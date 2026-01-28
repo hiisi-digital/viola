@@ -19,7 +19,7 @@
     "@std/fs": "jsr:@std/fs@^1",
     "@std/path": "jsr:@std/path@^1",
     "@std/cli": "jsr:@std/cli@^1",
-    "@hiisi/flash-freeze": "../flash-freeze/mod.ts"
+    "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1"
   },
   "compilerOptions": {
     "strict": true,
