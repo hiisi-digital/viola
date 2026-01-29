@@ -24,7 +24,8 @@
     "@std/fs": "jsr:@std/fs@^1",
     "@std/path": "jsr:@std/path@^1",
     "@std/assert": "jsr:@std/assert@^1",
-    "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1"
+    "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1",
+    "@hiisi/viola-linters": "./packages/linters/mod.ts"
   },
   "compilerOptions": {
     "strict": true,
@@ -39,6 +40,7 @@
     "viola:strict": "deno run -A scripts/viola.ts --strict"
   },
   "viola": {
+    "plugins": ["@hiisi/viola-linters"],
     "include": [
       "src"
     ],
