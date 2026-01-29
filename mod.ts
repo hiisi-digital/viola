@@ -8,7 +8,7 @@
  * ## Usage
  *
  * ```ts
- * import { createViola, runViola } from "@lets-muse/viola";
+ * import { createViola, runViola } from "@hiisi/viola";
  *
  * // Simple usage with defaults
  * const results = await runViola({
@@ -33,7 +33,7 @@
  * ## Custom Linters
  *
  * ```ts
- * import { BaseLinter, registry } from "@lets-muse/viola";
+ * import { BaseLinter, registry } from "@hiisi/viola";
  *
  * class MyLinter extends BaseLinter {
  *   readonly meta = {
