@@ -64,16 +64,21 @@ async function loadDenoConfig(path: string): Promise<ViolaConfig | null> {
   }
 }
 
+/** Known non-scope fields in viola config */
+const RESERVED_CONFIG_FIELDS = ["plugins", "inherit", "config", "include", "exclude"];
+
 /**
  * Resolve raw config into parsed patterns.
  */
 function resolveConfig(config: ViolaConfig): ResolvedConfig {
   const scopes: ResolvedScope[] = [];
   const plugins: string[] = config.plugins ?? [];
+  const inherit: string[] = config.inherit ?? [];
+  const linterConfig: Record<string, Record<string, unknown>> = config.config ?? {};
 
   for (const [key, value] of Object.entries(config)) {
     // Skip known non-scope fields
-    if (key === "plugins" || key === "include" || key === "exclude") {
+    if (RESERVED_CONFIG_FIELDS.includes(key)) {
       continue;
     }
 
@@ -82,6 +87,8 @@ function resolveConfig(config: ViolaConfig): ResolvedConfig {
       continue;
     }
 
+    // Check if this looks like a scope config (has pattern-like keys)
+    // vs a linter config object (which would have been in the config field)
     const scopeConfig = value as ScopeConfig;
     const patterns: ResolvedScope["patterns"] = [];
 
@@ -98,6 +105,8 @@ function resolveConfig(config: ViolaConfig): ResolvedConfig {
 
   return {
     plugins,
+    inherit,
+    linterConfig,
     scopes,
     include: [],
     exclude: [...DEFAULT_EXCLUDE],
