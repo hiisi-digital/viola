@@ -6,15 +6,18 @@
 [![GitHub Issues](https://img.shields.io/github/issues/hiisi-digital/viola.svg)](https://github.com/hiisi-digital/viola/issues)
 ![License](https://img.shields.io/github/license/hiisi-digital/viola?color=%23009689)
 
-> Unified lint runtime — crawl once, lint many.
+> Convention linter for codebases. Finds style and structure issues that language linters miss.
 
 </div>
 
 ## What it does
 
-`viola` crawls your codebase once, extracts structured data (functions, types, imports, strings),
-freezes it immutably, and feeds it to multiple linters. Each linter declares what data it needs
-and receives only that — no redundant file parsing, no mutable state.
+`viola` checks for convention violations — naming patterns, file organization, code duplication,
+and project-specific rules. Not a replacement for ESLint or `deno lint`; those handle language
+correctness. This handles everything else.
+
+Crawls the codebase once, extracts structured data (functions, types, imports, strings), and
+runs multiple checkers against it. Each checker declares what data it needs and gets only that.
 
 ```ts
 import { runViola, formatResults } from "@hiisi/viola";
@@ -39,72 +42,72 @@ deno add jsr:@hiisi/viola
 import { runViola, formatResults, registry } from "@hiisi/viola";
 ```
 
-## Built-in Linters
+## Built-in Checkers
 
-| Linter | Description |
-|--------|-------------|
+| Checker | Description |
+|---------|-------------|
 | `type-location` | Types must be in `types/` directories |
-| `similar-functions` | Detect similar function names (potential duplicates) |
+| `similar-functions` | Detect similar function names |
 | `similar-types` | Detect similar type names |
 | `duplicate-strings` | Find repeated string literals |
 | `deprecation-check` | Find deprecated code past its removal date |
 
-## Custom Linters
+## Custom Checkers
 
 ```ts
 import { BaseLinter, registry } from "@hiisi/viola";
 
-class MyLinter extends BaseLinter {
+class MyChecker extends BaseLinter {
   readonly meta = {
-    id: "my-linter",
-    name: "My Linter",
-    description: "Checks something important",
+    id: "my-checker",
+    name: "My Checker",
+    description: "Checks naming conventions",
     defaultSeverity: "warning",
   };
 
   readonly requirements = { functions: true };
 
   lint(data, config) {
-    const violations = [];
-    // Analyze data.functions, return violations
-    return violations;
+    const issues = [];
+    // Analyze data.functions, return issues
+    return issues;
   }
 }
 
-registry.register(new MyLinter());
+registry.register(new MyChecker());
 ```
 
 ## API
 
 ### High-Level
 
-- `runViola(options)` — crawl and lint, returns `LintResults`
-- `formatResults(results)` — format for console output
+- `runViola(options)` — Crawl and check, returns `LintResults`
+- `formatResults(results)` — Format for console output
 
 ### Runtime
 
-- `crawlCodebase(config)` — extract codebase data
-- `DEFAULT_CONFIG` — default configuration
+- `crawlCodebase(config)` — Extract codebase data
+- `DEFAULT_CONFIG` — Default configuration
 
 ### Registry
 
-- `registry.register(linter)` — register a linter
-- `registry.get(id)` — get linter by ID
-- `registry.getAll()` — list all linters
-- `runLinters(data, options)` — run linters on data
+- `registry.register(checker)` — Register a checker
+- `registry.get(id)` — Get checker by ID
+- `registry.getAll()` — List all checkers
+- `runLinters(data, options)` — Run checkers on data
 
-### Built-in Linter Classes
+### Built-in Checker Classes
 
 - `TypeLocationLinter`, `SimilarFunctionsLinter`, `SimilarTypesLinter`
 - `DuplicateStringsLinter`, `DeprecationCheckLinter`
 
 ### Types
 
-- `ViolaConfig` — configuration options
-- `LintResults` — lint run results
-- `Violation` — single violation
-- `CodebaseData` — extracted codebase structure
-- `BaseLinter` — base class for custom linters
+- `ViolaConfig` — Configuration options
+- `LintResults` — Check results
+- `Violation` — Single convention violation
+- `CodebaseData` — Extracted codebase structure
+- `BaseLinter` — Base class for custom checkers
 
 ## Support
 

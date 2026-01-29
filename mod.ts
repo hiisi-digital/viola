@@ -1,57 +1,58 @@
 /**
- * Viola - Violation Detection for Muse
+ * Viola - Convention linter for codebases
  *
- * A unified lint runtime that crawls the codebase once and provides
- * immutable data to multiple linters. Each linter declares what data
- * it needs and receives only that, frozen and ready for analysis.
+ * Checks for convention violations — naming patterns, file organization,
+ * code duplication, and project-specific rules. Not a replacement for
+ * language linters; those handle correctness. This handles everything else.
+ *
+ * Crawls the codebase once, extracts structured data (functions, types,
+ * imports, strings), and runs multiple checkers against it.
  *
  * ## Usage
  *
  * ```ts
- * import { createViola, runViola } from "@hiisi/viola";
+ * import { runViola, formatResults } from "@hiisi/viola";
  *
- * // Simple usage with defaults
  * const results = await runViola({
  *   projectRoot: Deno.cwd(),
  *   include: ["packages", "app"],
  * });
  *
  * if (results.hasErrors) {
- *   console.error("Lint failed!");
+ *   console.error("Convention check failed");
  *   Deno.exit(1);
  * }
  * ```
  *
- * ## Built-in Linters
+ * ## Built-in Checkers
  *
  * - `type-location` - Types must be in types/ directories
  * - `similar-functions` - Detect similar function names
  * - `similar-types` - Detect similar type names
  * - `duplicate-strings` - Find repeated string literals
- * - `deprecation-check` - Find deprecated code that should be deleted
+ * - `deprecation-check` - Find deprecated code past its removal date
  *
- * ## Custom Linters
+ * ## Custom Checkers
  *
  * ```ts
  * import { BaseLinter, registry } from "@hiisi/viola";
  *
- * class MyLinter extends BaseLinter {
+ * class MyChecker extends BaseLinter {
  *   readonly meta = {
- *     id: "my-linter",
- *     name: "My Linter",
- *     description: "Checks something",
+ *     id: "my-checker",
+ *     name: "My Checker",
+ *     description: "Checks naming conventions",
  *     defaultSeverity: "warning",
  *   };
  *
  *   readonly requirements = { functions: true };
  *
  *   lint(data, config) {
- *     // Return violations
  *     return [];
  *   }
  * }
  *
- * registry.register(new MyLinter());
+ * registry.register(new MyChecker());
  * ```
  *
  * @module
@@ -154,13 +155,11 @@ export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> 
 
 /**
  * Run viola with the given configuration.
- * This is the main entry point for using viola programmatically.
  *
  * @param options - Configuration options
- * @returns Lint results
+ * @returns Check results
  */
 export async function runViola(options: ViolaOptions): Promise<LintResults> {
-  // Build config with defaults
   const config: ViolaConfig = {
     projectRoot: options.projectRoot ?? Deno.cwd(),
     include: options.include ?? ["packages", "app", "src"],
@@ -171,7 +170,6 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     verbose: options.verbose ?? false,
   };
 
-  // Crawl codebase
   if (config.verbose) {
     console.log("Crawling codebase...");
   }
@@ -186,7 +184,6 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     console.log();
   }
 
-  // Run linters
   const runOptions: RunOptions = {
     only: options.only,
     skip: options.skip,
@@ -201,9 +198,9 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
 }
 
 /**
- * Format lint results for console output.
+ * Format check results for console output.
  *
- * @param results - Lint results to format
+ * @param results - Check results to format
  * @returns Formatted string
  */
 export function formatResults(results: LintResults): string {
@@ -211,7 +208,7 @@ export function formatResults(results: LintResults): string {
 
   lines.push("");
   lines.push("=".repeat(80));
-  lines.push("VIOLA LINT RESULTS");
+  lines.push("VIOLA RESULTS");
   lines.push("=".repeat(80));
   lines.push("");
   lines.push(`Files scanned: ${results.filesScanned}`);
@@ -219,50 +216,49 @@ export function formatResults(results: LintResults): string {
   lines.push("");
 
   if (results.summary.total === 0) {
-    lines.push("✅ All clear! No violations found.");
+    lines.push("All clear.");
     lines.push("");
     return lines.join("\n");
   }
 
   lines.push(
-    `❌ Found ${results.summary.total} violation(s):` +
+    `Found ${results.summary.total} issue(s):` +
       ` ${results.summary.errors} error(s),` +
       ` ${results.summary.warnings} warning(s),` +
       ` ${results.summary.infos} info(s)`
   );
   lines.push("");
 
-  // Group violations by linter
   for (const result of results.results) {
     if (result.violations.length === 0) continue;
 
     lines.push("-".repeat(80));
-    lines.push(`${result.linter} (${result.violations.length} violations)`);
+    lines.push(`${result.linter} (${result.violations.length} issues)`);
     lines.push("-".repeat(80));
     lines.push("");
 
     for (const v of result.violations) {
       const icon =
-        v.severity === "error" ? "❌" : v.severity === "warning" ? "⚠️" : "ℹ️";
+        v.severity === "error" ? "E" : v.severity === "warning" ? "W" : "I";
 
-      lines.push(`${icon} ${v.location.file}:${v.location.line}`);
-      lines.push(`   ${v.message}`);
+      lines.push(`[${icon}] ${v.location.file}:${v.location.line}`);
+      lines.push(`    ${v.message}`);
 
       if (v.suggestion) {
         lines.push("");
         for (const line of v.suggestion.split("\n")) {
-          lines.push(`   ${line}`);
+          lines.push(`    ${line}`);
         }
       }
 
       if (v.relatedLocations && v.relatedLocations.length > 0) {
         lines.push("");
-        lines.push("   Related:");
+        lines.push("    Related:");
         for (const loc of v.relatedLocations.slice(0, 3)) {
-          lines.push(`     - ${loc.file}:${loc.line}`);
+          lines.push(`      - ${loc.file}:${loc.line}`);
         }
         if (v.relatedLocations.length > 3) {
-          lines.push(`     ... and ${v.relatedLocations.length - 3} more`);
+          lines.push(`      ... and ${v.relatedLocations.length - 3} more`);
         }
       }
 
@@ -273,9 +269,9 @@ export function formatResults(results: LintResults): string {
   lines.push("=".repeat(80));
 
   if (results.hasErrors) {
-    lines.push("BUILD FAILED - Fix the above errors before proceeding.");
+    lines.push("Failed. Fix the above errors.");
   } else {
-    lines.push("Warnings found - consider addressing them.");
+    lines.push("Warnings found.");
   }
 
   lines.push("=".repeat(80));
