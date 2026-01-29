@@ -24,13 +24,18 @@
  * }
  * ```
  *
- * ## Built-in Checkers
+ * ## Plugin System
  *
- * - `type-location` - Types must be in types/ directories
- * - `similar-functions` - Detect similar function names
- * - `similar-types` - Detect similar type names
- * - `duplicate-strings` - Find repeated string literals
- * - `deprecation-check` - Find deprecated code past its removal date
+ * Linters are loaded as plugins via the `plugins` config field.
+ * There are no "built-in" linters - all must be explicitly imported.
+ *
+ * ```json
+ * {
+ *   "viola": {
+ *     "plugins": ["@hiisi/viola-linters"]
+ *   }
+ * }
+ * ```
  *
  * ## Custom Checkers
  *
@@ -125,20 +130,33 @@ export { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 
 export {
     // Base class
-    BaseLinter, DeprecationCheckLinter,
-    deprecationCheckLinter, DuplicateStringsLinter,
-    duplicateStringsLinter, isLinter, register, registerBuiltinLinters, registerLinter,
+    BaseLinter,
+    isLinter,
     // Registry
-    registry, runLinter,
-    runLinters, SimilarFunctionsLinter,
-    similarFunctionsLinter, SimilarTypesLinter,
-    similarTypesLinter,
-    // Built-in linters
-    TypeLocationLinter,
-    typeLocationLinter, type DeprecationCheckOptions, type DuplicateStringsOptions, type LinterConstructor,
+    register,
+    registerLinter,
+    registry,
+    runLinter,
+    runLinters,
+    // Types
+    type LinterConstructor,
     type LinterDataRequirements,
-    type LinterMeta, type RunOptions, type SimilarFunctionsOptions, type SimilarTypesOptions
+    type LinterMeta,
+    type RunOptions
 } from "./src/linters/mod.ts";
+
+// =============================================================================
+// Plugin Loader
+// =============================================================================
+
+export {
+    clearLinters,
+    getRegisteredLinters,
+    loadPlugin,
+    loadPlugins,
+    type PluginLoadResult,
+    type PluginsLoadResult
+} from "./src/runtime/plugins.ts";
 
 // =============================================================================
 // High-Level API
@@ -147,11 +165,15 @@ export {
 import type { LintResults, ViolaConfig } from "./src/data/mod.ts";
 import { runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
+import { loadPlugins } from "./src/runtime/plugins.ts";
 
 /**
  * Options for running viola.
  */
-export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> {}
+export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> {
+  /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
+  plugins?: string[];
+}
 
 /**
  * Run viola with the given configuration.
@@ -169,6 +191,26 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     reportOnly: options.reportOnly ?? false,
     verbose: options.verbose ?? false,
   };
+
+  // Load plugins if specified
+  const plugins = options.plugins ?? [];
+  if (plugins.length > 0) {
+    if (config.verbose) {
+      console.log(`Loading ${plugins.length} plugin(s)...`);
+    }
+    const pluginResults = await loadPlugins(plugins, { verbose: config.verbose });
+    if (!pluginResults.allSucceeded) {
+      const failed = pluginResults.results.filter((r) => !r.success);
+      console.error(`Failed to load ${failed.length} plugin(s):`);
+      for (const f of failed) {
+        console.error(`  - ${f.specifier}: ${f.error}`);
+      }
+    }
+    if (config.verbose) {
+      console.log(`Registered ${pluginResults.totalLinters} linter(s) from plugins`);
+      console.log();
+    }
+  }
 
   if (config.verbose) {
     console.log("Crawling codebase...");
@@ -309,4 +351,3 @@ export {
     matchesIssuePattern,
     resolveIssueSeverity
 } from "./src/config/mod.ts";
-
