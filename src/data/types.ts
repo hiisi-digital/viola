@@ -276,32 +276,28 @@ export interface CodebaseData {
 }
 
 // =============================================================================
-// Violation Types
+// Issue Types
 // =============================================================================
 
 /**
- * Severity level for a violation.
+ * An issue found by a linter.
+ * 
+ * Issues carry metadata (kind, confidence) but NOT severity. Severity is
+ * determined by the config layer based on issue category/impact and rules.
  */
-export type ViolationSeverity = "error" | "warning" | "info";
-
-/**
- * A violation found by a linter.
- */
-export interface Violation {
-  /** Linter that found the violation */
-  readonly linter: string;
-  /** Violation code (e.g., "similar-function-name") */
-  readonly code: string;
-  /** Severity level */
-  readonly severity: ViolationSeverity;
+export interface Issue {
+  /** Issue kind in format "linter-id/issue-name" */
+  readonly kind: string;
   /** Primary location */
   readonly location: SourceLocation;
-  /** Related locations (e.g., the other similar function) */
-  readonly relatedLocations?: readonly SourceLocation[];
   /** Human-readable message */
   readonly message: string;
+  /** Confidence score 0-100 (how sure is the linter) */
+  readonly confidence: number;
   /** Suggestion for fixing */
   readonly suggestion?: string;
+  /** Related locations (e.g., the other similar function) */
+  readonly relatedLocations?: readonly SourceLocation[];
   /** Additional context data */
   readonly context?: Record<string, unknown>;
 }
@@ -310,10 +306,10 @@ export interface Violation {
  * Result from running a linter.
  */
 export interface LinterResult {
-  /** Linter name */
+  /** Linter ID */
   readonly linter: string;
-  /** Violations found */
-  readonly violations: readonly Violation[];
+  /** Issues found */
+  readonly issues: readonly Issue[];
   /** Time taken in milliseconds */
   readonly durationMs: number;
   /** Whether the linter completed successfully */
@@ -328,13 +324,8 @@ export interface LinterResult {
 export interface LintResults {
   /** Individual linter results */
   readonly results: readonly LinterResult[];
-  /** Total violations by severity */
-  readonly summary: {
-    readonly errors: number;
-    readonly warnings: number;
-    readonly infos: number;
-    readonly total: number;
-  };
+  /** Total issue count */
+  readonly totalIssues: number;
   /** Total time taken in milliseconds */
   readonly totalDurationMs: number;
   /** Whether any linter failed */
@@ -353,8 +344,6 @@ export interface LintResults {
 export interface LinterConfig {
   /** Whether linter is enabled */
   readonly enabled: boolean;
-  /** Severity override (default depends on linter) */
-  readonly severity?: ViolationSeverity;
   /** Linter-specific options */
   readonly options?: Record<string, unknown>;
 }

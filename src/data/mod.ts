@@ -9,17 +9,22 @@
 
 // Re-export all types
 export type {
-
     // Codebase
     CodebaseData,
     // Exports/Imports
     ExportInfo,
     // Files
-    FileInfo, FunctionInfo,
+    FileInfo,
     // Functions
-    FunctionParam, ImportInfo,
+    FunctionInfo,
+    FunctionParam,
+    // Imports
+    ImportInfo,
+    // Issues
+    Issue,
     // Configuration
-    LinterConfig, LinterResult,
+    LinterConfig,
+    LinterResult,
     LintResults,
     // Schemas
     SchemaInfo,
@@ -29,8 +34,7 @@ export type {
     StringLiteral,
     // Types/Interfaces
     TypeField,
-    TypeInfo, ViolaConfig, Violation,
-    // Violations
-    ViolationSeverity
+    TypeInfo,
+    ViolaConfig
 } from "./types.ts";
 
