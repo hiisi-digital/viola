@@ -113,3 +113,20 @@ export {
     viola,
     ViolaBuilder
 } from "./builder.ts";
+
+// Evaluator
+export type {
+    EvaluatedIssue,
+    EvaluationContext
+} from "./evaluator.ts";
+
+export {
+    countByLevel,
+    createEvaluationContext,
+    evaluateCondition,
+    evaluateIssue,
+    evaluateIssues,
+    filterReportableIssues,
+    groupByLevel,
+    hasErrors
+} from "./evaluator.ts";
