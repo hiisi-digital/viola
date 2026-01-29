@@ -1,7 +1,8 @@
 /**
  * Viola Linters Module
  *
- * Exports all linters and the linter registry.
+ * Exports linter infrastructure: base class, registry, and utilities.
+ * Linter implementations are loaded via the plugin system.
  *
  * @module
  */
@@ -25,33 +26,27 @@ export {
     type RunOptions
 } from "./registry.ts";
 
-// Individual linters
+// Individual linters (for direct import, not auto-registered)
 export { DeprecationCheckLinter, deprecationCheckLinter, type DeprecationCheckOptions } from "./deprecation-check.ts";
 export { DuplicateStringsLinter, duplicateStringsLinter, type DuplicateStringsOptions } from "./duplicate-strings.ts";
 export { SimilarFunctionsLinter, similarFunctionsLinter, type SimilarFunctionsOptions } from "./similar-functions.ts";
 export { SimilarTypesLinter, similarTypesLinter, type SimilarTypesOptions } from "./similar-types.ts";
 export { TypeLocationLinter, typeLocationLinter } from "./type-location.ts";
 
-// New linters
+// Additional linters
 export { DuplicateLogicLinter } from "./duplicate-logic.ts";
 export { MissingDocsLinter } from "./missing-docs.ts";
 export { OrphanedCodeLinter } from "./orphaned-code.ts";
 export { SchemaCollisionLinter } from "./schema-collision.ts";
 
 // =============================================================================
-// Linter instances
+// Linter instances (exported but NOT auto-registered)
 // =============================================================================
 
-import { deprecationCheckLinter } from "./deprecation-check.ts";
 import { DuplicateLogicLinter } from "./duplicate-logic.ts";
-import { duplicateStringsLinter } from "./duplicate-strings.ts";
 import { MissingDocsLinter } from "./missing-docs.ts";
 import { OrphanedCodeLinter } from "./orphaned-code.ts";
-import { registry } from "./registry.ts";
 import { SchemaCollisionLinter } from "./schema-collision.ts";
-import { similarFunctionsLinter } from "./similar-functions.ts";
-import { similarTypesLinter } from "./similar-types.ts";
-import { typeLocationLinter } from "./type-location.ts";
 
 /** Pre-instantiated missing-docs linter */
 export const missingDocsLinter: MissingDocsLinter = new MissingDocsLinter();
@@ -64,42 +59,3 @@ export const schemaCollisionLinter: SchemaCollisionLinter = new SchemaCollisionL
 
 /** Pre-instantiated orphaned-code linter */
 export const orphanedCodeLinter: OrphanedCodeLinter = new OrphanedCodeLinter();
-
-/**
- * Register all built-in linters with the global registry.
- * This is called automatically when the module is imported.
- */
-export function registerBuiltinLinters(): void {
-  // Only register if not already registered
-  if (!registry.has(typeLocationLinter.meta.id)) {
-    registry.register(typeLocationLinter);
-  }
-  if (!registry.has(similarFunctionsLinter.meta.id)) {
-    registry.register(similarFunctionsLinter);
-  }
-  if (!registry.has(similarTypesLinter.meta.id)) {
-    registry.register(similarTypesLinter);
-  }
-  if (!registry.has(duplicateStringsLinter.meta.id)) {
-    registry.register(duplicateStringsLinter);
-  }
-  if (!registry.has(deprecationCheckLinter.meta.id)) {
-    registry.register(deprecationCheckLinter);
-  }
-  // New linters
-  if (!registry.has(missingDocsLinter.meta.id)) {
-    registry.register(missingDocsLinter);
-  }
-  if (!registry.has(duplicateLogicLinter.meta.id)) {
-    registry.register(duplicateLogicLinter);
-  }
-  if (!registry.has(schemaCollisionLinter.meta.id)) {
-    registry.register(schemaCollisionLinter);
-  }
-  if (!registry.has(orphanedCodeLinter.meta.id)) {
-    registry.register(orphanedCodeLinter);
-  }
-}
-
-// Auto-register on module import
-registerBuiltinLinters();
