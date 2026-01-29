@@ -18,11 +18,10 @@ import type {
 } from "../config/types.ts";
 import type {
     CodebaseData,
+    Issue,
     LinterConfig,
     LinterResult,
     SourceLocation,
-    Violation,
-    ViolationSeverity,
 } from "../data/types.ts";
 
 // =============================================================================
@@ -39,8 +38,6 @@ export interface LinterMeta {
   readonly name: string;
   /** Description of what this linter checks */
   readonly description: string;
-  /** Default severity (for backward compatibility) */
-  readonly defaultSeverity?: ViolationSeverity;
   /** Documentation URL (optional) */
   readonly docsUrl?: string;
 }
@@ -69,54 +66,11 @@ export interface LinterDataRequirements {
 }
 
 // =============================================================================
-// Issue Types (New System)
-// =============================================================================
-
-/**
- * An issue emitted by a linter (new system).
- */
-export interface Issue {
-  /** Issue kind in format "linter-id/issue-name" */
-  kind: string;
-  /** Source location where issue was found */
-  location: SourceLocation;
-  /** Human-readable message */
-  message: string;
-  /** Confidence score 0-100 (how sure is the linter) */
-  confidence: number;
-  /** Optional suggestion for fixing */
-  suggestion?: string;
-  /** Related locations (e.g., duplicate found at these locations) */
-  relatedLocations?: SourceLocation[];
-  /** Additional context data */
-  context?: Record<string, unknown>;
-}
-
-/**
- * Result of running a linter (new system).
- */
-export interface LinterIssueResult {
-  /** Linter ID */
-  linter: string;
-  /** Issues found */
-  issues: Issue[];
-  /** Time taken in milliseconds */
-  durationMs: number;
-  /** Whether the run completed successfully */
-  success: boolean;
-  /** Error message if failed */
-  error?: string;
-}
-
-// =============================================================================
 // Base Linter Class
 // =============================================================================
 
 /**
  * Abstract base class for all viola linters.
- *
- * Supports both old Violation-based API and new Issue-based API for
- * gradual migration.
  */
 export abstract class BaseLinter {
   /**
@@ -127,11 +81,8 @@ export abstract class BaseLinter {
   /**
    * Catalog of all issue kinds this linter can emit.
    * Keys must be in format "linter-id/issue-name".
-   * 
-   * Optional for backward compatibility - linters without catalog
-   * use the old Violation system.
    */
-  readonly catalog: IssueCatalog = {};
+  abstract readonly catalog: IssueCatalog;
 
   /**
    * Data requirements for this linter.
@@ -139,31 +90,31 @@ export abstract class BaseLinter {
   abstract readonly requirements: LinterDataRequirements;
 
   /**
-   * Run the linter and return violations.
+   * Run the linter and return issues.
    *
    * @param data - Frozen codebase data
    * @param config - Linter configuration
-   * @returns Array of violations found
+   * @returns Array of issues found
    */
-  abstract lint(data: CodebaseData, config: LinterConfig): Violation[];
+  abstract lint(data: CodebaseData, config: LinterConfig): Issue[];
 
   /**
    * Run the linter with timing and error handling.
    *
    * @param data - Frozen codebase data
    * @param config - Linter configuration
-   * @returns Linter result with violations and timing
+   * @returns Linter result with issues and timing
    */
   run(data: CodebaseData, config: LinterConfig): LinterResult {
     const startTime = performance.now();
 
     try {
-      const violations = this.lint(data, config);
+      const issues = this.lint(data, config);
       const durationMs = performance.now() - startTime;
 
       return {
         linter: this.meta.id,
-        violations,
+        issues,
         durationMs,
         success: true,
       };
@@ -174,7 +125,7 @@ export abstract class BaseLinter {
 
       return {
         linter: this.meta.id,
-        violations: [],
+        issues: [],
         durationMs,
         success: false,
         error: errorMessage,
@@ -204,87 +155,9 @@ export abstract class BaseLinter {
   }
 
   /**
-   * Create a violation with this linter's info pre-filled.
-   * (Backward compatibility)
-   */
-  protected createViolation(
-    violation: Omit<Violation, "linter" | "severity"> & {
-      severity?: ViolationSeverity;
-    },
-    config?: LinterConfig
-  ): Violation {
-    return {
-      linter: this.meta.id,
-      severity:
-        config?.severity ?? violation.severity ?? this.meta.defaultSeverity ?? "warning",
-      ...violation,
-    };
-  }
-
-  /**
-   * Create an error-level violation.
-   * (Backward compatibility)
-   */
-  protected error(
-    code: string,
-    message: string,
-    location: Violation["location"],
-    extra?: Partial<Omit<Violation, "linter" | "severity" | "code" | "message" | "location">>
-  ): Violation {
-    return {
-      linter: this.meta.id,
-      severity: "error",
-      code,
-      message,
-      location,
-      ...extra,
-    };
-  }
-
-  /**
-   * Create a warning-level violation.
-   * (Backward compatibility)
-   */
-  protected warning(
-    code: string,
-    message: string,
-    location: Violation["location"],
-    extra?: Partial<Omit<Violation, "linter" | "severity" | "code" | "message" | "location">>
-  ): Violation {
-    return {
-      linter: this.meta.id,
-      severity: "warning",
-      code,
-      message,
-      location,
-      ...extra,
-    };
-  }
-
-  /**
-   * Create an info-level violation.
-   * (Backward compatibility)
-   */
-  protected info(
-    code: string,
-    message: string,
-    location: Violation["location"],
-    extra?: Partial<Omit<Violation, "linter" | "severity" | "code" | "message" | "location">>
-  ): Violation {
-    return {
-      linter: this.meta.id,
-      severity: "info",
-      code,
-      message,
-      location,
-      ...extra,
-    };
-  }
-
-  /**
-   * Create an issue with this linter's info (new system).
+   * Create an issue with this linter's info.
    *
-   * @param issueKind - The issue kind (e.g., "bad-thing", will be prefixed with linter id)
+   * @param issueKind - The issue kind (e.g., "duplicate-string") - will be prefixed with linter id
    * @param location - Source location
    * @param message - Human-readable message
    * @param options - Additional options
@@ -336,6 +209,7 @@ export function isLinter(obj: unknown): obj is BaseLinter {
     obj !== null &&
     typeof obj === "object" &&
     "meta" in obj &&
+    "catalog" in obj &&
     "requirements" in obj &&
     "lint" in obj &&
     typeof (obj as BaseLinter).lint === "function"
