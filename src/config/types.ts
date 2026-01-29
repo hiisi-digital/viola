@@ -116,12 +116,17 @@ export type ScopeConfig = Record<string, PatternValue>;
 /**
  * Root viola configuration.
  * 
- * Contains a `plugins` array and file glob patterns mapped to scope configs.
+ * Contains a `plugins` array, `inherit` for presets, `config` for per-linter
+ * options, and file glob patterns mapped to scope configs.
  * 
  * @example
  * ```json
  * {
- *   "plugins": ["@hiisi/viola-linters"],
+ *   "plugins": ["@hiisi/viola-default-lints"],
+ *   "inherit": ["strict"],
+ *   "config": {
+ *     "type-location": { "allowedDirs": ["src/types"] }
+ *   },
  *   "**\/*.ts": {
  *     "*>=major": "error",
  *     "*>=minor": "warn",
@@ -137,19 +142,36 @@ export interface ViolaConfig {
   /**
    * List of plugin modules to load.
    * Uses the same syntax as TypeScript/Deno imports:
-   * - Import map references: `@hiisi/viola-linters`
+   * - Import map references: `@hiisi/viola-default-lints`
    * - JSR specifiers: `jsr:@scope/package`
    * - npm specifiers: `npm:package`
    * - URLs: `https://example.com/linter.ts`
    * - Local paths: `./local-linter.ts`
    */
   plugins?: string[];
+
+  /**
+   * Preset names to inherit from loaded plugins.
+   * Presets are applied in order (later presets override earlier).
+   * User's own rules are applied last (always win).
+   * 
+   * Note: "default" presets from plugins are auto-applied before these.
+   * Use short names or qualified names (plugin/preset) if ambiguous.
+   */
+  inherit?: string[];
+
+  /**
+   * Per-linter configuration options.
+   * Keys are linter IDs, values are linter-specific config objects.
+   * Validated against schemas provided by plugins.
+   */
+  config?: Record<string, Record<string, unknown>>;
   
   /**
    * File glob patterns mapped to scope configs.
    * All other keys are treated as file patterns.
    */
-  [filePattern: string]: ScopeConfig | string[] | undefined;
+  [filePattern: string]: ScopeConfig | string[] | Record<string, unknown> | undefined;
 }
 
 // =============================================================================
@@ -202,6 +224,10 @@ export interface ResolvedScope {
 export interface ResolvedConfig {
   /** Plugin specifiers to load */
   plugins: string[];
+  /** Preset names to inherit (after auto-applied defaults) */
+  inherit: string[];
+  /** Per-linter configuration options */
+  linterConfig: Record<string, Record<string, unknown>>;
   /** Scopes in order of definition */
   scopes: ResolvedScope[];
   /** Include paths for crawling */
