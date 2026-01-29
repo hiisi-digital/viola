@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "exports": {
     ".": "./mod.ts",
     "./config": "./src/config/mod.ts",
@@ -40,7 +40,9 @@
     "viola:strict": "deno run -A scripts/viola.ts --strict"
   },
   "viola": {
-    "plugins": ["@hiisi/viola-default-lints"],
+    "plugins": [
+      "@hiisi/viola-default-lints"
+    ],
     "include": [
       "src"
     ],
