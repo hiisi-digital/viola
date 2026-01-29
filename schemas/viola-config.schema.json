@@ -4,6 +4,11 @@
   "title": "Viola Configuration",
   "description": "Configuration schema for viola convention linter in deno.json",
   "type": "object",
+  "properties": {
+    "plugins": {
+      "$ref": "#/$defs/plugins"
+    }
+  },
   "additionalProperties": {
     "$ref": "#/$defs/scopeConfig"
   },
@@ -47,6 +52,19 @@
       ],
       "description": "Severity or configuration object for a pattern"
     },
+    "plugins": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Import specifier for a linter plugin module"
+      },
+      "description": "List of plugin modules to load. Uses the same syntax as TypeScript/Deno imports: import map references (e.g., '@hiisi/viola-linters'), JSR specifiers (e.g., 'jsr:@scope/package'), npm specifiers (e.g., 'npm:package'), or URLs.",
+      "examples": [
+        ["@hiisi/viola-linters"],
+        ["jsr:@hiisi/viola-linters", "jsr:@someone/custom-linter"],
+        ["./local-linter.ts"]
+      ]
+    },
     "scopeConfig": {
       "type": "object",
       "additionalProperties": {
@@ -69,6 +87,7 @@
   },
   "examples": [
     {
+      "plugins": ["@hiisi/viola-linters"],
       "**/*.ts": {
         "*>=major": "error",
         "*>=minor": "warn",

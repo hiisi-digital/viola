@@ -116,11 +116,12 @@ export type ScopeConfig = Record<string, PatternValue>;
 /**
  * Root viola configuration.
  * 
- * Keys are file glob patterns, values are scope configs.
+ * Contains a `plugins` array and file glob patterns mapped to scope configs.
  * 
  * @example
  * ```json
  * {
+ *   "plugins": ["@hiisi/viola-linters"],
  *   "**\/*.ts": {
  *     "*>=major": "error",
  *     "*>=minor": "warn",
@@ -132,7 +133,24 @@ export type ScopeConfig = Record<string, PatternValue>;
  * }
  * ```
  */
-export type ViolaConfig = Record<string, ScopeConfig>;
+export interface ViolaConfig {
+  /**
+   * List of plugin modules to load.
+   * Uses the same syntax as TypeScript/Deno imports:
+   * - Import map references: `@hiisi/viola-linters`
+   * - JSR specifiers: `jsr:@scope/package`
+   * - npm specifiers: `npm:package`
+   * - URLs: `https://example.com/linter.ts`
+   * - Local paths: `./local-linter.ts`
+   */
+  plugins?: string[];
+  
+  /**
+   * File glob patterns mapped to scope configs.
+   * All other keys are treated as file patterns.
+   */
+  [filePattern: string]: ScopeConfig | string[] | undefined;
+}
 
 // =============================================================================
 // Resolved Configuration
@@ -182,6 +200,8 @@ export interface ResolvedScope {
  * Fully resolved configuration.
  */
 export interface ResolvedConfig {
+  /** Plugin specifiers to load */
+  plugins: string[];
   /** Scopes in order of definition */
   scopes: ResolvedScope[];
   /** Include paths for crawling */

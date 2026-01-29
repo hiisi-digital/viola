@@ -69,27 +69,35 @@ async function loadDenoConfig(path: string): Promise<ViolaConfig | null> {
  */
 function resolveConfig(config: ViolaConfig): ResolvedConfig {
   const scopes: ResolvedScope[] = [];
+  const plugins: string[] = config.plugins ?? [];
 
-  for (const [filePattern, scopeConfig] of Object.entries(config)) {
-    // Skip non-scope entries (like "include", "exclude")
-    if (typeof scopeConfig !== "object" || scopeConfig === null) {
+  for (const [key, value] of Object.entries(config)) {
+    // Skip known non-scope fields
+    if (key === "plugins" || key === "include" || key === "exclude") {
       continue;
     }
 
+    // Skip non-object entries (shouldn't happen with proper config)
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      continue;
+    }
+
+    const scopeConfig = value as ScopeConfig;
     const patterns: ResolvedScope["patterns"] = [];
 
-    for (const [patternStr, value] of Object.entries(scopeConfig as ScopeConfig)) {
+    for (const [patternStr, patternValue] of Object.entries(scopeConfig)) {
       const pattern = parsePattern(patternStr);
       if (!pattern) continue;
 
-      const resolvedValue = resolvePatternValue(value);
+      const resolvedValue = resolvePatternValue(patternValue);
       patterns.push({ pattern, value: resolvedValue });
     }
 
-    scopes.push({ filePattern, patterns });
+    scopes.push({ filePattern: key, patterns });
   }
 
   return {
+    plugins,
     scopes,
     include: [],
     exclude: [...DEFAULT_EXCLUDE],
