@@ -151,12 +151,41 @@ export {
 
 export {
     clearLinters,
+    discoverPlugin,
+    discoverPlugins,
     getRegisteredLinters,
     loadPlugin,
     loadPlugins,
+    registerDiscoveredLinters,
+    resolveBundle,
+    resolvePreset,
     type PluginLoadResult,
     type PluginsLoadResult
 } from "./src/runtime/plugins.ts";
+
+// =============================================================================
+// Plugin Types
+// =============================================================================
+
+export type {
+    DiscoveredBundle,
+    DiscoveredPreset,
+    DiscoveredSchema,
+    JSONSchema,
+    PluginDiscoveryResult,
+    PluginsDiscoveryResult,
+    PresetPatternValue,
+    PresetScopeConfig,
+    ViolaConfigPreset,
+    ViolaPlugin
+} from "./src/types/mod.ts";
+
+export {
+    derivePluginName,
+    isQualifiedName,
+    parseQualifiedName,
+    qualifiedName
+} from "./src/types/mod.ts";
 
 // =============================================================================
 // High-Level API
