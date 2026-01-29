@@ -1,0 +1,32 @@
+{
+  "name": "@hiisi/viola-linters",
+  "version": "0.1.0",
+  "exports": {
+    ".": "./mod.ts"
+  },
+  "publish": {
+    "include": [
+      "mod.ts",
+      "src/**/*.ts",
+      "README.md",
+      "LICENSE"
+    ],
+    "exclude": [
+      "src/**/*_test.ts"
+    ]
+  },
+  "imports": {
+    "@hiisi/viola": "../../mod.ts",
+    "@std/assert": "jsr:@std/assert@^1"
+  },
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noUncheckedIndexedAccess": true
+  },
+  "tasks": {
+    "check": "deno check mod.ts",
+    "test": "deno test src/"
+  }
+}
