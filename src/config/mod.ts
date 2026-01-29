@@ -33,3 +33,14 @@ export {
     resolveIssueSeverity
 } from "./loader.ts";
 
+export type {
+    MergeOptions,
+    MergeResult
+} from "./merge.ts";
+
+export {
+    collectDefaultPresets,
+    mergeConfigWithPresets,
+    mergeLinterConfig,
+    resolvePresets
+} from "./merge.ts";
