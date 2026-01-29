@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "exports": {
     ".": "./mod.ts",
     "./config": "./src/config/mod.ts",
@@ -39,7 +39,9 @@
     "viola:strict": "deno run -A scripts/viola.ts --strict"
   },
   "viola": {
-    "include": ["src"],
+    "include": [
+      "src"
+    ],
     "**/*.ts": {
       "type-location/*": "off",
       "duplicate-strings/*": "warn",
