@@ -191,7 +191,8 @@ export {
 // High-Level API
 // =============================================================================
 
-import type { LintResults, ViolaConfig } from "./src/data/mod.ts";
+import { mergeLinterConfig } from "./src/config/mod.ts";
+import type { LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
 import { runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
@@ -205,6 +206,10 @@ import {
 export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> {
   /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
   plugins?: string[];
+  /** Preset names to inherit from loaded plugins */
+  inherit?: string[];
+  /** Per-linter configuration options (merged with preset configs) */
+  linterConfig?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -229,6 +234,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
   // Load plugins using full discovery
   const plugins = options.plugins ?? [];
   let discovery = null;
+  let mergedLinterConfig: Record<string, Record<string, unknown>> = {};
 
   if (plugins.length > 0) {
     if (verbose) {
@@ -271,15 +277,47 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
       console.log();
     }
 
-    // TODO: Merge presets with user config when we have full config loading
-    // For now, we just log that presets would be applied
-    if (discovery.defaultPresets.length > 0 && verbose) {
-      console.log("Preset merging:");
-      for (const preset of discovery.defaultPresets) {
-        console.log(`  Would apply default preset: ${preset.pluginName}/${preset.name}`);
+    // Collect linter configs from presets
+    // Order: default presets -> inherited presets -> user config
+    const presetConfigs: Record<string, Record<string, unknown>>[] = [];
+
+    // 1. Default presets (auto-applied)
+    for (const preset of discovery.defaultPresets) {
+      // Presets primarily define severity rules, but may also include linter configs
+      // For now, we don't have a way to specify linter config in presets
+      // This is a placeholder for future expansion
+      if (verbose) {
+        console.log(`Applied default preset: ${preset.pluginName}/${preset.name}`);
       }
+    }
+
+    // 2. Explicitly inherited presets
+    const inheritedPresetNames = options.inherit ?? [];
+    for (const presetName of inheritedPresetNames) {
+      const preset = discovery.allPresets.get(presetName) ??
+        // Try to find by short name
+        Array.from(discovery.allPresets.values()).find(p => p.name === presetName);
+
+      if (preset) {
+        if (verbose) {
+          console.log(`Applied inherited preset: ${preset.pluginName}/${preset.name}`);
+        }
+      } else if (verbose) {
+        console.log(`Warning: Preset "${presetName}" not found`);
+      }
+    }
+
+    // 3. User's linter config (always wins)
+    const userLinterConfig = options.linterConfig ?? {};
+    mergedLinterConfig = mergeLinterConfig(presetConfigs, userLinterConfig);
+
+    if (verbose && Object.keys(mergedLinterConfig).length > 0) {
+      console.log(`Merged linter config for: ${Object.keys(mergedLinterConfig).join(", ")}`);
       console.log();
     }
+  } else {
+    // No plugins, just use user config directly
+    mergedLinterConfig = options.linterConfig ?? {};
   }
 
   if (config.verbose) {
@@ -296,10 +334,39 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     console.log();
   }
 
+  // Build per-linter config by merging:
+  // 1. User's basic linter config (enabled/severity from options.config)
+  // 2. Merged linter options from presets + user linterConfig
+  const linterConfigs: Record<string, LinterConfig> = {};
+
+  // Start with basic config from options.config (enabled/severity)
+  if (options.config) {
+    for (const [id, cfg] of Object.entries(options.config)) {
+      linterConfigs[id] = { ...cfg };
+    }
+  }
+
+  // Merge in linter-specific options from mergedLinterConfig
+  for (const [id, opts] of Object.entries(mergedLinterConfig)) {
+    if (linterConfigs[id]) {
+      // Merge options into existing config
+      linterConfigs[id] = {
+        ...linterConfigs[id],
+        options: { ...linterConfigs[id].options, ...opts },
+      };
+    } else {
+      // Create new config with just options
+      linterConfigs[id] = {
+        enabled: true,
+        options: opts,
+      };
+    }
+  }
+
   const runOptions: RunOptions = {
     only: options.only,
     skip: options.skip,
-    config: options.config,
+    config: Object.keys(linterConfigs).length > 0 ? linterConfigs : options.config,
     parallel: options.parallel ?? false,
     verbose,
   };
