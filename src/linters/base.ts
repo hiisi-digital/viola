@@ -1,16 +1,26 @@
 /**
  * Viola Base Linter
  *
- * Abstract base class for all linters. Each linter declares what data it needs
- * and implements the lint() method to find violations.
+ * Abstract base class for all linters (rules). Each linter declares:
+ * - meta: Basic info about the rule
+ * - catalog: All issue kinds it can emit with their category/impact
+ * - requirements: What codebase data it needs
+ * - lint(): The actual linting logic
  *
  * @module
  */
 
 import type {
+    IssueCatalog,
+    IssueCategory,
+    IssueDef,
+    IssueImpact,
+} from "../config/types.ts";
+import type {
     CodebaseData,
     LinterConfig,
     LinterResult,
+    SourceLocation,
     Violation,
     ViolationSeverity,
 } from "../data/types.ts";
@@ -23,14 +33,14 @@ import type {
  * Metadata describing a linter.
  */
 export interface LinterMeta {
-  /** Unique linter ID */
+  /** Unique linter ID (e.g., "type-location", "similar-functions") */
   readonly id: string;
   /** Human-readable name */
   readonly name: string;
   /** Description of what this linter checks */
   readonly description: string;
-  /** Default severity for violations */
-  readonly defaultSeverity: ViolationSeverity;
+  /** Default severity (for backward compatibility) */
+  readonly defaultSeverity?: ViolationSeverity;
   /** Documentation URL (optional) */
   readonly docsUrl?: string;
 }
@@ -59,44 +69,69 @@ export interface LinterDataRequirements {
 }
 
 // =============================================================================
+// Issue Types (New System)
+// =============================================================================
+
+/**
+ * An issue emitted by a linter (new system).
+ */
+export interface Issue {
+  /** Issue kind in format "rule-id/issue-name" */
+  kind: string;
+  /** Source location where issue was found */
+  location: SourceLocation;
+  /** Human-readable message */
+  message: string;
+  /** Confidence score 0-100 (how sure is the linter) */
+  confidence: number;
+  /** Optional suggestion for fixing */
+  suggestion?: string;
+  /** Related locations (e.g., duplicate found at these locations) */
+  relatedLocations?: SourceLocation[];
+  /** Additional context data */
+  context?: Record<string, unknown>;
+}
+
+/**
+ * Result of running a linter (new system).
+ */
+export interface RuleResult {
+  /** Rule ID */
+  rule: string;
+  /** Issues found */
+  issues: Issue[];
+  /** Time taken in milliseconds */
+  durationMs: number;
+  /** Whether the run completed successfully */
+  success: boolean;
+  /** Error message if failed */
+  error?: string;
+}
+
+// =============================================================================
 // Base Linter Class
 // =============================================================================
 
 /**
  * Abstract base class for all viola linters.
  *
- * Linters extend this class and implement:
- * - meta: Metadata about the linter
- * - requirements: What data the linter needs
- * - lint(): The actual linting logic
- *
- * @example
- * ```ts
- * class MyLinter extends BaseLinter {
- *   readonly meta: LinterMeta = {
- *     id: "my-linter",
- *     name: "My Linter",
- *     description: "Checks for something",
- *     defaultSeverity: "warning",
- *   };
- *
- *   readonly requirements: LinterDataRequirements = {
- *     functions: true,
- *   };
- *
- *   lint(data: CodebaseData, config: LinterConfig): Violation[] {
- *     const violations: Violation[] = [];
- *     // ... check data.allFunctions ...
- *     return violations;
- *   }
- * }
- * ```
+ * Supports both old Violation-based API and new Issue-based API for
+ * gradual migration.
  */
 export abstract class BaseLinter {
   /**
    * Metadata describing this linter.
    */
   abstract readonly meta: LinterMeta;
+
+  /**
+   * Catalog of all issue kinds this linter can emit.
+   * Keys must be in format "rule-id/issue-name".
+   * 
+   * Optional for backward compatibility - linters without catalog
+   * use the old Violation system.
+   */
+  readonly catalog: IssueCatalog = {};
 
   /**
    * Data requirements for this linter.
@@ -148,11 +183,29 @@ export abstract class BaseLinter {
   }
 
   /**
+   * Get the definition for an issue kind.
+   */
+  getIssueDef(kind: string): IssueDef | undefined {
+    return this.catalog[kind];
+  }
+
+  /**
+   * Get category for an issue kind.
+   */
+  getCategory(kind: string): IssueCategory {
+    return this.catalog[kind]?.category ?? "consistency";
+  }
+
+  /**
+   * Get impact for an issue kind.
+   */
+  getImpact(kind: string): IssueImpact {
+    return this.catalog[kind]?.impact ?? "minor";
+  }
+
+  /**
    * Create a violation with this linter's info pre-filled.
-   *
-   * @param violation - Partial violation (without linter field)
-   * @param config - Linter config for severity override
-   * @returns Complete violation
+   * (Backward compatibility)
    */
   protected createViolation(
     violation: Omit<Violation, "linter" | "severity"> & {
@@ -163,13 +216,14 @@ export abstract class BaseLinter {
     return {
       linter: this.meta.id,
       severity:
-        config?.severity ?? violation.severity ?? this.meta.defaultSeverity,
+        config?.severity ?? violation.severity ?? this.meta.defaultSeverity ?? "warning",
       ...violation,
     };
   }
 
   /**
    * Create an error-level violation.
+   * (Backward compatibility)
    */
   protected error(
     code: string,
@@ -189,6 +243,7 @@ export abstract class BaseLinter {
 
   /**
    * Create a warning-level violation.
+   * (Backward compatibility)
    */
   protected warning(
     code: string,
@@ -208,6 +263,7 @@ export abstract class BaseLinter {
 
   /**
    * Create an info-level violation.
+   * (Backward compatibility)
    */
   protected info(
     code: string,
@@ -222,6 +278,43 @@ export abstract class BaseLinter {
       message,
       location,
       ...extra,
+    };
+  }
+
+  /**
+   * Create an issue with this linter's info (new system).
+   *
+   * @param issueKind - The issue kind (e.g., "bad-thing", will be prefixed with rule id)
+   * @param location - Source location
+   * @param message - Human-readable message
+   * @param options - Additional options
+   */
+  protected issue(
+    issueKind: string,
+    location: SourceLocation,
+    message: string,
+    options: {
+      confidence?: number;
+      suggestion?: string;
+      relatedLocations?: SourceLocation[];
+      context?: Record<string, unknown>;
+    } = {}
+  ): Issue {
+    const kind = issueKind.includes("/") 
+      ? issueKind 
+      : `${this.meta.id}/${issueKind}`;
+    
+    const def = this.catalog[kind];
+    const defaultConfidence = def?.defaultConfidence ?? 80;
+
+    return {
+      kind,
+      location,
+      message,
+      confidence: options.confidence ?? defaultConfidence,
+      suggestion: options.suggestion,
+      relatedLocations: options.relatedLocations,
+      context: options.context,
     };
   }
 }
