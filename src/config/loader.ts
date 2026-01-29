@@ -101,15 +101,15 @@ function resolveConfig(config: ViolaConfig): ResolvedConfig {
  * Parse a pattern string into components.
  * 
  * Formats:
- * - `rule/issue` - exact match
- * - `rule/*` - all issues from rule
+ * - `linter/issue` - exact match
+ * - `linter/*` - all issues from linter
  * - `*::category` - category filter
  * - `*>=impact` - impact comparison
- * - `rule/*::category>=impact` - combined
+ * - `linter/*::category>=impact` - combined
  */
 function parsePattern(pattern: string): ParsedPattern | null {
   let remaining = pattern;
-  let rule = "*";
+  let linter = "*";
   let issue = "*";
   let category: IssueCategory | undefined;
   let impact: ParsedPattern["impact"];
@@ -135,23 +135,23 @@ function parsePattern(pattern: string): ParsedPattern | null {
     remaining = remaining.replace(impactMatch[0], "");
   }
 
-  // Parse rule/issue
+  // Parse linter/issue
   remaining = remaining.trim();
   if (remaining) {
     const slashIdx = remaining.indexOf("/");
     if (slashIdx !== -1) {
-      rule = remaining.slice(0, slashIdx) || "*";
+      linter = remaining.slice(0, slashIdx) || "*";
       issue = remaining.slice(slashIdx + 1) || "*";
     } else {
-      // Just a rule name or "*"
-      rule = remaining;
+      // Just a linter name or "*"
+      linter = remaining;
       issue = "*";
     }
   }
 
   return {
     raw: pattern,
-    rule,
+    linter,
     issue,
     category,
     impact,
@@ -196,13 +196,13 @@ export function matchesIssuePattern(
   issueImpact: IssueImpact,
   pattern: ParsedPattern
 ): boolean {
-  // Parse issue kind (rule/issue format)
+  // Parse issue kind (linter/issue format)
   const slashIdx = issueKind.indexOf("/");
-  const ruleId = slashIdx !== -1 ? issueKind.slice(0, slashIdx) : issueKind;
+  const linterId = slashIdx !== -1 ? issueKind.slice(0, slashIdx) : issueKind;
   const issueName = slashIdx !== -1 ? issueKind.slice(slashIdx + 1) : "*";
 
-  // Check rule match
-  if (pattern.rule !== "*" && !matchesGlob(ruleId, pattern.rule)) {
+  // Check linter match
+  if (pattern.linter !== "*" && !matchesGlob(linterId, pattern.linter)) {
     return false;
   }
 
@@ -248,7 +248,7 @@ export function matchesIssuePattern(
 }
 
 /**
- * Simple glob matching for rule/issue names.
+ * Simple glob matching for linter/issue names.
  */
 function matchesGlob(value: string, pattern: string): boolean {
   if (pattern === "*") return true;

@@ -230,6 +230,8 @@ export interface FileInfo {
   readonly extension: string;
   /** Line count */
   readonly lineCount: number;
+  /** Raw file content (only populated if a linter requests it) */
+  readonly content?: string;
   /** All functions in the file */
   readonly functions: readonly FunctionInfo[];
   /** All types/interfaces in the file */
@@ -240,10 +242,6 @@ export interface FileInfo {
   readonly exports: readonly ExportInfo[];
   /** All imports into the file */
   readonly imports: readonly ImportInfo[];
-  /** Whether file has any @deprecated annotations */
-  readonly hasDeprecations: boolean;
-  /** Deprecation locations (if any) */
-  readonly deprecations: readonly SourceLocation[];
 }
 
 // =============================================================================

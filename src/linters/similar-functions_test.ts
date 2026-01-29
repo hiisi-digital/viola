@@ -4,12 +4,13 @@
  * @module
  */
 
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import type { LinterConfig } from "../data/types.ts";
 import { SimilarFunctionsLinter } from "./similar-functions.ts";
 import {
     defaultConfig,
     expectNoViolations,
+    first,
     mockCodebase,
     mockFile,
     mockFunction
@@ -67,7 +68,7 @@ Deno.test("similar-functions - reports functions with similar names (medium thre
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].code, "similar-function-name-medium");
+  assertEquals(first(violations).code, "similar-function-name-medium");
 });
 
 Deno.test("similar-functions - reports similar functions across files", () => {
@@ -90,7 +91,7 @@ Deno.test("similar-functions - reports similar functions across files", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].code, "similar-function-name-medium");
+  assertEquals(first(violations).code, "similar-function-name-medium");
 });
 
 Deno.test("similar-functions - identical names in different files produces high similarity", () => {
@@ -113,7 +114,7 @@ Deno.test("similar-functions - identical names in different files produces high 
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].code, "duplicate-function");
+  assertEquals(first(violations).code, "duplicate-function");
 });
 
 // =============================================================================
@@ -257,7 +258,7 @@ Deno.test("similar-functions - violation has correct severity", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].severity, "warning");
+  assertEquals(first(violations).severity, "warning");
 });
 
 Deno.test("similar-functions - violation includes related locations", () => {
@@ -281,8 +282,8 @@ Deno.test("similar-functions - violation includes related locations", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(Array.isArray(violations[0].relatedLocations), true);
-  assertEquals(violations[0].relatedLocations!.length >= 1, true);
+  assertEquals(Array.isArray(first(violations).relatedLocations), true);
+  assertEquals(first(violations).relatedLocations!.length >= 1, true);
 });
 
 Deno.test("similar-functions - violation includes suggestion", () => {
@@ -306,8 +307,8 @@ Deno.test("similar-functions - violation includes suggestion", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(typeof violations[0].suggestion, "string");
-  assertEquals(violations[0].suggestion!.length > 0, true);
+  assertEquals(typeof first(violations).suggestion, "string");
+  assertEquals(first(violations).suggestion!.length > 0, true);
 });
 
 Deno.test("similar-functions - violation has correct linter name", () => {
@@ -331,7 +332,7 @@ Deno.test("similar-functions - violation has correct linter name", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].linter, "similar-functions");
+  assertEquals(first(violations).linter, "similar-functions");
 });
 
 // =============================================================================

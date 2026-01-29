@@ -24,7 +24,7 @@ import { BaseLinter, type LinterDataRequirements, type LinterMeta } from "./base
 /**
  * Thresholds for type name similarity.
  */
-const TYPE_NAME_THRESHOLDS: SimilarityThresholds = {
+const _TYPE_NAME_THRESHOLDS: SimilarityThresholds = {
   low: 0.5,    // Below this: no match
   medium: 0.7, // Above this: warning
   high: 0.85,  // Above this: error
@@ -258,7 +258,7 @@ export class SimilarTypesLinter extends BaseLinter {
     typeB: TypeInfo,
     options: SimilarTypesOptions
   ): Violation | null {
-    const { similarity, level, metrics } = compareIdentifiers(typeA.name, typeB.name);
+    const { similarity, level: _level, metrics } = compareIdentifiers(typeA.name, typeB.name);
 
     // Exact same name in different files
     if (typeA.name === typeB.name) {
@@ -472,4 +472,4 @@ export class SimilarTypesLinter extends BaseLinter {
 /**
  * Default instance for registration.
  */
-export const similarTypesLinter = new SimilarTypesLinter();
+export const similarTypesLinter: SimilarTypesLinter = new SimilarTypesLinter();
