@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@hiisi/flash-freeze@0.1": "0.1.1",
+    "jsr:@hiisi/viola-default-lints@0.1": "0.1.1",
     "jsr:@std/assert@1": "1.0.17",
     "jsr:@std/fs@1": "1.0.22",
     "jsr:@std/internal@^1.0.12": "1.0.12",
@@ -11,6 +12,9 @@
   "jsr": {
     "@hiisi/flash-freeze@0.1.1": {
       "integrity": "d47a7143f8f0497101b62faf466574577383add61960265d8fc3323f3c77c512"
+    },
+    "@hiisi/viola-default-lints@0.1.1": {
+      "integrity": "0f359e5fb8eb50f70fd468c181ff4f896f631da7839dc96a404b82878c5bdfc0"
     },
     "@std/assert@1.0.17": {
       "integrity": "df5ebfffe77c03b3fa1401e11c762cc8f603d51021c56c4d15a8c7ab45e90dbe",
@@ -37,6 +41,7 @@
   "workspace": {
     "dependencies": [
       "jsr:@hiisi/flash-freeze@0.1",
+      "jsr:@hiisi/viola-default-lints@0.1",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",
       "jsr:@std/path@1"
