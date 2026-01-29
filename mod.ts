@@ -279,3 +279,18 @@ export function formatResults(results: LintResults): string {
 
   return lines.join("\n");
 }
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+export type {
+  CheckerConfig,
+  ConfigSource,
+  ResolvedConfig,
+  ScopedConfig,
+  Severity,
+  ViolaFileConfig,
+} from "./src/config/mod.ts";
+
+export { getCheckersForFile, loadConfig } from "./src/config/mod.ts";

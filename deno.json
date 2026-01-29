@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "exports": {
     ".": "./mod.ts",
+    "./config": "./src/config/mod.ts",
     "./runtime": "./src/runtime/mod.ts",
     "./linters": "./src/linters/mod.ts",
     "./data": "./src/data/mod.ts",
@@ -16,8 +17,7 @@
       "LICENSE"
     ],
     "exclude": [
-      "src/**/*_test.ts",
-      "cli.ts"
+      "src/**/*_test.ts"
     ]
   },
   "imports": {
