@@ -125,7 +125,22 @@ Pattern values can be:
 - `"error"` | `"warn"` | `"info"` | `"off"` — simple severity
 - `{ "severity": "warn", "minConfidence": 80 }` — with confidence threshold
 
-## Built-in Linters
+## Plugins
+
+Linters are loaded as plugins. Add them to the `plugins` array in your config:
+
+```json
+{
+  "viola": {
+    "plugins": ["@hiisi/viola-linters"],
+    "**/*.ts": {
+      "*>=major": "error"
+    }
+  }
+}
+```
+
+The `@hiisi/viola-linters` package provides these linters:
 
 | Linter | Description |
 |------|-------------|
@@ -133,7 +148,13 @@ Pattern values can be:
 | `similar-functions` | Detect similar function names |
 | `similar-types` | Detect similar type names |
 | `duplicate-strings` | Find repeated string literals |
+| `duplicate-logic` | Find duplicated code patterns |
 | `deprecation` | Find deprecated code past its removal date |
+| `missing-docs` | Find exports without documentation |
+| `orphaned-code` | Find unused internal code |
+| `schema-collision` | Find conflicting schema definitions |
+
+Plugins are loaded via dynamic import. Any module that exports linters (as a `linters` array, individual named exports, or default export) can be used as a plugin.
 
 ## Custom Linters
 
