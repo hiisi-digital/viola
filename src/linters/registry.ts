@@ -205,7 +205,7 @@ export async function runLinters(
       results.push(result);
       if (options.verbose) {
         console.log(
-          `  ${result.violations.length} violations in ${result.durationMs.toFixed(1)}ms`
+          `  ${result.issues.length} issues in ${result.durationMs.toFixed(1)}ms`
         );
       }
     }
@@ -213,37 +213,13 @@ export async function runLinters(
 
   // Aggregate results
   const totalDurationMs = performance.now() - startTime;
-
-  let errors = 0;
-  let warnings = 0;
-  let infos = 0;
-
-  for (const result of results) {
-    for (const violation of result.violations) {
-      switch (violation.severity) {
-        case "error":
-          errors++;
-          break;
-        case "warning":
-          warnings++;
-          break;
-        case "info":
-          infos++;
-          break;
-      }
-    }
-  }
+  const totalIssues = results.reduce((sum, r) => sum + r.issues.length, 0);
 
   return {
     results,
-    summary: {
-      errors,
-      warnings,
-      infos,
-      total: errors + warnings + infos,
-    },
+    totalIssues,
     totalDurationMs,
-    hasErrors: errors > 0 || results.some((r) => !r.success),
+    hasErrors: results.some((r) => !r.success),
     filesScanned: data.files.length,
   };
 }
@@ -266,7 +242,7 @@ export function runLinter(
   if (!linter) {
     return {
       linter: id,
-      violations: [],
+      issues: [],
       durationMs: 0,
       success: false,
       error: `Linter "${id}" not found`,
