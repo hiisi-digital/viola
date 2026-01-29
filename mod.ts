@@ -12,11 +12,23 @@
  *
  * ```ts
  * // viola.config.ts
- * import { viola, report, when, Impact, Category } from "@hiisi/viola";
- * import { defaultLints } from "@hiisi/viola-default-lints";
+ * import { viola, withDefaults } from "@hiisi/viola";
+ * import defaultLints from "@hiisi/viola-default-lints";
  *
  * export default viola()
- *   .use(defaultLints)
+ *   .use(withDefaults(defaultLints))  // use plugin with its default rules
+ *   .rule(report.off, when.in("**\/*_test.ts"));  // your overrides
+ * ```
+ *
+ * ### Without Plugin Defaults
+ *
+ * ```ts
+ * // Define all rules yourself
+ * import { viola, report, when, Impact } from "@hiisi/viola";
+ * import defaultLints from "@hiisi/viola-default-lints";
+ *
+ * export default viola()
+ *   .use(defaultLints)  // just linters, no default rules
  *   .rule(report.error, when.impact.atLeast(Impact.Major))
  *   .rule(report.warn, when.impact.is(Impact.Minor))
  *   .rule(report.off, when.in("**\/*_test.ts"));
@@ -172,7 +184,7 @@ export type {
     PresetPatternValue,
     PresetScopeConfig,
     ViolaConfigPreset,
-    ViolaPlugin
+    ViolaPlugin as ViolaPluginModule
 } from "./src/types/mod.ts";
 
 export {
@@ -689,7 +701,7 @@ export {
     compareImpact, ConditionExpr, formatValidationErrors, Impact, IMPACT_ORDER,
     impactValue, isReportAction, loadConfig,
     matchesFilePattern,
-    matchesIssuePattern, report,
+    matchesIssuePattern, plugin, report,
     ReportLevel, resolveIssueSeverity,
     validateLinterConfig, viola,
     ViolaBuilder,
@@ -701,14 +713,17 @@ export type {
     Condition,
     EvaluatedIssue,
     EvaluationContext,
-    LinterPlugin,
+    LinterInput,
     LinterSetting,
+    PluginInput,
     ReportAction,
     Rule,
     RuleAction,
     // Legacy
     ValidationError,
-    ValidationResult, ViolaBuilderConfig
+    ValidationResult, ViolaBuilderConfig,
+    ViolaPlugin,
+    ViolaPluginFn
 } from "./src/config/mod.ts";
 
 export {

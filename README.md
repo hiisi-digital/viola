@@ -29,56 +29,64 @@ deno add jsr:@hiisi/viola
 Create a `viola.config.ts` in your project root:
 
 ```ts
-import { viola, report, when, Impact } from "@hiisi/viola";
-import { defaultLints } from "@hiisi/viola-default-lints";
+import { viola } from "@hiisi/viola";
+import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
-  .use(defaultLints)
-  .rule(report.error, when.impact.atLeast(Impact.Major))
-  .rule(report.warn, when.impact.is(Impact.Minor))
-  .rule(report.off, when.impact.is(Impact.Trivial));
+  .use(defaultLints)  // plugin adds linters + default rules
+  .rule(report.off, when.in("**/*_test.ts"));  // your overrides
 ```
+
+Plugins configure the builder with linters and default rules. Your rules are always checked first (first match wins), so you can override plugin defaults.
 
 ### Full Example
 
 ```ts
 import { viola, report, when, Impact, Category } from "@hiisi/viola";
-import { defaultLints } from "@hiisi/viola-default-lints";
-import { schemaHasTypes } from "./lints/schema-has-types.ts";
-import { readmeVersion } from "./lints/readme-version.ts";
+import defaultLints from "@hiisi/viola-default-lints";
+import { myCustomLinter } from "./lints/my-custom.ts";
 
 export default viola()
-  // Plugins
+  // Plugins (add linters + their default rules)
   .use(defaultLints)
-  .use(schemaHasTypes)
-  .use(readmeVersion)
+  
+  // Individual linters (no default rules)
+  .add(myCustomLinter)
   
   // Linter settings
   .set("similar-functions.threshold", 0.85)
-  .set("duplicate-strings", { minLength: 12, minOccurrences: 3 })
+  .set("duplicate-strings", { minLength: 12, threshold: 3 })
   
-  // Global rules - classify issues by impact and category
-  .rule(report.error, when.impact.atLeast(Impact.Major))
-  .rule(report.warn, when.impact.is(Impact.Minor))
-  .rule(report.off, when.impact.is(Impact.Trivial))
-  .rule(report.error, when.category.is(Category.Correctness))
-  .rule(report.hint, when.category.is(Category.Style))
-  
+  // Your rules (checked BEFORE plugin rules)
   // File-scoped rules
   .rule(report.off, when.in("**/*_test.ts"))
   .rule(report.off, when.in("**/*.spec.ts"))
   .rule(report.skip, when.in("src/generated/**"))
   
-  // Combine conditions
-  .rule(report.error, when.in("packages/core/**").impact.atLeast(Impact.Minor))
-  .rule(report.off, when.in("packages/legacy/**").impact.below(Impact.Critical))
+  // Category rules
+  .rule(report.error, when.category.is(Category.Correctness))
+  .rule(report.hint, when.category.is(Category.Style))
   
-  // Specific linter rules
-  .rule(report.error, when.linter("readme-version").in("README.md"))
-  .rule(report.error, when.linter("schema-has-types").in("schemas/*.json"))
+  // Combine conditions
+  .rule(report.error, when.in("packages/core/**").and(when.impact.atLeast(Impact.Minor)))
   
   // Confidence filtering
   .rule(report.off, when.confidence.below(50));
+```
+
+### Without Plugin Defaults
+
+If you want just linters without a plugin's default rules:
+
+```ts
+import { viola, report, when, Impact } from "@hiisi/viola";
+import { linters } from "@hiisi/viola-default-lints";
+
+export default viola()
+  .add(linters)  // just linters, no default rules
+  .rule(report.error, when.impact.atLeast(Impact.Critical))
+  .rule(report.warn, when.impact.atLeast(Impact.Major))
+  .rule(report.info, when.impact.is(Impact.Minor));
 ```
 
 ## API
@@ -88,6 +96,7 @@ export default viola()
 ```ts
 import { 
   viola,          // Config builder
+  plugin,         // Create plugin from function
   report,         // Report level actions
   when,           // Condition builders
   Impact,         // Impact levels enum
@@ -101,7 +110,8 @@ import {
 
 | Method | Description |
 |--------|-------------|
-| `.use(plugin)` | Add a linter plugin |
+| `.use(plugin)` | Add a plugin (linters + rules) |
+| `.add(linter)` | Add a linter or array of linters |
 | `.set(key, value)` | Configure a linter (`"linter.option"` or `"linter", { options }`) |
 | `.rule(action, condition)` | Add a classification rule |
 
@@ -153,11 +163,13 @@ when.confidence.atLeast(80)
 when.confidence.below(50)
 ```
 
-**Chaining (AND logic):**
+**Combining conditions:**
 ```ts
-when.in("packages/core/**").impact.atLeast(Impact.Minor)
-when.category.is(Category.Style).confidence.atLeast(90)
-when.linter("deprecated").in("src/**")
+when.in("packages/core/**").and(when.impact.atLeast(Impact.Minor))
+when.category.is(Category.Style).or(when.category.is(Category.Consistency))
+when.in("**/*_test.ts").not()
+when.all(when.in("src/**"), when.impact.atLeast(Impact.Major))
+when.any(when.in("**/*_test.ts"), when.in("**/*.spec.ts"))
 ```
 
 ### Enums
@@ -183,48 +195,37 @@ enum Category {
 }
 ```
 
-## Integration Examples
+## Writing Plugins
 
-### Deno Task
-
-```json
-{
-  "tasks": {
-    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli",
-    "build": "deno task lint:conventions && deno task compile"
-  }
-}
-```
-
-### Deno Test Suite
+Plugins configure the builder with linters, rules, and settings:
 
 ```ts
-import { runViola, formatResults } from "@hiisi/viola";
-import { assertEquals } from "@std/assert";
+import { plugin, report, when, Impact, type ViolaPlugin } from "@hiisi/viola";
+import { myLinter } from "./my-linter.ts";
 
-Deno.test("conventions", async () => {
-  const results = await runViola();
-  assertEquals(results.totalIssues, 0, formatResults(results));
+// Object form
+export const myPlugin: ViolaPlugin = {
+  build(viola) {
+    viola
+      .add(myLinter)
+      .rule(report.error, when.impact.atLeast(Impact.Major))
+      .set("my-linter.threshold", 0.9);
+  }
+};
+
+// Function form
+export const myPlugin = plugin((viola) => {
+  viola
+    .add(myLinter)
+    .rule(report.error, when.impact.atLeast(Impact.Major));
 });
 ```
 
-### Pre-commit Hook
-
-```bash
-#!/bin/sh
-deno run -A jsr:@hiisi/viola-cli || exit 1
-```
-
-### CI Workflow
-
-```yaml
-- name: Convention Lint
-  run: deno run -A jsr:@hiisi/viola-cli
-```
+Plugin rules are checked AFTER user rules, so users can always override defaults.
 
 ## Writing Linters
 
-Linters define a **catalog** of issue kinds (with category, impact, description). When they find problems, they create issues referencing those kinds. The config then classifies them into report levels.
+Linters define a **catalog** of issue kinds (with category, impact, description). When they find problems, they create issues referencing those kinds.
 
 ```ts
 import { BaseLinter, type CodebaseData, type Issue, type IssueCatalog } from "@hiisi/viola";
@@ -257,7 +258,7 @@ class NoUnderscoreFunctions extends BaseLinter {
   }
 }
 
-export default new NoUnderscoreFunctions();
+export const noUnderscoreFunctions = new NoUnderscoreFunctions();
 ```
 
 ### Data Requirements
@@ -276,42 +277,41 @@ readonly requirements = {
 };
 ```
 
+## Integration
+
+### Deno Task
+
+```json
+{
+  "tasks": {
+    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli",
+    "build": "deno task lint:conventions && deno task compile"
+  }
+}
+```
+
+### Pre-commit Hook
+
+```bash
+#!/bin/sh
+deno run -A jsr:@hiisi/viola-cli || exit 1
+```
+
+### CI Workflow
+
+```yaml
+- name: Convention Lint
+  run: deno run -A jsr:@hiisi/viola-cli
+```
+
 ## Programmatic API
 
 ```ts
 import { runViola, formatResults } from "@hiisi/viola";
 
-const results = await runViola();
+const results = await runViola({ projectRoot: "." });
 console.log(formatResults(results));
 if (results.hasErrors) Deno.exit(1);
-```
-
-With inline config:
-
-```ts
-import { viola, report, when, Impact, runViola } from "@hiisi/viola";
-import { defaultLints } from "@hiisi/viola-default-lints";
-
-const config = viola()
-  .use(defaultLints)
-  .rule(report.error, when.impact.atLeast(Impact.Major))
-  .rule(report.off, when.in("**/*_test.ts"));
-
-const results = await runViola({ config });
-```
-
-## Extensibility
-
-The `.rule(action, condition)` pattern is extensible. Future actions might include:
-
-```ts
-// Hypothetical future extensions
-import { report, transform, collect, when } from "@hiisi/viola";
-
-viola()
-  .rule(report.error, when.impact.atLeast(Impact.Major))
-  .rule(transform.autofix, when.linter("formatting"))
-  .rule(collect.metrics, when.category.is(Category.Performance))
 ```
 
 ## Support
