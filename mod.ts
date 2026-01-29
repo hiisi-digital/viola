@@ -285,12 +285,28 @@ export function formatResults(results: LintResults): string {
 // =============================================================================
 
 export type {
-  CheckerConfig,
-  ConfigSource,
-  ResolvedConfig,
-  ScopedConfig,
-  Severity,
-  ViolaFileConfig,
+    ConfigSource,
+    IssueCatalog,
+    IssueCategory,
+    IssueDef,
+    IssueImpact,
+    ParsedPattern,
+    PatternValue,
+    ResolvedConfig,
+    ResolvedPatternValue,
+    ResolvedScope,
+    ScopeConfig,
+    Severity,
+    ViolaConfig as ViolaFileConfig
 } from "./src/config/mod.ts";
 
-export { getCheckersForFile, loadConfig } from "./src/config/mod.ts";
+export {
+    compareImpact,
+    IMPACT_ORDER,
+    impactValue,
+    loadConfig,
+    matchesFilePattern,
+    matchesIssuePattern,
+    resolveIssueSeverity
+} from "./src/config/mod.ts";
+

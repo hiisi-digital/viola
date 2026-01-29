@@ -1,122 +1,200 @@
 /**
  * Viola configuration types.
  *
- * Configuration can be specified in:
- * 1. `deno.json` under the `viola` field
- * 2. `viola.json` at project root or subdirectories
- * 3. Environment variable `VIOLA_CONFIG` pointing to a config file
- *
- * Subdirectory configs inherit from parent configs and can override.
- * Explicit `viola.json` takes precedence over `deno.json`.
+ * Configuration is specified in `deno.json` under the `viola` field.
+ * Config is always scoped by file patterns.
  */
 
-/**
- * Severity level for a checker.
- */
-export type Severity = "error" | "warning" | "info" | "off";
+// =============================================================================
+// Issue Classification
+// =============================================================================
 
 /**
- * Configuration for a single checker.
- * Can be just the checker name (string) for defaults,
- * or an object with options.
+ * Category of an issue - what kind of problem it represents.
  */
-export type CheckerConfig =
-  | string // Just the checker name, use defaults
+export type IssueCategory =
+  | "correctness"    // Code is wrong or broken
+  | "maintainability" // Harder to work with over time
+  | "consistency"    // Breaks project conventions
+  | "performance"    // Slower than needed
+  | "style";         // Cosmetic/formatting
+
+/**
+ * Impact level of an issue - how urgent it is (ordered).
+ * 
+ * Order: critical > major > minor > trivial
+ */
+export type IssueImpact =
+  | "critical"  // Must fix, blocks release
+  | "major"     // Should fix soon
+  | "minor"     // Fix when convenient
+  | "trivial";  // Nice to have
+
+/**
+ * Impact levels in order from highest to lowest.
+ */
+export const IMPACT_ORDER: readonly IssueImpact[] = [
+  "critical",
+  "major",
+  "minor",
+  "trivial",
+] as const;
+
+/**
+ * Get numeric value for impact comparison.
+ */
+export function impactValue(impact: IssueImpact): number {
+  return IMPACT_ORDER.indexOf(impact);
+}
+
+/**
+ * Compare two impacts. Returns negative if a > b, positive if a < b, 0 if equal.
+ */
+export function compareImpact(a: IssueImpact, b: IssueImpact): number {
+  return impactValue(a) - impactValue(b);
+}
+
+/**
+ * Output severity for reporting.
+ */
+export type Severity = "error" | "warn" | "info" | "off";
+
+// =============================================================================
+// Issue Catalog
+// =============================================================================
+
+/**
+ * Definition of an issue kind that a rule can emit.
+ */
+export interface IssueDef {
+  /** What kind of problem this is */
+  category: IssueCategory;
+  /** How urgent this is by default */
+  impact: IssueImpact;
+  /** Human-readable description */
+  description: string;
+  /** Default confidence if not specified per-issue (0-100) */
+  defaultConfidence?: number;
+}
+
+/**
+ * Catalog of all issue kinds a rule can emit.
+ * Keys are in format "rule-id/issue-kind".
+ */
+export type IssueCatalog = Record<string, IssueDef>;
+
+// =============================================================================
+// Configuration
+// =============================================================================
+
+/**
+ * Simple severity value or full config object.
+ */
+export type PatternValue =
+  | Severity
   | {
-      /** Checker ID */
-      id: string;
-      /** Override severity */
-      severity?: Severity;
-      /** Checker-specific options */
-      options?: Record<string, unknown>;
+      /** Output severity */
+      severity: Severity;
+      /** Minimum confidence to report (0-100) */
+      minConfidence?: number;
     };
 
 /**
- * A scoped configuration that applies to files matching a pattern.
+ * Scope configuration - patterns mapped to severities.
+ * 
+ * Pattern syntax:
+ * - `rule/issue` - exact issue
+ * - `rule/*` - all issues from rule
+ * - `*::category` - all issues with category
+ * - `*>=impact` - all issues with impact >= threshold
+ * - `*=impact` - all issues with exact impact
+ * - `*!=impact` - all issues except impact
+ * - Combinations: `rule/*::category`, `rule/*>=impact`
  */
-export interface ScopedConfig {
-  /** Glob pattern for files this config applies to */
-  pattern: string;
-  /** Checkers to run on matching files */
-  checkers?: CheckerConfig[];
-  /** Checkers to skip on matching files */
-  skip?: string[];
-  /** Override severity for specific checkers */
-  severity?: Record<string, Severity>;
-}
+export type ScopeConfig = Record<string, PatternValue>;
 
 /**
  * Root viola configuration.
+ * 
+ * Keys are file glob patterns, values are scope configs.
+ * 
+ * @example
+ * ```json
+ * {
+ *   "**\/*.ts": {
+ *     "*>=major": "error",
+ *     "*>=minor": "warn",
+ *     "deprecation/stale": "error"
+ *   },
+ *   "**\/*_test.ts": {
+ *     "*>=major": "warn"
+ *   }
+ * }
+ * ```
  */
-export interface ViolaFileConfig {
-  /**
-   * Checkers to run globally (implicit "*" pattern).
-   * Can be an array of checker names/configs.
-   */
-  checkers?: CheckerConfig[];
+export type ViolaConfig = Record<string, ScopeConfig>;
 
-  /**
-   * Checkers to skip globally.
-   */
-  skip?: string[];
+// =============================================================================
+// Resolved Configuration
+// =============================================================================
 
-  /**
-   * Override severity for specific checkers globally.
-   */
-  severity?: Record<string, Severity>;
-
-  /**
-   * Scoped configurations by pattern.
-   * Keys are glob patterns, values are scoped configs.
-   */
-  scopes?: Record<string, Omit<ScopedConfig, "pattern">>;
-
-  /**
-   * Directories to include.
-   */
-  include?: string[];
-
-  /**
-   * Directories/patterns to exclude.
-   */
-  exclude?: string[];
-
-  /**
-   * File extensions to check.
-   */
-  extensions?: string[];
-
-  /**
-   * Paths to additional config files to extend.
-   */
-  extends?: string | string[];
+/**
+ * A parsed pattern with its components.
+ */
+export interface ParsedPattern {
+  /** Original pattern string */
+  raw: string;
+  /** Rule glob (e.g., "deprecation", "*", "similar-*") */
+  rule: string;
+  /** Issue glob (e.g., "stale", "*") */
+  issue: string;
+  /** Category filter if present */
+  category?: IssueCategory;
+  /** Impact comparison if present */
+  impact?: {
+    operator: "=" | "!=" | ">=" | "<=" | ">" | "<";
+    value: IssueImpact;
+  };
 }
 
 /**
- * Resolved configuration after merging all sources.
+ * Resolved pattern value.
+ */
+export interface ResolvedPatternValue {
+  severity: Severity;
+  minConfidence: number;
+}
+
+/**
+ * A scope with parsed patterns.
+ */
+export interface ResolvedScope {
+  /** File glob pattern */
+  filePattern: string;
+  /** Patterns in resolution order (last wins) */
+  patterns: Array<{
+    pattern: ParsedPattern;
+    value: ResolvedPatternValue;
+  }>;
+}
+
+/**
+ * Fully resolved configuration.
  */
 export interface ResolvedConfig {
-  /** Root checkers (apply to all files unless overridden) */
-  checkers: Map<string, { severity: Severity; options: Record<string, unknown> }>;
-
-  /** Scoped configs by pattern */
-  scopes: Map<string, {
-    checkers: Map<string, { severity: Severity; options: Record<string, unknown> }>;
-    skip: Set<string>;
-  }>;
-
-  /** Global skip list */
-  skip: Set<string>;
-
-  /** Include paths */
+  /** Scopes in order of definition */
+  scopes: ResolvedScope[];
+  /** Include paths for crawling */
   include: string[];
-
-  /** Exclude patterns */
+  /** Exclude patterns for crawling */
   exclude: string[];
-
-  /** File extensions */
+  /** File extensions to check */
   extensions: string[];
 }
+
+// =============================================================================
+// Configuration Source
+// =============================================================================
 
 /**
  * Configuration source for debugging.
@@ -126,6 +204,4 @@ export interface ConfigSource {
   path: string;
   /** Type of config */
   type: "deno.json" | "viola.json" | "env";
-  /** Whether this config was inherited */
-  inherited: boolean;
 }

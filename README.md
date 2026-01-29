@@ -17,7 +17,7 @@ and project-specific rules. Not a replacement for ESLint or `deno lint`; those h
 correctness. This handles everything else.
 
 Crawls the codebase once, extracts structured data (functions, types, imports, strings), and
-runs multiple checkers against it. Each checker declares what data it needs and gets only that.
+runs multiple rules against it. Each rule declares what data it needs and gets only that.
 
 ```ts
 import { runViola, formatResults } from "@hiisi/viola";
@@ -38,43 +38,138 @@ if (results.hasErrors) Deno.exit(1);
 deno add jsr:@hiisi/viola
 ```
 
-```ts
-import { runViola, formatResults, registry } from "@hiisi/viola";
+## Configuration
+
+Configure via `deno.json` under the `viola` field. Config is scoped by file patterns:
+
+```json
+{
+  "viola": {
+    "**/*.ts": {
+      "*>=major": "error",
+      "*>=minor": "warn",
+      "*=trivial": "off",
+      
+      "similar-functions/*": "error",
+      "deprecation/stale": "error"
+    },
+    "**/*_test.ts": {
+      "*>=major": "warn",
+      "deprecation/*": "off"
+    }
+  }
+}
 ```
 
-## Built-in Checkers
+### Issue Classification
 
-| Checker | Description |
-|---------|-------------|
+Every issue has two dimensions:
+
+**Category** (what kind of problem):
+- `correctness` — code is wrong or broken
+- `maintainability` — harder to work with over time
+- `consistency` — breaks project conventions
+- `performance` — slower than needed
+- `style` — cosmetic/formatting
+
+**Impact** (how urgent, ordered):
+1. `critical` — must fix, blocks release
+2. `major` — should fix soon
+3. `minor` — fix when convenient
+4. `trivial` — nice to have
+
+Each issue also has a **confidence** score (0-100) indicating how certain the rule is.
+
+### Pattern Syntax
+
+Patterns match against `rule/issue` identifiers:
+
+| Pattern | Matches |
+|---------|---------|
+| `deprecation/stale` | Exact issue |
+| `deprecation/*` | All issues from rule |
+| `*::correctness` | All issues with category |
+| `*>=major` | All issues with impact major or higher |
+| `*=minor` | All issues with exactly minor impact |
+| `*!=trivial` | All issues except trivial |
+| `similar-functions/*::maintainability` | Category filter on specific rule |
+
+**Operators for impact:**
+- `=` equals
+- `!=` not equals
+- `>=` greater or equal
+- `<=` less or equal
+- `>` greater
+- `<` less
+
+**Category filter:** `::category`
+
+### Pattern Resolution
+
+Patterns are matched in order; last match wins. More specific patterns should come after general ones:
+
+```json
+{
+  "**/*.ts": {
+    "*>=major": "error",
+    "*>=minor": "warn",
+    "similar-functions/*": "error",
+    "similar-functions/near-match": { "severity": "warn", "minConfidence": 80 }
+  }
+}
+```
+
+### Value Format
+
+Pattern values can be:
+- `"error"` | `"warn"` | `"info"` | `"off"` — simple severity
+- `{ "severity": "warn", "minConfidence": 80 }` — with confidence threshold
+
+## Built-in Rules
+
+| Rule | Description |
+|------|-------------|
 | `type-location` | Types must be in `types/` directories |
 | `similar-functions` | Detect similar function names |
 | `similar-types` | Detect similar type names |
 | `duplicate-strings` | Find repeated string literals |
-| `deprecation-check` | Find deprecated code past its removal date |
+| `deprecation` | Find deprecated code past its removal date |
 
-## Custom Checkers
+## Custom Rules
 
 ```ts
 import { BaseLinter, registry } from "@hiisi/viola";
 
-class MyChecker extends BaseLinter {
+class MyRule extends BaseLinter {
   readonly meta = {
-    id: "my-checker",
-    name: "My Checker",
+    id: "my-rule",
+    name: "My Rule",
     description: "Checks naming conventions",
-    defaultSeverity: "warning",
+  };
+
+  readonly catalog = {
+    "my-rule/bad-name": { 
+      category: "consistency", 
+      impact: "minor",
+      description: "Name does not follow convention"
+    },
+    "my-rule/very-bad-name": { 
+      category: "consistency", 
+      impact: "major",
+      description: "Name is confusing or misleading"
+    },
   };
 
   readonly requirements = { functions: true };
 
   lint(data, config) {
     const issues = [];
-    // Analyze data.functions, return issues
+    // Analyze data.functions, emit issues with kind from catalog
     return issues;
   }
 }
 
-registry.register(new MyChecker());
+registry.register(new MyRule());
 ```
 
 ## API
@@ -91,23 +186,18 @@ registry.register(new MyChecker());
 
 ### Registry
 
-- `registry.register(checker)` — Register a checker
-- `registry.get(id)` — Get checker by ID
-- `registry.getAll()` — List all checkers
-- `runLinters(data, options)` — Run checkers on data
-
-### Built-in Checker Classes
-
-- `TypeLocationLinter`, `SimilarFunctionsLinter`, `SimilarTypesLinter`
-- `DuplicateStringsLinter`, `DeprecationCheckLinter`
+- `registry.register(rule)` — Register a rule
+- `registry.get(id)` — Get rule by ID
+- `registry.getAll()` — List all rules
+- `runLinters(data, options)` — Run rules on data
 
 ### Types
 
 - `ViolaConfig` — Configuration options
 - `LintResults` — Check results
-- `Violation` — Single convention violation
+- `Issue` — Single convention violation with category, impact, confidence
 - `CodebaseData` — Extracted codebase structure
-- `BaseLinter` — Base class for custom checkers
+- `BaseLinter` — Base class for custom rules
 
 ## Support
 
