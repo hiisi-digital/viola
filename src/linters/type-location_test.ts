@@ -4,11 +4,12 @@
  * @module
  */
 
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import {
     defaultConfig,
     expectCodes,
     expectNoViolations,
+    first,
     mockCodebase,
     mockFile,
     mockFunction,
@@ -143,7 +144,7 @@ Deno.test("type-location - reports interface outside types directory", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].code, "type-outside-types");
+  assertEquals(first(violations).code, "type-outside-types");
 });
 
 // =============================================================================
@@ -289,7 +290,7 @@ Deno.test("type-location - handles mixed valid and invalid locations", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].message.includes("BadConfig"), true);
+  assertEquals(first(violations).message.includes("BadConfig"), true);
 });
 
 Deno.test("type-location - empty codebase produces no violations", () => {
@@ -333,7 +334,7 @@ Deno.test("type-location - violation has correct severity", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].severity, "error");
+  assertEquals(first(violations).severity, "error");
 });
 
 Deno.test("type-location - violation includes suggestion", () => {
@@ -350,8 +351,8 @@ Deno.test("type-location - violation includes suggestion", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(typeof violations[0].suggestion, "string");
-  assertEquals(violations[0].suggestion!.length > 0, true);
+  assertEquals(typeof first(violations).suggestion, "string");
+  assertEquals(first(violations).suggestion!.length > 0, true);
 });
 
 Deno.test("type-location - violation has correct linter name", () => {
@@ -368,5 +369,5 @@ Deno.test("type-location - violation has correct linter name", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].linter, "type-location");
+  assertEquals(first(violations).linter, "type-location");
 });

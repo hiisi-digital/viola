@@ -64,7 +64,7 @@ export type Severity = "error" | "warn" | "info" | "off";
 // =============================================================================
 
 /**
- * Definition of an issue kind that a rule can emit.
+ * Definition of an issue kind that a linter can emit.
  */
 export interface IssueDef {
   /** What kind of problem this is */
@@ -78,8 +78,8 @@ export interface IssueDef {
 }
 
 /**
- * Catalog of all issue kinds a rule can emit.
- * Keys are in format "rule-id/issue-kind".
+ * Catalog of all issue kinds a linter can emit.
+ * Keys are in format "linter-id/issue-kind".
  */
 export type IssueCatalog = Record<string, IssueDef>;
 
@@ -103,13 +103,13 @@ export type PatternValue =
  * Scope configuration - patterns mapped to severities.
  * 
  * Pattern syntax:
- * - `rule/issue` - exact issue
- * - `rule/*` - all issues from rule
+ * - `linter/issue` - exact issue
+ * - `linter/*` - all issues from linter
  * - `*::category` - all issues with category
  * - `*>=impact` - all issues with impact >= threshold
  * - `*=impact` - all issues with exact impact
  * - `*!=impact` - all issues except impact
- * - Combinations: `rule/*::category`, `rule/*>=impact`
+ * - Combinations: `linter/*::category`, `linter/*>=impact`
  */
 export type ScopeConfig = Record<string, PatternValue>;
 
@@ -144,8 +144,8 @@ export type ViolaConfig = Record<string, ScopeConfig>;
 export interface ParsedPattern {
   /** Original pattern string */
   raw: string;
-  /** Rule glob (e.g., "deprecation", "*", "similar-*") */
-  rule: string;
+  /** Linter glob (e.g., "deprecation", "*", "similar-*") */
+  linter: string;
   /** Issue glob (e.g., "stale", "*") */
   issue: string;
   /** Category filter if present */

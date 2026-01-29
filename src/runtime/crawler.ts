@@ -18,11 +18,10 @@ import type {
     FunctionParam,
     ImportInfo,
     SchemaInfo,
-    SourceLocation,
     StringLiteral,
     TypeField,
     TypeInfo,
-    ViolaConfig,
+    ViolaConfig
 } from "../data/types.ts";
 import { hashCodeBody } from "../utils/hash.ts";
 import { normalizeCode } from "../utils/similarity.ts";
@@ -66,7 +65,7 @@ const STRING_LITERAL_PATTERN =
 /**
  * Pattern to match template literals with expressions.
  */
-const TEMPLATE_LITERAL_PATTERN = /`(?:[^`\\$]|\\.|\$(?!\{)|\$\{[^}]*\})*`/g;
+const _TEMPLATE_LITERAL_PATTERN = /`(?:[^`\\$]|\\.|\$(?!\{)|\$\{[^}]*\})*`/g;
 
 /**
  * Pattern to match export statements.
@@ -81,43 +80,14 @@ const IMPORT_PATTERN =
   /(?:^|\n)\s*import\s+(?:(type)\s+)?(?:(\*\s+as\s+\w+)|(\w+)|(?:\{([^}]+)\}))\s+from\s*["']([^"']+)["']/gm;
 
 /**
- * Pattern to match deprecation annotations.
- * Only match actual deprecation markers, not mentions in comments about deprecation detection.
- * - @deprecated JSDoc annotation
- * - DEPRECATED in all caps (marker)
- * - "is deprecated" or "are deprecated" (actual deprecation statement)
- * - "marked as deprecated"
- */
-const DEPRECATION_PATTERNS = [
-  /@deprecated/i,                    // JSDoc annotation
-  /\bDEPRECATED\b/,                  // All caps marker (exact case)
-  /\bis\s+deprecated\b/i,            // "is deprecated"
-  /\bare\s+deprecated\b/i,           // "are deprecated"
-  /\bmarked\s+(?:as\s+)?deprecated\b/i, // "marked deprecated" or "marked as deprecated"
-];
-
-/**
- * Patterns that indicate false positives (talking ABOUT deprecation, not actual deprecation).
- */
-const DEPRECATION_FALSE_POSITIVES = [
-  /has\s+any\s+@?deprecated/i,       // "has any @deprecated" - describing a field
-  /check.*deprecat/i,                // "check for deprecation"
-  /detect.*deprecat/i,               // "detect deprecation"
-  /find.*deprecat/i,                 // "find deprecation"
-  /deprecation.?pattern/i,           // "deprecation pattern"
-  /deprecation.?check/i,             // "deprecation check"
-  /deprecation.?linter/i,            // "deprecation linter"
-];
-
-/**
  * Pattern to match JSDoc comments.
  */
-const JSDOC_PATTERN = /\/\*\*[\s\S]*?\*\//g;
+const _JSDOC_PATTERN = /\/\*\*[\s\S]*?\*\//g;
 
 /**
  * Pattern to match class declarations.
  */
-const CLASS_PATTERN =
+const _CLASS_PATTERN =
   /(?:^|\n)\s*(export\s+)?(default\s+)?class\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([^{]+))?\s*\{/gm;
 
 // =============================================================================
@@ -334,7 +304,7 @@ function extractFileData(
   const strings: StringLiteral[] = [];
   const exports: ExportInfo[] = [];
   const imports: ImportInfo[] = [];
-  const deprecations: SourceLocation[] = [];
+
 
   // Extract functions
   extractFunctions(content, relativePath, functions);
@@ -357,20 +327,16 @@ function extractFileData(
   // Extract imports
   extractImports(content, relativePath, imports);
 
-  // Extract deprecations
-  extractDeprecations(content, relativePath, deprecations);
-
   return {
     path: relativePath,
     extension: extname(filePath),
     lineCount: lines.length,
+    content, // Provide raw content for linters that need it
     functions,
     types,
     strings,
     exports,
     imports,
-    hasDeprecations: deprecations.length > 0,
-    deprecations,
   };
 }
 
@@ -387,7 +353,7 @@ function extractFunctions(
 
   while ((match = FUNCTION_PATTERN.exec(content)) !== null) {
     const [
-      fullMatch,
+      _fullMatch,
       exportKw,
       defaultKw,
       asyncKw,
@@ -509,7 +475,7 @@ function extractInterfaces(
   INTERFACE_PATTERN.lastIndex = 0;
 
   while ((match = INTERFACE_PATTERN.exec(content)) !== null) {
-    const [fullMatch, exportKw, defaultKw, name, typeParams, extendsClause] =
+    const [_fullMatch, exportKw, defaultKw, name, typeParams, extendsClause] =
       match;
 
     const startIndex = match.index;
@@ -687,7 +653,7 @@ function extractExports(
   EXPORT_PATTERN.lastIndex = 0;
 
   while ((match = EXPORT_PATTERN.exec(content)) !== null) {
-    const [fullMatch, kind, namedExports, fromModule, singleExport] = match;
+    const [_fullMatch, kind, namedExports, fromModule, singleExport] = match;
     const line = getLineNumber(content, match.index);
 
     if (namedExports && fromModule) {
@@ -729,7 +695,7 @@ function extractImports(
 
   while ((match = IMPORT_PATTERN.exec(content)) !== null) {
     const [
-      fullMatch,
+      _fullMatch,
       typeOnly,
       namespaceImport,
       defaultImport,
@@ -778,42 +744,6 @@ function extractImports(
         });
       }
     }
-  }
-}
-
-/**
- * Extract deprecation annotations.
- */
-function extractDeprecations(
-  content: string,
-  filePath: string,
-  deprecations: SourceLocation[]
-): void {
-  const lines = content.split("\n");
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
-    const lineNum = i + 1;
-
-    // Check if line matches any deprecation pattern
-    const matchesDeprecation = DEPRECATION_PATTERNS.some((pattern) =>
-      pattern.test(line)
-    );
-
-    if (!matchesDeprecation) continue;
-
-    // Check for false positives
-    const isFalsePositive = DEPRECATION_FALSE_POSITIVES.some((pattern) =>
-      pattern.test(line)
-    );
-
-    if (isFalsePositive) continue;
-
-    deprecations.push({
-      file: filePath,
-      line: lineNum,
-    });
   }
 }
 
@@ -880,7 +810,7 @@ export const DEFAULT_CONFIG: Partial<ViolaConfig> = {
 export async function crawlCodebase(
   config: ViolaConfig
 ): Promise<Readonly<CodebaseData>> {
-  const startTime = Date.now();
+  const _startTime = Date.now();
 
   const extensions = config.extensions.length > 0 ? config.extensions : DEFAULT_CONFIG.extensions!;
   const excludePatterns = [...(config.exclude || []), ...(DEFAULT_CONFIG.exclude || [])];

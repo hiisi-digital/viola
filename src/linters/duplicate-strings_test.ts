@@ -4,12 +4,13 @@
  * @module
  */
 
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { DuplicateStringsLinter } from "./duplicate-strings.ts";
 import {
     defaultConfig,
     expectCodes,
     expectNoViolations,
+    first,
     mockCodebase,
     mockFile,
     mockString,
@@ -263,7 +264,7 @@ Deno.test("duplicate-strings - violation has correct severity", () => {
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
   // 3 occurrences >= errorThreshold (3), so it should be "error"
-  assertEquals(violations[0].severity, "error");
+  assertEquals(first(violations).severity, "error");
 });
 
 Deno.test("duplicate-strings - violation includes related locations", () => {
@@ -282,9 +283,9 @@ Deno.test("duplicate-strings - violation includes related locations", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(Array.isArray(violations[0].relatedLocations), true);
+  assertEquals(Array.isArray(first(violations).relatedLocations), true);
   // Should have related locations pointing to the duplicate occurrences
-  assertEquals(violations[0].relatedLocations!.length >= 1, true);
+  assertEquals(first(violations).relatedLocations!.length >= 1, true);
 });
 
 Deno.test("duplicate-strings - violation includes suggestion", () => {
@@ -303,8 +304,8 @@ Deno.test("duplicate-strings - violation includes suggestion", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(typeof violations[0].suggestion, "string");
-  assertEquals(violations[0].suggestion!.length > 0, true);
+  assertEquals(typeof first(violations).suggestion, "string");
+  assertEquals(first(violations).suggestion!.length > 0, true);
 });
 
 Deno.test("duplicate-strings - violation has correct linter name", () => {
@@ -323,7 +324,7 @@ Deno.test("duplicate-strings - violation has correct linter name", () => {
 
   const violations = linter.lint(data, defaultConfig);
   assertEquals(violations.length, 1);
-  assertEquals(violations[0].linter, "duplicate-strings");
+  assertEquals(first(violations).linter, "duplicate-strings");
 });
 
 // =============================================================================

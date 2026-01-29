@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://jsr.io/@hiisi/viola/schemas/viola-config.schema.json",
+  "title": "Viola Configuration",
+  "description": "Configuration schema for viola convention linter in deno.json",
+  "type": "object",
+  "additionalProperties": {
+    "$ref": "#/$defs/scopeConfig"
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["error", "warn", "info", "off"],
+      "description": "Output severity level for issues"
+    },
+    "issueCategory": {
+      "type": "string",
+      "enum": ["correctness", "maintainability", "consistency", "performance", "style"],
+      "description": "Category of an issue - what kind of problem it represents"
+    },
+    "issueImpact": {
+      "type": "string",
+      "enum": ["critical", "major", "minor", "trivial"],
+      "description": "Impact level of an issue - how urgent it is (critical > major > minor > trivial)"
+    },
+    "patternValueObject": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "$ref": "#/$defs/severity",
+          "description": "Output severity for matched issues"
+        },
+        "minConfidence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Minimum confidence score (0-100) required to report the issue"
+        }
+      },
+      "required": ["severity"],
+      "additionalProperties": false
+    },
+    "patternValue": {
+      "oneOf": [
+        { "$ref": "#/$defs/severity" },
+        { "$ref": "#/$defs/patternValueObject" }
+      ],
+      "description": "Severity or configuration object for a pattern"
+    },
+    "scopeConfig": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/patternValue"
+      },
+      "description": "Issue patterns mapped to severities. Keys are pattern strings matching linter/issue identifiers.",
+      "examples": [
+        {
+          "*>=major": "error",
+          "*>=minor": "warn",
+          "*=trivial": "off",
+          "similar-functions/*": "error",
+          "deprecation/stale": { "severity": "error", "minConfidence": 90 }
+        }
+      ],
+      "propertyNames": {
+        "description": "Pattern syntax: 'linter/issue' (exact), 'linter/*' (all from linter), '*::category' (by category), '*>=impact' (by impact threshold), or combinations"
+      }
+    }
+  },
+  "examples": [
+    {
+      "**/*.ts": {
+        "*>=major": "error",
+        "*>=minor": "warn",
+        "*=trivial": "off",
+        "similar-functions/*": "error",
+        "deprecation/stale": "error"
+      },
+      "**/*_test.ts": {
+        "*>=major": "warn",
+        "deprecation/*": "off"
+      }
+    }
+  ]
+}

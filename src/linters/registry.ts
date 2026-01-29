@@ -8,7 +8,7 @@
  */
 
 import type { CodebaseData, LinterConfig, LinterResult, LintResults } from "../data/types.ts";
-import { BaseLinter, type LinterConstructor, type LinterMeta } from "./base.ts";
+import type { BaseLinter, LinterConstructor, LinterMeta } from "./base.ts";
 
 // =============================================================================
 // Registry
@@ -17,7 +17,7 @@ import { BaseLinter, type LinterConstructor, type LinterMeta } from "./base.ts";
 /**
  * Registry of all available linters.
  */
-class LinterRegistry {
+export class LinterRegistry {
   private readonly linters = new Map<string, BaseLinter>();
 
   /**
@@ -126,7 +126,7 @@ class LinterRegistry {
 /**
  * Global linter registry instance.
  */
-export const registry = new LinterRegistry();
+export const registry: LinterRegistry = new LinterRegistry();
 
 // =============================================================================
 // Runner

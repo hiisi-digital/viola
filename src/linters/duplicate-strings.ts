@@ -326,4 +326,4 @@ export class DuplicateStringsLinter extends BaseLinter {
 /**
  * Default instance for registration.
  */
-export const duplicateStringsLinter = new DuplicateStringsLinter();
+export const duplicateStringsLinter: DuplicateStringsLinter = new DuplicateStringsLinter();

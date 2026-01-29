@@ -23,7 +23,7 @@ import { BaseLinter, type LinterDataRequirements, type LinterMeta } from "./base
 /**
  * Thresholds for function name similarity.
  */
-const FUNCTION_NAME_THRESHOLDS: SimilarityThresholds = {
+const _FUNCTION_NAME_THRESHOLDS: SimilarityThresholds = {
   low: 0.5,    // Below this: no match
   medium: 0.7, // Above this: warning
   high: 0.85,  // Above this: error
@@ -225,7 +225,7 @@ export class SimilarFunctionsLinter extends BaseLinter {
     funcB: FunctionInfo,
     options: SimilarFunctionsOptions
   ): Violation | null {
-    const { similarity, level, metrics } = compareIdentifiers(funcA.name, funcB.name);
+    const { similarity, level: _level, metrics } = compareIdentifiers(funcA.name, funcB.name);
 
     // Exact same name in different files
     if (funcA.name === funcB.name) {
@@ -245,7 +245,7 @@ export class SimilarFunctionsLinter extends BaseLinter {
       return null;
     }
 
-    const severity = isError ? "error" : "warning";
+    const _severity = isError ? "error" : "warning";
     const pct = (similarity * 100).toFixed(0);
 
     if (isError) {
@@ -363,4 +363,4 @@ export class SimilarFunctionsLinter extends BaseLinter {
 /**
  * Default instance for registration.
  */
-export const similarFunctionsLinter = new SimilarFunctionsLinter();
+export const similarFunctionsLinter: SimilarFunctionsLinter = new SimilarFunctionsLinter();

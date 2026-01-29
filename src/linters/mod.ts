@@ -54,16 +54,16 @@ import { similarTypesLinter } from "./similar-types.ts";
 import { typeLocationLinter } from "./type-location.ts";
 
 /** Pre-instantiated missing-docs linter */
-export const missingDocsLinter = new MissingDocsLinter();
+export const missingDocsLinter: MissingDocsLinter = new MissingDocsLinter();
 
 /** Pre-instantiated duplicate-logic linter */
-export const duplicateLogicLinter = new DuplicateLogicLinter();
+export const duplicateLogicLinter: DuplicateLogicLinter = new DuplicateLogicLinter();
 
 /** Pre-instantiated schema-collision linter */
-export const schemaCollisionLinter = new SchemaCollisionLinter();
+export const schemaCollisionLinter: SchemaCollisionLinter = new SchemaCollisionLinter();
 
 /** Pre-instantiated orphaned-code linter */
-export const orphanedCodeLinter = new OrphanedCodeLinter();
+export const orphanedCodeLinter: OrphanedCodeLinter = new OrphanedCodeLinter();
 
 /**
  * Register all built-in linters with the global registry.

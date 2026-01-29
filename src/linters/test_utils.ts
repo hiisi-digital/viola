@@ -6,6 +6,7 @@
  * @module
  */
 
+import { assert } from "@std/assert";
 import type {
     CodebaseData,
     ExportInfo,
@@ -31,6 +32,15 @@ import type { BaseLinter } from "./base.ts";
  */
 export function loc(file: string, line: number, column?: number): SourceLocation {
   return { file, line, column };
+}
+
+/**
+ * Get the first element of an array, asserting it exists.
+ * Useful for tests with noUncheckedIndexedAccess enabled.
+ */
+export function first<T>(arr: readonly T[]): T {
+  assert(arr.length > 0, "Expected array to have at least one element");
+  return arr[0] as T;
 }
 
 // =============================================================================
@@ -297,8 +307,7 @@ export interface MockFileOptions {
   strings?: StringLiteral[];
   exports?: ExportInfo[];
   imports?: ImportInfo[];
-  hasDeprecations?: boolean;
-  deprecations?: SourceLocation[];
+  content?: string;
 }
 
 /**
@@ -314,8 +323,7 @@ export function mockFile(opts: MockFileOptions = {}): FileInfo {
     strings: opts.strings ?? [],
     exports: opts.exports ?? [],
     imports: opts.imports ?? [],
-    hasDeprecations: opts.hasDeprecations ?? false,
-    deprecations: opts.deprecations ?? [],
+    content: opts.content,
   };
 }
 

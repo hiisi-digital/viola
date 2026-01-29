@@ -60,7 +60,7 @@ const TYPES_DIRECTORY_PATTERNS = [
 /**
  * Patterns that indicate logic (functions, classes, runtime values).
  */
-const LOGIC_PATTERNS = [
+const _LOGIC_PATTERNS = [
   { pattern: /^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)/, type: "function" },
   { pattern: /^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s*)?\([^)]*\)\s*(?::\s*[^=]+)?\s*=>/, type: "arrow" },
   { pattern: /^\s*(?:export\s+)?class\s+(\w+)/, type: "class" },
@@ -71,7 +71,7 @@ const LOGIC_PATTERNS = [
 /**
  * Patterns that are allowed in types files (not logic).
  */
-const ALLOWED_IN_TYPES = [
+const _ALLOWED_IN_TYPES = [
   /^\s*export\s+type\s/,
   /^\s*import\s/,
   /^\s*\/\//,
@@ -241,4 +241,4 @@ export class TypeLocationLinter extends BaseLinter {
 /**
  * Default instance for registration.
  */
-export const typeLocationLinter = new TypeLocationLinter();
+export const typeLocationLinter: TypeLocationLinter = new TypeLocationLinter();

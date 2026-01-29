@@ -1,8 +1,8 @@
 /**
  * Viola Base Linter
  *
- * Abstract base class for all linters (rules). Each linter declares:
- * - meta: Basic info about the rule
+ * Abstract base class for all linters. Each linter declares:
+ * - meta: Basic info about the linter
  * - catalog: All issue kinds it can emit with their category/impact
  * - requirements: What codebase data it needs
  * - lint(): The actual linting logic
@@ -62,8 +62,8 @@ export interface LinterDataRequirements {
   readonly imports?: boolean;
   /** Need schema information */
   readonly schemas?: boolean;
-  /** Need deprecation information */
-  readonly deprecations?: boolean;
+  /** Need raw file content (for linters that do their own parsing) */
+  readonly content?: boolean;
   /** Need full file information */
   readonly files?: boolean;
 }
@@ -76,7 +76,7 @@ export interface LinterDataRequirements {
  * An issue emitted by a linter (new system).
  */
 export interface Issue {
-  /** Issue kind in format "rule-id/issue-name" */
+  /** Issue kind in format "linter-id/issue-name" */
   kind: string;
   /** Source location where issue was found */
   location: SourceLocation;
@@ -95,9 +95,9 @@ export interface Issue {
 /**
  * Result of running a linter (new system).
  */
-export interface RuleResult {
-  /** Rule ID */
-  rule: string;
+export interface LinterIssueResult {
+  /** Linter ID */
+  linter: string;
   /** Issues found */
   issues: Issue[];
   /** Time taken in milliseconds */
@@ -126,7 +126,7 @@ export abstract class BaseLinter {
 
   /**
    * Catalog of all issue kinds this linter can emit.
-   * Keys must be in format "rule-id/issue-name".
+   * Keys must be in format "linter-id/issue-name".
    * 
    * Optional for backward compatibility - linters without catalog
    * use the old Violation system.
@@ -284,7 +284,7 @@ export abstract class BaseLinter {
   /**
    * Create an issue with this linter's info (new system).
    *
-   * @param issueKind - The issue kind (e.g., "bad-thing", will be prefixed with rule id)
+   * @param issueKind - The issue kind (e.g., "bad-thing", will be prefixed with linter id)
    * @param location - Source location
    * @param message - Human-readable message
    * @param options - Additional options

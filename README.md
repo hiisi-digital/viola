@@ -125,9 +125,9 @@ Pattern values can be:
 - `"error"` | `"warn"` | `"info"` | `"off"` — simple severity
 - `{ "severity": "warn", "minConfidence": 80 }` — with confidence threshold
 
-## Built-in Rules
+## Built-in Linters
 
-| Rule | Description |
+| Linter | Description |
 |------|-------------|
 | `type-location` | Types must be in `types/` directories |
 | `similar-functions` | Detect similar function names |
@@ -135,25 +135,25 @@ Pattern values can be:
 | `duplicate-strings` | Find repeated string literals |
 | `deprecation` | Find deprecated code past its removal date |
 
-## Custom Rules
+## Custom Linters
 
 ```ts
 import { BaseLinter, registry } from "@hiisi/viola";
 
-class MyRule extends BaseLinter {
+class MyLinter extends BaseLinter {
   readonly meta = {
-    id: "my-rule",
-    name: "My Rule",
+    id: "my-linter",
+    name: "My Linter",
     description: "Checks naming conventions",
   };
 
   readonly catalog = {
-    "my-rule/bad-name": { 
+    "my-linter/bad-name": { 
       category: "consistency", 
       impact: "minor",
       description: "Name does not follow convention"
     },
-    "my-rule/very-bad-name": { 
+    "my-linter/very-bad-name": { 
       category: "consistency", 
       impact: "major",
       description: "Name is confusing or misleading"
@@ -169,7 +169,7 @@ class MyRule extends BaseLinter {
   }
 }
 
-registry.register(new MyRule());
+registry.register(new MyLinter());
 ```
 
 ## API
@@ -186,10 +186,10 @@ registry.register(new MyRule());
 
 ### Registry
 
-- `registry.register(rule)` — Register a rule
-- `registry.get(id)` — Get rule by ID
-- `registry.getAll()` — List all rules
-- `runLinters(data, options)` — Run rules on data
+- `registry.register(linter)` — Register a linter
+- `registry.get(id)` — Get linter by ID
+- `registry.getAll()` — List all linters
+- `runLinters(data, options)` — Run linters on data
 
 ### Types
 
@@ -197,7 +197,7 @@ registry.register(new MyRule());
 - `LintResults` — Check results
 - `Issue` — Single convention violation with category, impact, confidence
 - `CodebaseData` — Extracted codebase structure
-- `BaseLinter` — Base class for custom rules
+- `BaseLinter` — Base class for custom linters
 
 ## Support
 
