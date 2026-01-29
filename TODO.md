@@ -169,31 +169,31 @@ Per-linter configuration options. Keys are linter IDs.
 
 ### Phase 1: Plugin Interface Types
 
-- [ ] Define `ViolaPlugin` interface in `src/types/plugin.ts`
+- [x] Define `ViolaPlugin` interface in `src/types/plugin.ts`
   - `linters?: BaseLinter[]`
   - `bundles?: Record<string, BaseLinter[]>`
   - `configPresets?: Record<string, ViolaConfigPreset>`
   - `schemas?: Record<string, JSONSchema>`
-- [ ] Define `ViolaConfigPreset` type
-- [ ] Update `PluginLoadResult` to include discovered bundles, presets, schemas
+- [x] Define `ViolaConfigPreset` type
+- [x] Update `PluginLoadResult` to include discovered bundles, presets, schemas
 
 ### Phase 2: Plugin Loader Updates
 
-- [ ] Update `discoverLinters()` to also discover bundles, presets, schemas
-- [ ] Track loaded plugins by name for collision detection
-- [ ] Implement bundle name collision detection and resolution
-- [ ] Store schemas in a global schema registry for validation
+- [x] Update `discoverLinters()` to also discover bundles, presets, schemas
+- [x] Track loaded plugins by name for collision detection
+- [x] Implement bundle name collision detection and resolution
+- [x] Store schemas in a global schema registry for validation
 
 ### Phase 3: Config Schema Updates
 
-- [ ] Add `inherit` field to `viola-config.schema.json`
-- [ ] Add `config` field to `viola-config.schema.json`
-- [ ] Update `ViolaConfig` type in `src/data/types.ts`
+- [x] Add `inherit` field to `viola-config.schema.json`
+- [x] Add `config` field to `viola-config.schema.json`
+- [x] Update `ViolaConfig` type in `src/config/types.ts`
 
 ### Phase 4: Config Loader Updates
 
-- [ ] Parse `inherit` field
-- [ ] Parse `config` field
+- [x] Parse `inherit` field
+- [x] Parse `config` field
 - [ ] Implement preset resolution (find preset by name across plugins)
 - [ ] Implement config merging (presets -> user config)
 - [ ] Auto-apply `"default"` presets from loaded plugins
@@ -207,7 +207,7 @@ Per-linter configuration options. Keys are linter IDs.
 ### Phase 6: Runtime Integration
 
 - [ ] Update `runViola()` to:
-  1. Load plugins
+  1. Load plugins (using full discovery)
   2. Collect default presets
   3. Resolve explicit inherits
   4. Merge configs (presets underlaid, user on top)
@@ -218,9 +218,9 @@ Per-linter configuration options. Keys are linter IDs.
 
 - [ ] Remove any remaining "builtin" references
 - [ ] Remove linter implementations from `src/linters/` (keep only base, registry, types)
-- [ ] Update dogfooding to use `@hiisi/viola-default-lints` from JSR
+- [x] Update dogfooding to use `@hiisi/viola-default-lints` from JSR
 - [ ] Update README to reflect plugin-only architecture
-- [ ] Remove `packages/linters/` directory (now in separate repo)
+- [x] Remove `packages/linters/` directory (now in separate repo)
 
 ### Phase 8: Documentation
 
