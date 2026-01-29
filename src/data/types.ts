@@ -373,6 +373,8 @@ export interface ViolaConfig {
   readonly extensions: readonly string[];
   /** Per-linter configuration */
   readonly linters: Record<string, LinterConfig>;
+  /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
+  readonly plugins?: readonly string[];
   /** Report-only mode (don't fail on errors) */
   readonly reportOnly: boolean;
   /** Verbose output */
