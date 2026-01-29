@@ -7,7 +7,6 @@
 
 import { resolve } from "@std/path";
 import {
-    ViolaBuilder,
     type ViolaBuilderConfig
 } from "./builder.ts";
 import {
@@ -40,7 +39,12 @@ export async function loadConfig(
 
   // Try viola.config.ts first (or custom config path)
   const configTsPath = options.configPath ?? resolve(dir, "viola.config.ts");
-  const builderConfig = await loadBuilderConfig(configTsPath);
+  
+  if (options.verbose) {
+    console.log(`[loader] Looking for config at: ${configTsPath}`);
+  }
+  
+  const builderConfig = await loadBuilderConfig(configTsPath, options.verbose);
 
   if (builderConfig) {
     sources.push({ path: configTsPath, type: "viola.config.ts" as ConfigSource["type"] });
@@ -72,33 +76,76 @@ export async function loadConfig(
 }
 
 /**
+ * Check if an object looks like a ViolaBuilder (duck typing).
+ * 
+ * We can't use instanceof because the config file may import ViolaBuilder
+ * from a different module instance than the loader.
+ */
+function isViolaBuilder(obj: unknown): boolean {
+  return (
+    obj !== null &&
+    typeof obj === "object" &&
+    "_plugins" in obj &&
+    "_rules" in obj &&
+    "_settings" in obj &&
+    "build" in obj &&
+    typeof (obj as unknown as { build: unknown }).build === "function"
+  );
+}
+
+/**
  * Load viola.config.ts and get the builder config.
  */
-async function loadBuilderConfig(path: string): Promise<ViolaBuilderConfig | null> {
+async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBuilderConfig | null> {
   try {
     // Check if file exists
     await Deno.stat(path);
+    
+    if (verbose) {
+      console.log(`[loader] Found config file: ${path}`);
+    }
 
     // Dynamic import the config file
     const module = await import(`file://${path}`);
     const defaultExport = module.default;
 
     if (!defaultExport) {
+      if (verbose) {
+        console.log(`[loader] Config has no default export`);
+      }
       return null;
     }
 
-    // If it's a ViolaBuilder, call build()
-    if (defaultExport instanceof ViolaBuilder) {
-      return defaultExport.build();
+    if (verbose) {
+      console.log(`[loader] Default export type: ${typeof defaultExport}`);
+      console.log(`[loader] Is ViolaBuilder: ${isViolaBuilder(defaultExport)}`);
+    }
+
+    // If it's a ViolaBuilder (duck typing), call build()
+    if (isViolaBuilder(defaultExport)) {
+      const built = defaultExport.build();
+      if (verbose) {
+        console.log(`[loader] Built config: ${built.plugins.length} plugins, ${built.rules.length} rules`);
+      }
+      return built;
     }
 
     // If it's already a built config object
     if (typeof defaultExport === "object" && "plugins" in defaultExport) {
+      if (verbose) {
+        console.log(`[loader] Config is already built`);
+      }
       return defaultExport as ViolaBuilderConfig;
     }
 
+    if (verbose) {
+      console.log(`[loader] Config format not recognized`);
+    }
     return null;
-  } catch {
+  } catch (err) {
+    if (verbose) {
+      console.log(`[loader] Error loading config: ${err}`);
+    }
     return null;
   }
 }
