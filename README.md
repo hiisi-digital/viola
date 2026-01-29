@@ -24,18 +24,187 @@ Think of it like a test runner that doesn't include any test assertions - you br
 deno add jsr:@hiisi/viola
 ```
 
+## Configuration
+
+Create a `viola.config.ts` in your project root:
+
+```ts
+import { viola, report, when, Impact } from "@hiisi/viola";
+import { defaultLints } from "@hiisi/viola-default-lints";
+
+export default viola()
+  .use(defaultLints)
+  .rule(report.error, when.impact.atLeast(Impact.Major))
+  .rule(report.warn, when.impact.is(Impact.Minor))
+  .rule(report.off, when.impact.is(Impact.Trivial));
+```
+
+### Full Example
+
+```ts
+import { viola, report, when, Impact, Category } from "@hiisi/viola";
+import { defaultLints } from "@hiisi/viola-default-lints";
+import { schemaHasTypes } from "./lints/schema-has-types.ts";
+import { readmeVersion } from "./lints/readme-version.ts";
+
+export default viola()
+  // Plugins
+  .use(defaultLints)
+  .use(schemaHasTypes)
+  .use(readmeVersion)
+  
+  // Linter settings
+  .set("similar-functions.threshold", 0.85)
+  .set("duplicate-strings", { minLength: 12, minOccurrences: 3 })
+  
+  // Global rules - classify issues by impact and category
+  .rule(report.error, when.impact.atLeast(Impact.Major))
+  .rule(report.warn, when.impact.is(Impact.Minor))
+  .rule(report.off, when.impact.is(Impact.Trivial))
+  .rule(report.error, when.category.is(Category.Correctness))
+  .rule(report.hint, when.category.is(Category.Style))
+  
+  // File-scoped rules
+  .rule(report.off, when.in("**/*_test.ts"))
+  .rule(report.off, when.in("**/*.spec.ts"))
+  .rule(report.skip, when.in("src/generated/**"))
+  
+  // Combine conditions
+  .rule(report.error, when.in("packages/core/**").impact.atLeast(Impact.Minor))
+  .rule(report.off, when.in("packages/legacy/**").impact.below(Impact.Critical))
+  
+  // Specific linter rules
+  .rule(report.error, when.linter("readme-version").in("README.md"))
+  .rule(report.error, when.linter("schema-has-types").in("schemas/*.json"))
+  
+  // Confidence filtering
+  .rule(report.off, when.confidence.below(50));
+```
+
+## API
+
+### Core Imports
+
+```ts
+import { 
+  viola,          // Config builder
+  report,         // Report level actions
+  when,           // Condition builders
+  Impact,         // Impact levels enum
+  Category,       // Category enum
+  runViola,       // Run linters
+  formatResults,  // Format output
+} from "@hiisi/viola";
+```
+
+### `viola()` - Config Builder
+
+| Method | Description |
+|--------|-------------|
+| `.use(plugin)` | Add a linter plugin |
+| `.set(key, value)` | Configure a linter (`"linter.option"` or `"linter", { options }`) |
+| `.rule(action, condition)` | Add a classification rule |
+
+### `report` - Report Actions
+
+| Action | Description |
+|--------|-------------|
+| `report.error` | Fails build, exits non-zero |
+| `report.warn` | Yellow output, doesn't fail |
+| `report.info` | Blue, informational |
+| `report.hint` | Dim, subtle suggestion |
+| `report.off` | Suppress, don't show |
+| `report.skip` | Don't run linters at all (file-scope only) |
+
+### `when` - Condition Builders
+
+**By impact:**
+```ts
+when.impact.atLeast(Impact.Major)  // >= major
+when.impact.atMost(Impact.Minor)   // <= minor
+when.impact.is(Impact.Critical)    // exactly critical
+when.impact.not(Impact.Trivial)    // not trivial
+when.impact.above(Impact.Minor)    // > minor
+when.impact.below(Impact.Major)    // < major
+```
+
+**By category:**
+```ts
+when.category.is(Category.Correctness)
+when.category.not(Category.Style)
+when.category.in(Category.Correctness, Category.Maintainability)
+```
+
+**By file pattern:**
+```ts
+when.in("**/*_test.ts")
+when.in("src/**", "lib/**")  // multiple patterns
+```
+
+**By linter:**
+```ts
+when.linter("similar-functions")
+when.linter("similar-*")  // glob
+```
+
+**By confidence:**
+```ts
+when.confidence.atLeast(80)
+when.confidence.below(50)
+```
+
+**Chaining (AND logic):**
+```ts
+when.in("packages/core/**").impact.atLeast(Impact.Minor)
+when.category.is(Category.Style).confidence.atLeast(90)
+when.linter("deprecated").in("src/**")
+```
+
+### Enums
+
+**Impact** (how urgent):
+```ts
+enum Impact {
+  Critical,  // Must fix, blocks release
+  Major,     // Should fix soon
+  Minor,     // Fix when convenient
+  Trivial,   // Nice to have
+}
+```
+
+**Category** (what kind of problem):
+```ts
+enum Category {
+  Correctness,     // Code is wrong
+  Maintainability, // Harder to work with
+  Consistency,     // Breaks conventions
+  Performance,     // Slower than needed
+  Style,           // Cosmetic
+}
+```
+
 ## Integration Examples
+
+### Deno Task
+
+```json
+{
+  "tasks": {
+    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli",
+    "build": "deno task lint:conventions && deno task compile"
+  }
+}
+```
 
 ### Deno Test Suite
 
 ```ts
-// conventions_test.ts
-import { runViola } from "@hiisi/viola";
+import { runViola, formatResults } from "@hiisi/viola";
 import { assertEquals } from "@std/assert";
 
-Deno.test("no underscore functions", async () => {
-  const results = await runViola({ plugins: ["./linters.ts"], only: ["no-underscore-functions"] });
-  assertEquals(results.violations.length, 0, results.violations.map(v => v.message).join("\n"));
+Deno.test("conventions", async () => {
+  const results = await runViola();
+  assertEquals(results.totalIssues, 0, formatResults(results));
 });
 ```
 
@@ -43,204 +212,22 @@ Deno.test("no underscore functions", async () => {
 
 ```bash
 #!/bin/sh
-deno run -A jsr:@hiisi/viola-cli --plugins ./linters.ts || exit 1
-```
-
-### Build Pipeline Step
-
-```json
-{
-  "tasks": {
-    "build": "deno task lint:conventions && deno task compile",
-    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli"
-  }
-}
+deno run -A jsr:@hiisi/viola-cli || exit 1
 ```
 
 ### CI Workflow
 
 ```yaml
 - name: Convention Lint
-  run: deno run -A jsr:@hiisi/viola-cli --report-only
-```
-
-### Watch Mode (Development)
-
-```bash
-deno run --watch -A jsr:@hiisi/viola-cli --plugins ./linters.ts
-```
-
-### Monorepo (Per-Package Linting)
-
-```ts
-for (const pkg of ["packages/core", "packages/cli"]) {
-  const results = await runViola({ projectRoot: pkg, plugins: ["../../linters.ts"] });
-  console.log(`${pkg}: ${results.violations.length} issues`);
-}
-```
-
-## Full Configuration Example
-
-```jsonc
-{
-  "viola": {
-    "plugins": [
-      "jsr:@hiisi/viola-default-lints",     // third-party linters
-      "./lints/schema-has-types.ts",        // custom: schemas need generated .ts
-      "./lints/readme-version.ts"           // custom: README version matches deno.json
-    ],
-    "config": {
-      "similar-functions": { "threshold": 0.85 },
-      "duplicate-strings": { "minLength": 12 }
-    },
-
-    // Severity rules by file pattern (last match wins)
-    "**/*.ts": {
-      "*>=major": "error",                  // major+ fails build
-      "*=minor": "warn",                    // minor just warns
-      "*=trivial": "off",                   // trivial ignored
-      "*::correctness": "error",            // correctness always errors
-      "*::style": "hint",                   // style as hints
-      "deprecated-code/*": "error",         // specific linter override
-      "orphaned-code/*": "info"             // just informational
-    },
-    "**/*_test.ts": {
-      "*": "off",                           // disable in tests
-      "deprecated-code/*": "warn"           // except deprecations
-    },
-    "src/generated/**": { "*": "off" },     // skip generated
-    "packages/legacy/**": {
-      "*>=critical": "error",               // only critical in legacy
-      "*": "off"
-    },
-    "packages/core/**/*.ts": {
-      "*>=minor": "error",                  // stricter in core
-      "*::style": "warn"
-    },
-    "README.md": {
-      "readme-version/*": "error",          // version mismatch fails
-      "*": "off"
-    },
-    "schemas/*.json": {
-      "schema-has-types/*": "error"         // schemas need types
-    }
-  }
-}
-```
-
-**Severities:** `error` (fails build), `warn` (yellow), `info` (blue), `hint` (dim), `off` (disabled)
-
-## Usage
-
-### Programmatic API
-
-```ts
-import { runViola, formatResults } from "@hiisi/viola";
-
-const results = await runViola({
-  projectRoot: Deno.cwd(),
-  include: ["src"],
-  plugins: ["./my-linters.ts"],  // Your linters
-});
-
-console.log(formatResults(results));
-if (results.hasErrors) Deno.exit(1);
-```
-
-### With CLI
-
-For command-line usage, see [`@hiisi/viola-cli`](https://jsr.io/@hiisi/viola-cli).
-
-```bash
-deno install -A -n viola jsr:@hiisi/viola-cli
-viola --plugins ./my-linters.ts
-```
-
-## Configuration
-
-Configure via `deno.json` under the `viola` field:
-
-```json
-{
-  "viola": {
-    "plugins": ["./my-linters.ts"],
-    "**/*.ts": {
-      "*>=major": "error",
-      "*>=minor": "warn",
-      "*=trivial": "off"
-    },
-    "**/*_test.ts": {
-      "*": "off"
-    }
-  }
-}
-```
-
-### Plugins
-
-The `plugins` array specifies which linter modules to load. Plugins can be:
-
-- Local files: `"./my-linters.ts"`
-- JSR packages: `"jsr:@org/linters"`
-- npm packages: `"npm:some-linters"`
-- Import map references: `"@org/linters"`
-
-### Severity Rules
-
-File patterns map to severity configurations:
-
-```json
-{
-  "**/*.ts": {
-    "*>=major": "error",        // All major+ issues are errors
-    "my-linter/*": "warn",      // All issues from my-linter are warnings
-    "my-linter/specific": "off" // Disable specific issue
-  }
-}
-```
-
-### Per-Linter Configuration
-
-Configure individual linters via the `config` field:
-
-```json
-{
-  "viola": {
-    "plugins": ["./my-linters.ts"],
-    "config": {
-      "my-linter": {
-        "someOption": true,
-        "threshold": 5
-      }
-    }
-  }
-}
-```
-
-### Config Presets
-
-Plugins can provide presets. Inherit from them using `inherit`:
-
-```json
-{
-  "viola": {
-    "plugins": ["./my-linters.ts"],
-    "inherit": ["strict"]
-  }
-}
+  run: deno run -A jsr:@hiisi/viola-cli
 ```
 
 ## Writing Linters
 
-This is a minimal linter:
+Linters define a **catalog** of issue kinds (with category, impact, description). When they find problems, they create issues referencing those kinds. The config then classifies them into report levels.
 
 ```ts
-import { 
-  BaseLinter, 
-  type CodebaseData, 
-  type LinterConfig, 
-  type Violation 
-} from "@hiisi/viola";
+import { BaseLinter, type CodebaseData, type Issue, type IssueCatalog } from "@hiisi/viola";
 
 class NoUnderscoreFunctions extends BaseLinter {
   readonly meta = {
@@ -249,32 +236,33 @@ class NoUnderscoreFunctions extends BaseLinter {
     description: "Disallow function names starting with underscore",
   };
 
+  readonly catalog: IssueCatalog = {
+    "no-underscore-functions/underscore-prefix": {
+      category: "consistency",
+      impact: "minor",
+      description: "Function name starts with underscore",
+    },
+  };
+
   readonly requirements = { functions: true };
 
-  lint(data: CodebaseData, _config: LinterConfig): Violation[] {
-    const violations: Violation[] = [];
-    
-    for (const fn of data.allFunctions) {
-      if (fn.name.startsWith("_")) {
-        violations.push(this.warning(
-          "underscore-prefix",
-          `Function "${fn.name}" starts with underscore`,
-          fn.location
-        ));
-      }
-    }
-    
-    return violations;
+  lint(data: CodebaseData): Issue[] {
+    return data.allFunctions
+      .filter(fn => fn.name.startsWith("_"))
+      .map(fn => this.issue(
+        "underscore-prefix",
+        fn.location,
+        `Function "${fn.name}" starts with underscore`,
+      ));
   }
 }
 
-// Export for plugin discovery
-export const linters = [new NoUnderscoreFunctions()];
+export default new NoUnderscoreFunctions();
 ```
 
 ### Data Requirements
 
-Linters declare what data they need:
+Declare what data your linter needs:
 
 ```ts
 readonly requirements = {
@@ -288,77 +276,43 @@ readonly requirements = {
 };
 ```
 
-### Issue Catalog
-
-For richer issue classification:
+## Programmatic API
 
 ```ts
-readonly catalog = {
-  "my-linter/bad-name": { 
-    category: "consistency",  // correctness | maintainability | consistency | performance | style
-    impact: "minor",          // critical | major | minor | trivial
-    description: "Name does not follow convention"
-  },
-};
+import { runViola, formatResults } from "@hiisi/viola";
+
+const results = await runViola();
+console.log(formatResults(results));
+if (results.hasErrors) Deno.exit(1);
 ```
 
-### Plugin Exports
+With inline config:
 
-Plugins can export:
+```ts
+import { viola, report, when, Impact, runViola } from "@hiisi/viola";
+import { defaultLints } from "@hiisi/viola-default-lints";
 
-- `linters: BaseLinter[]` - Array of linter instances (preferred)
-- Individual named exports that are linters
-- Default export (single linter or array)
-- `bundles: Record<string, BaseLinter[]>` - Named linter collections
-- `configPresets: Record<string, ViolaConfigPreset>` - Configuration presets
-- `schemas: Record<string, JSONSchema>` - JSON schemas for config validation
+const config = viola()
+  .use(defaultLints)
+  .rule(report.error, when.impact.atLeast(Impact.Major))
+  .rule(report.off, when.in("**/*_test.ts"));
 
-For a complete example, see [`@hiisi/viola-default-lints`](https://jsr.io/@hiisi/viola-default-lints).
+const results = await runViola({ config });
+```
 
-## Pattern Syntax
+## Extensibility
 
-Severity patterns match against `linter-id/issue-code`:
+The `.rule(action, condition)` pattern is extensible. Future actions might include:
 
-| Pattern | Matches |
-|---------|---------|
-| `my-linter/specific` | Exact issue |
-| `my-linter/*` | All issues from linter |
-| `*::correctness` | All correctness issues |
-| `*>=major` | Impact major or higher |
-| `*=minor` | Exactly minor impact |
-| `*!=trivial` | All except trivial |
+```ts
+// Hypothetical future extensions
+import { report, transform, collect, when } from "@hiisi/viola";
 
-**Impact operators:** `=`, `!=`, `>=`, `<=`, `>`, `<`
-
-**Category filter:** `::category`
-
-## API Reference
-
-### High-Level
-
-- `runViola(options)` - Run linters, returns `LintResults`
-- `formatResults(results)` - Format for console output
-
-### Runtime
-
-- `crawlCodebase(config)` - Extract codebase data
-- `discoverPlugins(specifiers)` - Load plugin modules
-- `registerDiscoveredLinters(discovery)` - Register linters from plugins
-
-### Registry
-
-- `registry.register(linter)` - Register a linter
-- `registry.get(id)` - Get linter by ID
-- `registry.getAll()` - List all registered linters
-- `runLinters(data, options)` - Run registered linters
-
-### Types
-
-- `BaseLinter` - Base class for linters
-- `CodebaseData` - Extracted codebase structure
-- `Violation` - Single lint violation
-- `LintResults` - Aggregated results
-- `ViolaConfig` - Configuration options
+viola()
+  .rule(report.error, when.impact.atLeast(Impact.Major))
+  .rule(transform.autofix, when.linter("formatting"))
+  .rule(collect.metrics, when.category.is(Category.Performance))
+```
 
 ## Support
 

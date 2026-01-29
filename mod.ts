@@ -8,56 +8,46 @@
  * Crawls the codebase once, extracts structured data (functions, types,
  * imports, strings), and runs multiple checkers against it.
  *
- * ## Usage
+ * ## Configuration
  *
  * ```ts
- * import { runViola, formatResults } from "@hiisi/viola";
+ * // viola.config.ts
+ * import { viola, report, when, Impact, Category } from "@hiisi/viola";
+ * import { defaultLints } from "@hiisi/viola-default-lints";
  *
- * const results = await runViola({
- *   projectRoot: Deno.cwd(),
- *   include: ["packages", "app"],
- * });
- *
- * if (results.hasErrors) {
- *   console.error("Convention check failed");
- *   Deno.exit(1);
- * }
+ * export default viola()
+ *   .use(defaultLints)
+ *   .rule(report.error, when.impact.atLeast(Impact.Major))
+ *   .rule(report.warn, when.impact.is(Impact.Minor))
+ *   .rule(report.off, when.in("**\/*_test.ts"));
  * ```
  *
- * ## Plugin System
- *
- * Linters are loaded as plugins via the `plugins` config field.
- * There are no "built-in" linters - all must be explicitly imported.
- *
- * ```json
- * {
- *   "viola": {
- *     "plugins": ["@hiisi/viola-linters"]
- *   }
- * }
- * ```
- *
- * ## Custom Checkers
+ * ## Custom Linters
  *
  * ```ts
- * import { BaseLinter, registry } from "@hiisi/viola";
+ * import { BaseLinter, type Issue } from "@hiisi/viola";
  *
- * class MyChecker extends BaseLinter {
+ * class MyLinter extends BaseLinter {
  *   readonly meta = {
- *     id: "my-checker",
- *     name: "My Checker",
+ *     id: "my-linter",
+ *     name: "My Linter",
  *     description: "Checks naming conventions",
- *     defaultSeverity: "warning",
+ *   };
+ *
+ *   readonly catalog = {
+ *     "my-linter/bad-name": {
+ *       category: "consistency",
+ *       impact: "minor",
+ *       description: "Name doesn't follow convention",
+ *     },
  *   };
  *
  *   readonly requirements = { functions: true };
  *
- *   lint(data, config) {
+ *   lint(data, config): Issue[] {
  *     return [];
  *   }
  * }
- *
- * registry.register(new MyChecker());
  * ```
  *
  * @module
@@ -74,6 +64,7 @@ export type {
     FunctionInfo,
     FunctionParam,
     ImportInfo,
+    Issue,
     LinterConfig,
     LinterResult,
     LintResults,
@@ -82,9 +73,7 @@ export type {
     StringLiteral,
     TypeField,
     TypeInfo,
-    ViolaConfig,
-    Violation,
-    ViolationSeverity
+    ViolaConfig
 } from "./src/data/mod.ts";
 
 // =============================================================================
@@ -411,50 +400,43 @@ export function formatResults(results: LintResults): string {
   lines.push(`Total time: ${results.totalDurationMs.toFixed(1)}ms`);
   lines.push("");
 
-  if (results.summary.total === 0) {
+  if (results.totalIssues === 0) {
     lines.push("All clear.");
     lines.push("");
     return lines.join("\n");
   }
 
-  lines.push(
-    `Found ${results.summary.total} issue(s):` +
-      ` ${results.summary.errors} error(s),` +
-      ` ${results.summary.warnings} warning(s),` +
-      ` ${results.summary.infos} info(s)`
-  );
+  lines.push(`Found ${results.totalIssues} issue(s)`);
   lines.push("");
 
   for (const result of results.results) {
-    if (result.violations.length === 0) continue;
+    if (result.issues.length === 0) continue;
 
     lines.push("-".repeat(80));
-    lines.push(`${result.linter} (${result.violations.length} issues)`);
+    lines.push(`${result.linter} (${result.issues.length} issues)`);
     lines.push("-".repeat(80));
     lines.push("");
 
-    for (const v of result.violations) {
-      const icon =
-        v.severity === "error" ? "E" : v.severity === "warning" ? "W" : "I";
+    for (const issue of result.issues) {
+      lines.push(`[${issue.kind}] ${issue.location.file}:${issue.location.line}`);
+      lines.push(`    ${issue.message}`);
+      lines.push(`    (confidence: ${issue.confidence}%)`);
 
-      lines.push(`[${icon}] ${v.location.file}:${v.location.line}`);
-      lines.push(`    ${v.message}`);
-
-      if (v.suggestion) {
+      if (issue.suggestion) {
         lines.push("");
-        for (const line of v.suggestion.split("\n")) {
+        for (const line of issue.suggestion.split("\n")) {
           lines.push(`    ${line}`);
         }
       }
 
-      if (v.relatedLocations && v.relatedLocations.length > 0) {
+      if (issue.relatedLocations && issue.relatedLocations.length > 0) {
         lines.push("");
         lines.push("    Related:");
-        for (const loc of v.relatedLocations.slice(0, 3)) {
+        for (const loc of issue.relatedLocations.slice(0, 3)) {
           lines.push(`      - ${loc.file}:${loc.line}`);
         }
-        if (v.relatedLocations.length > 3) {
-          lines.push(`      ... and ${v.relatedLocations.length - 3} more`);
+        if (issue.relatedLocations.length > 3) {
+          lines.push(`      ... and ${issue.relatedLocations.length - 3} more`);
         }
       }
 
@@ -465,9 +447,9 @@ export function formatResults(results: LintResults): string {
   lines.push("=".repeat(80));
 
   if (results.hasErrors) {
-    lines.push("Failed. Fix the above errors.");
-  } else {
-    lines.push("Warnings found.");
+    lines.push("Some linters failed to run.");
+  } else if (results.totalIssues > 0) {
+    lines.push("Issues found. Review and address as needed.");
   }
 
   lines.push("=".repeat(80));
@@ -497,18 +479,28 @@ export type {
 } from "./src/config/mod.ts";
 
 export {
-    compareImpact,
-    formatValidationErrors,
-    IMPACT_ORDER,
-    impactValue,
-    loadConfig,
+    // New API
+    Category,
+    // Legacy
+    compareImpact, ConditionExpr, formatValidationErrors, Impact, IMPACT_ORDER,
+    impactValue, isReportAction, loadConfig,
     matchesFilePattern,
-    matchesIssuePattern,
-    resolveIssueSeverity,
-    validateLinterConfig
+    matchesIssuePattern, report,
+    ReportLevel, resolveIssueSeverity,
+    validateLinterConfig, viola,
+    ViolaBuilder,
+    when
 } from "./src/config/mod.ts";
 
 export type {
+    // New API
+    Condition,
+    LinterPlugin,
+    LinterSetting,
+    ReportAction,
+    Rule,
+    RuleAction,
+    // Legacy
     ValidationError,
-    ValidationResult
+    ValidationResult, ViolaBuilderConfig
 } from "./src/config/mod.ts";
