@@ -4,6 +4,7 @@
  * @module
  */
 
+// Legacy types (to be deprecated)
 export type {
     ConfigSource,
     IssueCatalog,
@@ -21,15 +22,10 @@ export type {
 } from "./types.ts";
 
 export {
-    compareImpact,
-    IMPACT_ORDER,
-    impactValue
-} from "./types.ts";
-
-export {
     loadConfig,
     matchesFilePattern,
     matchesIssuePattern,
+    resolveBuilderConfig,
     resolveIssueSeverity
 } from "./loader.ts";
 
@@ -54,3 +50,66 @@ export {
     formatValidationErrors,
     validateLinterConfig
 } from "./validate.ts";
+
+// =============================================================================
+// New Builder API
+// =============================================================================
+
+// Enums
+export {
+    Category,
+    compareImpact,
+    Impact,
+    IMPACT_ORDER,
+    impactValue,
+    ReportLevel
+} from "./enums.ts";
+
+// Actions
+export type {
+    ReportAction,
+    RuleAction
+} from "./actions.ts";
+
+export {
+    isReportAction,
+    report
+} from "./actions.ts";
+
+// Conditions
+export type {
+    CategoryCondition,
+    CompoundCondition,
+    Condition,
+    ConditionOperator,
+    ConfidenceCondition,
+    FileCondition,
+    ImpactCondition,
+    LinterCondition,
+    NotCondition
+} from "./conditions.ts";
+
+export {
+    ConditionExpr,
+    isCategoryCondition,
+    isCompoundCondition,
+    isConfidenceCondition,
+    isFileCondition,
+    isImpactCondition,
+    isLinterCondition,
+    isNotCondition,
+    when
+} from "./conditions.ts";
+
+// Builder
+export type {
+    LinterPlugin,
+    LinterSetting,
+    Rule,
+    ViolaBuilderConfig
+} from "./builder.ts";
+
+export {
+    viola,
+    ViolaBuilder
+} from "./builder.ts";

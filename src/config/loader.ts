@@ -1,10 +1,15 @@
 /**
  * Configuration loader.
  *
- * Loads viola configuration from deno.json and parses patterns.
+ * Loads viola configuration from viola.config.ts or deno.json.
  */
 
+
 import { resolve } from "@std/path";
+import {
+    ViolaBuilder,
+    type ViolaBuilderConfig
+} from "./builder.ts";
 import {
     IMPACT_ORDER,
     type ConfigSource,
@@ -25,30 +30,107 @@ const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
 const CATEGORIES: IssueCategory[] = ["correctness", "maintainability", "consistency", "performance", "style"];
 
 /**
- * Load configuration from deno.json.
+ * Load configuration, preferring viola.config.ts over deno.json.
  */
 export async function loadConfig(
   dir: string,
-  options: { verbose?: boolean } = {}
-): Promise<{ config: ResolvedConfig; sources: ConfigSource[] }> {
+  options: { verbose?: boolean; configPath?: string } = {}
+): Promise<{ config: ResolvedConfig; sources: ConfigSource[]; builderConfig?: ViolaBuilderConfig }> {
   const sources: ConfigSource[] = [];
-  
-  const denoPath = resolve(dir, "deno.json");
-  const violaConfig = await loadDenoConfig(denoPath);
-  
-  if (violaConfig) {
-    sources.push({ path: denoPath, type: "deno.json" });
+
+  // Try viola.config.ts first (or custom config path)
+  const configTsPath = options.configPath ?? resolve(dir, "viola.config.ts");
+  const builderConfig = await loadBuilderConfig(configTsPath);
+
+  if (builderConfig) {
+    sources.push({ path: configTsPath, type: "viola.config.ts" as ConfigSource["type"] });
+
+    if (options.verbose) {
+      console.log("Config sources:");
+      console.log(`  - ${configTsPath} (viola.config.ts)`);
+    }
+
+    const resolved = resolveBuilderConfig(builderConfig);
+    return { config: resolved, sources, builderConfig };
   }
 
-  if (options.verbose && sources.length > 0) {
-    console.log("Config sources:");
-    for (const source of sources) {
-      console.log(`  - ${source.path} (${source.type})`);
+  // Fall back to deno.json (deprecated)
+  const denoPath = resolve(dir, "deno.json");
+  const violaConfig = await loadDenoConfig(denoPath);
+
+  if (violaConfig) {
+    sources.push({ path: denoPath, type: "deno.json" });
+    
+    if (options.verbose) {
+      console.log("Config sources:");
+      console.log(`  - ${denoPath} (deno.json) [deprecated: use viola.config.ts]`);
     }
   }
 
   const resolved = resolveConfig(violaConfig ?? {});
   return { config: resolved, sources };
+}
+
+/**
+ * Load viola.config.ts and get the builder config.
+ */
+async function loadBuilderConfig(path: string): Promise<ViolaBuilderConfig | null> {
+  try {
+    // Check if file exists
+    await Deno.stat(path);
+
+    // Dynamic import the config file
+    const module = await import(`file://${path}`);
+    const defaultExport = module.default;
+
+    if (!defaultExport) {
+      return null;
+    }
+
+    // If it's a ViolaBuilder, call build()
+    if (defaultExport instanceof ViolaBuilder) {
+      return defaultExport.build();
+    }
+
+    // If it's already a built config object
+    if (typeof defaultExport === "object" && "plugins" in defaultExport) {
+      return defaultExport as ViolaBuilderConfig;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert builder config to resolved config.
+ * 
+ * Note: The new rule-based config uses Condition objects that are evaluated
+ * at runtime. This function extracts linter settings but leaves rules
+ * in their native format for the new evaluation engine.
+ */
+export function resolveBuilderConfig(config: ViolaBuilderConfig): ResolvedConfig {
+  // Build linter config from settings
+  const linterConfig: Record<string, Record<string, unknown>> = {};
+
+  for (const setting of config.settings) {
+    if (!linterConfig[setting.linter]) {
+      linterConfig[setting.linter] = {};
+    }
+    const linterCfg = linterConfig[setting.linter]!;
+    linterCfg[setting.key] = setting.value;
+  }
+
+  return {
+    plugins: [], // Plugins are handled separately (they're actual objects, not strings)
+    inherit: [],
+    linterConfig,
+    scopes: [], // Rules are now in config.rules, evaluated separately
+    include: [],
+    exclude: [...DEFAULT_EXCLUDE],
+    extensions: [...DEFAULT_EXTENSIONS],
+  };
 }
 
 /**

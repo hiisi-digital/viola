@@ -249,5 +249,5 @@ export interface ConfigSource {
   /** Path to the config file */
   path: string;
   /** Type of config */
-  type: "deno.json" | "viola.json" | "env";
+  type: "viola.config.ts" | "deno.json" | "viola.json" | "env";
 }
