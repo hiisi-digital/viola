@@ -44,3 +44,13 @@ export {
     mergeLinterConfig,
     resolvePresets
 } from "./merge.ts";
+
+export type {
+    ValidationError,
+    ValidationResult
+} from "./validate.ts";
+
+export {
+    formatValidationErrors,
+    validateLinterConfig
+} from "./validate.ts";

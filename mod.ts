@@ -191,9 +191,9 @@ export {
 // High-Level API
 // =============================================================================
 
-import { mergeLinterConfig } from "./src/config/mod.ts";
+import { formatValidationErrors, mergeLinterConfig, validateLinterConfig } from "./src/config/mod.ts";
 import type { LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
-import { runLinters, type RunOptions } from "./src/linters/mod.ts";
+import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
     discoverPlugins,
@@ -314,6 +314,23 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     if (verbose && Object.keys(mergedLinterConfig).length > 0) {
       console.log(`Merged linter config for: ${Object.keys(mergedLinterConfig).join(", ")}`);
       console.log();
+    }
+
+    // Validate linter config against schemas
+    if (Object.keys(mergedLinterConfig).length > 0) {
+      const registeredIds = new Set(registry.getIds());
+      const validation = validateLinterConfig(mergedLinterConfig, discovery, registeredIds);
+
+      if (validation.warnings.length > 0) {
+        for (const warn of validation.warnings) {
+          console.warn(`Warning: ${warn}`);
+        }
+      }
+
+      if (!validation.valid) {
+        console.error(formatValidationErrors(validation));
+        // Continue anyway - validation errors are warnings, not fatal
+      }
     }
   } else {
     // No plugins, just use user config directly
@@ -481,10 +498,17 @@ export type {
 
 export {
     compareImpact,
+    formatValidationErrors,
     IMPACT_ORDER,
     impactValue,
     loadConfig,
     matchesFilePattern,
     matchesIssuePattern,
-    resolveIssueSeverity
+    resolveIssueSeverity,
+    validateLinterConfig
+} from "./src/config/mod.ts";
+
+export type {
+    ValidationError,
+    ValidationResult
 } from "./src/config/mod.ts";
