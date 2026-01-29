@@ -29,7 +29,7 @@ deno add jsr:@hiisi/viola
 Create a `viola.config.ts` in your project root:
 
 ```ts
-import { viola } from "@hiisi/viola";
+import { viola, report, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
@@ -37,7 +37,9 @@ export default viola()
   .rule(report.off, when.in("**/*_test.ts"));  // your overrides
 ```
 
-Plugins configure the builder with linters and default rules. Your rules are always checked first (first match wins), so you can override plugin defaults.
+Rules use **"last wins" semantics** (like CSS). Rules defined later override earlier ones. This means:
+- Plugin rules come first (base configuration)
+- Your rules come after (overrides)
 
 ### Full Example
 
@@ -57,7 +59,7 @@ export default viola()
   .set("similar-functions.threshold", 0.85)
   .set("duplicate-strings", { minLength: 12, threshold: 3 })
   
-  // Your rules (checked BEFORE plugin rules)
+  // Your rules (override plugin defaults - last wins!)
   // File-scoped rules
   .rule(report.off, when.in("**/*_test.ts"))
   .rule(report.off, when.in("**/*.spec.ts"))
@@ -88,6 +90,26 @@ export default viola()
   .rule(report.warn, when.impact.atLeast(Impact.Major))
   .rule(report.info, when.impact.is(Impact.Minor));
 ```
+
+## Rule Evaluation
+
+Rules are evaluated with **"last wins"** semantics:
+
+```ts
+viola()
+  .rule(report.warn, when.impact.atLeast(Impact.Minor))   // base rule
+  .rule(report.off, when.in("**/*_test.ts"))              // override for tests
+  .rule(report.error, when.in("packages/core/**"))        // override for core
+```
+
+For an issue in `packages/core/utils_test.ts`:
+1. First rule matches (it's Minor+ impact) → warn
+2. Second rule matches (it's a test file) → off
+3. Third rule matches (it's in core) → error
+
+**Result: error** (last matching rule wins)
+
+This matches the mental model of `{...defaults, ...overrides}` - what you write later takes precedence.
 
 ## API
 
@@ -221,7 +243,7 @@ export const myPlugin = plugin((viola) => {
 });
 ```
 
-Plugin rules are checked AFTER user rules, so users can always override defaults.
+Plugin rules are added to the builder in order. Users can override them by adding their own rules after `.use()`.
 
 ## Writing Linters
 

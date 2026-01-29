@@ -86,8 +86,8 @@ function isViolaBuilder(obj: unknown): boolean {
     obj !== null &&
     typeof obj === "object" &&
     "_linters" in obj &&
-    "_userRules" in obj &&
-    "_pluginRules" in obj &&
+    "_rules" in obj &&
+    "_settings" in obj &&
     "build" in obj &&
     typeof (obj as unknown as { build: unknown }).build === "function"
   );

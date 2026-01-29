@@ -2,6 +2,8 @@
  * Rule evaluator for viola configuration.
  *
  * Evaluates conditions against issues to determine the appropriate report level.
+ * Uses "last wins" semantics - rules are evaluated in reverse order, so later
+ * rules take precedence over earlier ones (like CSS).
  *
  * @module
  */
@@ -363,11 +365,12 @@ export function createEvaluationContext(
 /**
  * Evaluate an issue against a set of rules.
  *
- * Rules are evaluated in order. The first matching rule determines the report level.
- * If no rule matches, returns the default level.
+ * Rules are evaluated in reverse order (last to first). The first matching
+ * rule (from the end) determines the report level. This gives "last wins"
+ * semantics - later rules override earlier ones, like CSS.
  *
  * @param issue - The issue to evaluate
- * @param rules - Rules to evaluate against (in order)
+ * @param rules - Rules to evaluate against (in definition order)
  * @param catalogs - Map of linter ID -> issue catalog
  * @param defaultLevel - Default level if no rule matches
  * @returns Evaluated issue with report level
@@ -380,7 +383,8 @@ export function evaluateIssue(
 ): EvaluatedIssue {
   const context = createEvaluationContext(issue, catalogs);
 
-  for (let i = 0; i < rules.length; i++) {
+  // Iterate in reverse order - last matching rule wins
+  for (let i = rules.length - 1; i >= 0; i--) {
     const rule = rules[i]!;
 
     if (evaluateCondition(rule.condition, context)) {
