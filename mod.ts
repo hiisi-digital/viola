@@ -194,7 +194,10 @@ export {
 import type { LintResults, ViolaConfig } from "./src/data/mod.ts";
 import { runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
-import { loadPlugins } from "./src/runtime/plugins.ts";
+import {
+    discoverPlugins,
+    registerDiscoveredLinters
+} from "./src/runtime/plugins.ts";
 
 /**
  * Options for running viola.
@@ -211,6 +214,8 @@ export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> 
  * @returns Check results
  */
 export async function runViola(options: ViolaOptions): Promise<LintResults> {
+  const verbose = options.verbose ?? false;
+
   const config: ViolaConfig = {
     projectRoot: options.projectRoot ?? Deno.cwd(),
     include: options.include ?? ["packages", "app", "src"],
@@ -218,25 +223,61 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     extensions: options.extensions ?? DEFAULT_CONFIG.extensions ?? [],
     linters: options.linters ?? {},
     reportOnly: options.reportOnly ?? false,
-    verbose: options.verbose ?? false,
+    verbose,
   };
 
-  // Load plugins if specified
+  // Load plugins using full discovery
   const plugins = options.plugins ?? [];
+  let discovery = null;
+
   if (plugins.length > 0) {
-    if (config.verbose) {
+    if (verbose) {
       console.log(`Loading ${plugins.length} plugin(s)...`);
     }
-    const pluginResults = await loadPlugins(plugins, { verbose: config.verbose });
-    if (!pluginResults.allSucceeded) {
-      const failed = pluginResults.results.filter((r) => !r.success);
+
+    // Use full discovery to get bundles, presets, schemas
+    discovery = await discoverPlugins(plugins, { verbose });
+
+    if (!discovery.allSucceeded) {
+      const failed = discovery.results.filter((r) => !r.success);
       console.error(`Failed to load ${failed.length} plugin(s):`);
       for (const f of failed) {
         console.error(`  - ${f.specifier}: ${f.error}`);
       }
     }
-    if (config.verbose) {
-      console.log(`Registered ${pluginResults.totalLinters} linter(s) from plugins`);
+
+    // Register all discovered linters
+    const registeredIds = registerDiscoveredLinters(discovery);
+
+    if (verbose) {
+      console.log(`Registered ${registeredIds.length} linter(s) from plugins`);
+
+      // Report on bundles and presets
+      if (discovery.allBundles.size > 0) {
+        console.log(`Found ${discovery.allBundles.size} bundle(s)`);
+      }
+      if (discovery.allPresets.size > 0) {
+        console.log(`Found ${discovery.allPresets.size} preset(s)`);
+      }
+      if (discovery.defaultPresets.length > 0) {
+        console.log(`Auto-applying ${discovery.defaultPresets.length} default preset(s)`);
+      }
+      if (discovery.bundleCollisions.length > 0) {
+        console.log(`Bundle name collisions: ${discovery.bundleCollisions.join(", ")}`);
+      }
+      if (discovery.presetCollisions.length > 0) {
+        console.log(`Preset name collisions: ${discovery.presetCollisions.join(", ")}`);
+      }
+      console.log();
+    }
+
+    // TODO: Merge presets with user config when we have full config loading
+    // For now, we just log that presets would be applied
+    if (discovery.defaultPresets.length > 0 && verbose) {
+      console.log("Preset merging:");
+      for (const preset of discovery.defaultPresets) {
+        console.log(`  Would apply default preset: ${preset.pluginName}/${preset.name}`);
+      }
       console.log();
     }
   }
@@ -260,7 +301,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     skip: options.skip,
     config: options.config,
     parallel: options.parallel ?? false,
-    verbose: config.verbose,
+    verbose,
   };
 
   const results = await runLinters(data, runOptions);
