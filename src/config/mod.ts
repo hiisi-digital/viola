@@ -103,13 +103,17 @@ export {
 
 // Builder
 export type {
-    LinterPlugin,
+    LinterInput,
     LinterSetting,
+    PluginInput,
     Rule,
-    ViolaBuilderConfig
+    ViolaBuilderConfig,
+    ViolaPlugin,
+    ViolaPluginFn
 } from "./builder.ts";
 
 export {
+    plugin,
     viola,
     ViolaBuilder
 } from "./builder.ts";

@@ -85,9 +85,9 @@ function isViolaBuilder(obj: unknown): boolean {
   return (
     obj !== null &&
     typeof obj === "object" &&
-    "_plugins" in obj &&
-    "_rules" in obj &&
-    "_settings" in obj &&
+    "_linters" in obj &&
+    "_userRules" in obj &&
+    "_pluginRules" in obj &&
     "build" in obj &&
     typeof (obj as unknown as { build: unknown }).build === "function"
   );
@@ -125,13 +125,13 @@ async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBu
     if (isViolaBuilder(defaultExport)) {
       const built = defaultExport.build();
       if (verbose) {
-        console.log(`[loader] Built config: ${built.plugins.length} plugins, ${built.rules.length} rules`);
+        console.log(`[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`);
       }
       return built;
     }
 
     // If it's already a built config object
-    if (typeof defaultExport === "object" && "plugins" in defaultExport) {
+    if (typeof defaultExport === "object" && "linters" in defaultExport && "rules" in defaultExport) {
       if (verbose) {
         console.log(`[loader] Config is already built`);
       }
