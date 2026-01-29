@@ -25,6 +25,7 @@ import { runViola, formatResults } from "@hiisi/viola";
 const results = await runViola({
   projectRoot: Deno.cwd(),
   include: ["src", "packages"],
+  plugins: ["@hiisi/viola-default-lints"],
 });
 
 console.log(formatResults(results));
@@ -35,16 +36,22 @@ if (results.hasErrors) Deno.exit(1);
 ## Installation
 
 ```bash
-deno add jsr:@hiisi/viola
+deno add jsr:@hiisi/viola jsr:@hiisi/viola-default-lints
 ```
+
+## Plugin-Based Architecture
+
+Viola has no built-in linters. All linters are loaded as plugins, giving you full control over
+what checks run in your project. The official linter package is `@hiisi/viola-default-lints`.
 
 ## Configuration
 
-Configure via `deno.json` under the `viola` field. Config is scoped by file patterns:
+Configure via `deno.json` under the `viola` field:
 
 ```json
 {
   "viola": {
+    "plugins": ["@hiisi/viola-default-lints"],
     "**/*.ts": {
       "*>=major": "error",
       "*>=minor": "warn",
@@ -60,6 +67,68 @@ Configure via `deno.json` under the `viola` field. Config is scoped by file patt
   }
 }
 ```
+
+### Plugins
+
+Linters are loaded from the `plugins` array. Any module that exports linters can be a plugin:
+
+```json
+{
+  "viola": {
+    "plugins": [
+      "@hiisi/viola-default-lints",
+      "./my-local-linters.ts",
+      "jsr:@org/custom-lints"
+    ]
+  }
+}
+```
+
+### Config Presets
+
+Plugins can provide configuration presets. Inherit from them using the `inherit` field:
+
+```json
+{
+  "viola": {
+    "plugins": ["@hiisi/viola-default-lints"],
+    "inherit": ["strict"],
+    "**/*.ts": {
+      "*>=major": "error"
+    }
+  }
+}
+```
+
+A preset named `"default"` is auto-applied when a plugin loads. Your config always takes
+precedence over presets.
+
+### Per-Linter Configuration
+
+Configure individual linters via the `config` field:
+
+```json
+{
+  "viola": {
+    "plugins": ["@hiisi/viola-default-lints"],
+    "config": {
+      "type-location": {
+        "allowedDirs": ["src/types", "packages/*/types"]
+      },
+      "duplicate-strings": {
+        "minLength": 10,
+        "threshold": 3
+      }
+    },
+    "**/*.ts": {
+      "*>=major": "error"
+    }
+  }
+}
+```
+
+Plugins provide JSON schemas for their linter configs; viola validates against them and
+warns about typos or invalid values.
 
 ### Issue Classification
 
@@ -125,22 +194,9 @@ Pattern values can be:
 - `"error"` | `"warn"` | `"info"` | `"off"` — simple severity
 - `{ "severity": "warn", "minConfidence": 80 }` — with confidence threshold
 
-## Plugins
+## Default Linters
 
-Linters are loaded as plugins. Add them to the `plugins` array in your config:
-
-```json
-{
-  "viola": {
-    "plugins": ["@hiisi/viola-linters"],
-    "**/*.ts": {
-      "*>=major": "error"
-    }
-  }
-}
-```
-
-The `@hiisi/viola-linters` package provides these linters:
+The `@hiisi/viola-default-lints` package provides these linters:
 
 | Linter | Description |
 |------|-------------|
@@ -149,17 +205,18 @@ The `@hiisi/viola-linters` package provides these linters:
 | `similar-types` | Detect similar type names |
 | `duplicate-strings` | Find repeated string literals |
 | `duplicate-logic` | Find duplicated code patterns |
-| `deprecation` | Find deprecated code past its removal date |
+| `deprecation-check` | Find deprecated code past its removal date |
 | `missing-docs` | Find exports without documentation |
 | `orphaned-code` | Find unused internal code |
 | `schema-collision` | Find conflicting schema definitions |
 
-Plugins are loaded via dynamic import. Any module that exports linters (as a `linters` array, individual named exports, or default export) can be used as a plugin.
+## Creating Plugins
 
-## Custom Linters
+A plugin is any module that exports linters. The simplest plugin:
 
 ```ts
-import { BaseLinter, registry } from "@hiisi/viola";
+// my-plugin.ts
+import { BaseLinter, type CodebaseData, type LinterConfig, type Violation } from "@hiisi/viola";
 
 class MyLinter extends BaseLinter {
   readonly meta = {
@@ -174,23 +231,102 @@ class MyLinter extends BaseLinter {
       impact: "minor",
       description: "Name does not follow convention"
     },
-    "my-linter/very-bad-name": { 
-      category: "consistency", 
-      impact: "major",
-      description: "Name is confusing or misleading"
-    },
   };
 
   readonly requirements = { functions: true };
 
-  lint(data, config) {
-    const issues = [];
-    // Analyze data.functions, emit issues with kind from catalog
-    return issues;
+  lint(data: CodebaseData, config: LinterConfig): Violation[] {
+    const violations: Violation[] = [];
+    
+    for (const fn of data.allFunctions) {
+      if (fn.name.startsWith("_")) {
+        violations.push(this.warning(
+          "bad-name",
+          `Function "${fn.name}" starts with underscore`,
+          fn.location
+        ));
+      }
+    }
+    
+    return violations;
   }
 }
 
-registry.register(new MyLinter());
+// Export as linters array (preferred)
+export const linters = [new MyLinter()];
+```
+
+Use it in your config:
+
+```json
+{
+  "viola": {
+    "plugins": ["./my-plugin.ts"]
+  }
+}
+```
+
+### Plugin Exports
+
+Plugins can export:
+
+- `linters: BaseLinter[]` — Array of linter instances (preferred)
+- Individual named exports that are linters
+- A default export (single linter or array)
+- `bundles: Record<string, BaseLinter[]>` — Named linter collections
+- `configPresets: Record<string, ViolaConfigPreset>` — Configuration presets
+- `schemas: Record<string, JSONSchema>` — JSON schemas for linter config validation
+
+### Bundles
+
+Bundle groups of linters for convenience:
+
+```ts
+export const bundles = {
+  minimal: [typeLocationLinter],
+  standard: [typeLocationLinter, similarFunctionsLinter, duplicateStringsLinter],
+  strict: [...allLinters],
+};
+```
+
+### Config Presets
+
+Provide default configurations:
+
+```ts
+export const configPresets = {
+  default: {
+    "**/*.ts": {
+      "*>=major": "error",
+      "*>=minor": "warn",
+    },
+  },
+  strict: {
+    "**/*.ts": {
+      "*>=minor": "error",
+      "*=trivial": "warn",
+    },
+  },
+};
+```
+
+### Config Schemas
+
+Provide JSON schemas for linter config validation:
+
+```ts
+export const schemas = {
+  "type-location": {
+    type: "object",
+    properties: {
+      allowedDirs: { 
+        type: "array", 
+        items: { type: "string" },
+        description: "Directories where types are allowed"
+      },
+    },
+  },
+};
 ```
 
 ## API
@@ -205,6 +341,11 @@ registry.register(new MyLinter());
 - `crawlCodebase(config)` — Extract codebase data
 - `DEFAULT_CONFIG` — Default configuration
 
+### Plugin Loading
+
+- `discoverPlugins(specifiers)` — Load and discover all plugin exports
+- `registerDiscoveredLinters(discovery)` — Register discovered linters
+
 ### Registry
 
 - `registry.register(linter)` — Register a linter
@@ -212,13 +353,34 @@ registry.register(new MyLinter());
 - `registry.getAll()` — List all linters
 - `runLinters(data, options)` — Run linters on data
 
+### Config Validation
+
+- `validateLinterConfig(config, discovery, ids)` — Validate config against schemas
+- `formatValidationErrors(result)` — Format validation errors for display
+
 ### Types
 
 - `ViolaConfig` — Configuration options
 - `LintResults` — Check results
-- `Issue` — Single convention violation with category, impact, confidence
+- `Violation` — Single convention violation
 - `CodebaseData` — Extracted codebase structure
 - `BaseLinter` — Base class for custom linters
+- `ViolaPlugin` — Plugin interface
+- `JSONSchema` — JSON Schema type for config validation
+
+## CLI
+
+Use `@hiisi/viola-cli` for command-line access:
+
+```bash
+deno run -A jsr:@hiisi/viola-cli
+```
+
+Or install globally:
+
+```bash
+deno install -A -n viola jsr:@hiisi/viola-cli
+```
 
 ## Support
 
