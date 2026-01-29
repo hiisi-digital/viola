@@ -25,12 +25,12 @@ import type {
 import { derivePluginName, qualifiedName } from "../types/plugin.ts";
 
 // =============================================================================
-// Legacy Types (for backwards compatibility)
+// Simple Plugin Loading Types
 // =============================================================================
 
 /**
- * Result of loading a plugin (legacy format).
- * @deprecated Use PluginDiscoveryResult instead
+ * Result of loading a plugin (simple format).
+ * For full discovery including bundles/presets/schemas, use PluginDiscoveryResult.
  */
 export interface PluginLoadResult {
   /** The plugin specifier that was loaded */
@@ -44,8 +44,8 @@ export interface PluginLoadResult {
 }
 
 /**
- * Result of loading all plugins (legacy format).
- * @deprecated Use PluginsDiscoveryResult instead
+ * Result of loading all plugins (simple format).
+ * For full discovery including bundles/presets/schemas, use PluginsDiscoveryResult.
  */
 export interface PluginsLoadResult {
   /** Results for each plugin */
