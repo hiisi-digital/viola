@@ -7,6 +7,12 @@
   "properties": {
     "plugins": {
       "$ref": "#/$defs/plugins"
+    },
+    "inherit": {
+      "$ref": "#/$defs/inherit"
+    },
+    "config": {
+      "$ref": "#/$defs/linterConfig"
     }
   },
   "additionalProperties": {
@@ -58,11 +64,42 @@
         "type": "string",
         "description": "Import specifier for a linter plugin module"
       },
-      "description": "List of plugin modules to load. Uses the same syntax as TypeScript/Deno imports: import map references (e.g., '@hiisi/viola-linters'), JSR specifiers (e.g., 'jsr:@scope/package'), npm specifiers (e.g., 'npm:package'), or URLs.",
+      "description": "List of plugin modules to load. Uses the same syntax as TypeScript/Deno imports: import map references (e.g., '@hiisi/viola-default-lints'), JSR specifiers (e.g., 'jsr:@scope/package'), npm specifiers (e.g., 'npm:package'), or URLs.",
       "examples": [
-        ["@hiisi/viola-linters"],
-        ["jsr:@hiisi/viola-linters", "jsr:@someone/custom-linter"],
+        ["@hiisi/viola-default-lints"],
+        ["jsr:@hiisi/viola-default-lints", "jsr:@someone/custom-linter"],
         ["./local-linter.ts"]
+      ]
+    },
+    "inherit": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "description": "Preset name (short or qualified as plugin/preset)"
+      },
+      "description": "Preset names to inherit from loaded plugins. Presets are applied in order (later presets override earlier). User's own rules are applied last (always win). Note: 'default' presets from plugins are auto-applied before these explicit inherits.",
+      "examples": [
+        ["strict"],
+        ["viola-default-lints/strict", "my-plugin/relaxed"]
+      ]
+    },
+    "linterConfig": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Linter-specific configuration options"
+      },
+      "description": "Per-linter configuration options. Keys are linter IDs, values are linter-specific config objects. Validated against schemas provided by plugins.",
+      "examples": [
+        {
+          "type-location": {
+            "allowedDirs": ["src/types", "packages/*/types"]
+          },
+          "duplicate-strings": {
+            "minLength": 10,
+            "threshold": 3
+          }
+        }
       ]
     },
     "scopeConfig": {
@@ -87,7 +124,13 @@
   },
   "examples": [
     {
-      "plugins": ["@hiisi/viola-linters"],
+      "plugins": ["@hiisi/viola-default-lints"],
+      "inherit": ["strict"],
+      "config": {
+        "type-location": {
+          "allowedDirs": ["src/types"]
+        }
+      },
       "**/*.ts": {
         "*>=major": "error",
         "*>=minor": "warn",
