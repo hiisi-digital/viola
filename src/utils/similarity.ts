@@ -489,12 +489,15 @@ export function findAllSimilarPairs<T>(
 
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
-      const nameA = getName(items[i]);
-      const nameB = getName(items[j]);
+      const itemA = items[i];
+      const itemB = items[j];
+      if (!itemA || !itemB) continue;
+      const nameA = getName(itemA);
+      const nameB = getName(itemB);
       const { similarity, level } = compareIdentifiers(nameA, nameB);
 
       if (similarity >= minSimilarity) {
-        pairs.push({ a: items[i], b: items[j], similarity, level });
+        pairs.push({ a: itemA, b: itemB, similarity, level });
       }
     }
   }
