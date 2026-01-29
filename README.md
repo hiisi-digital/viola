@@ -81,94 +81,54 @@ for (const pkg of ["packages/core", "packages/cli"]) {
 
 ## Full Configuration Example
 
-A comprehensive `deno.json` showcasing all features:
-
 ```jsonc
 {
   "viola": {
-    // ─── PLUGINS ───────────────────────────────────────────────────────
-    // Load linters from multiple sources
     "plugins": [
-      "jsr:@hiisi/viola-default-lints",      // Third-party linter package
-      "./lints/ensure-schema-has-types.ts",  // Custom: schema files need generated .ts
-      "./lints/readme-version-match.ts"      // Custom: README version matches deno.json
+      "jsr:@hiisi/viola-default-lints",     // third-party linters
+      "./lints/schema-has-types.ts",        // custom: schemas need generated .ts
+      "./lints/readme-version.ts"           // custom: README version matches deno.json
     ],
-
-    // ─── SCOPE: INCLUDE/EXCLUDE ────────────────────────────────────────
-    "include": ["src", "packages"],
-    "exclude": ["builds", "dist", "vendor", "node_modules"],
-
-    // ─── PER-LINTER OPTIONS ────────────────────────────────────────────
-    "linters": {
+    "config": {
       "similar-functions": { "threshold": 0.85 },
-      "duplicate-strings": { "minLength": 12, "minOccurrences": 3 },
-      "readme-version-match": { "files": ["README.md", "docs/install.md"] }
+      "duplicate-strings": { "minLength": 12 }
     },
 
-    // ─── SEVERITY RULES ────────────────────────────────────────────────
-    // Default: all TypeScript files
+    // Severity rules by file pattern (last match wins)
     "**/*.ts": {
-      // By impact level (critical > major > minor > trivial)
-      "*>=critical": "error",  // Critical issues fail the build
-      "*>=major": "error",     // Major issues also fail
-      "*=minor": "warn",       // Minor issues warn but don't fail
-      "*=trivial": "off",      // Trivial issues ignored entirely
-
-      // By category
-      "*::correctness": "error",     // Correctness issues always error
-      "*::maintainability": "warn",  // Maintainability as warnings
-      "*::style": "hint",            // Style issues as hints (non-blocking)
-
-      // Specific linter overrides
-      "deprecated-code/*": "error",           // All deprecation issues are errors
-      "similar-functions/high-similarity": "warn",  // Downgrade to warning
-      "orphaned-code/*": "info"               // Just informational
+      "*>=major": "error",                  // major+ fails build
+      "*=minor": "warn",                    // minor just warns
+      "*=trivial": "off",                   // trivial ignored
+      "*::correctness": "error",            // correctness always errors
+      "*::style": "hint",                   // style as hints
+      "deprecated-code/*": "error",         // specific linter override
+      "orphaned-code/*": "info"             // just informational
     },
-
-    // ─── SCOPED OVERRIDES ──────────────────────────────────────────────
-    // Test files: relaxed rules
     "**/*_test.ts": {
-      "*": "off",                      // Disable all linters in tests
-      "deprecated-code/*": "warn"      // Except: still warn on deprecated usage
+      "*": "off",                           // disable in tests
+      "deprecated-code/*": "warn"           // except deprecations
     },
-
-    // Generated code: mostly skip
-    "src/generated/**": {
-      "*": "off"                       // Don't lint generated files
-    },
-
-    // Legacy code: gradual migration
+    "src/generated/**": { "*": "off" },     // skip generated
     "packages/legacy/**": {
-      "*>=critical": "error",          // Still catch critical issues
-      "*": "off"                       // But ignore everything else
+      "*>=critical": "error",               // only critical in legacy
+      "*": "off"
     },
-
-    // Stricter rules for core package
     "packages/core/**/*.ts": {
-      "*>=minor": "error",             // Even minor issues are errors in core
-      "*::style": "warn"               // Style still just warns
+      "*>=minor": "error",                  // stricter in core
+      "*::style": "warn"
     },
-
-    // README specifically: only version linter
     "README.md": {
-      "readme-version-match/*": "error",  // Version mismatch fails build
-      "*": "off"                          // No other linters
+      "readme-version/*": "error",          // version mismatch fails
+      "*": "off"
     },
-
-    // Schema files: must have generated types
     "schemas/*.json": {
-      "ensure-schema-has-types/*": "error"
+      "schema-has-types/*": "error"         // schemas need types
     }
   }
 }
 ```
 
-**Severity levels explained:**
-- `"error"` - Fails the build, exits non-zero
-- `"warn"` - Printed but doesn't fail (yellow)
-- `"info"` - Informational, printed in blue
-- `"hint"` - Subtle suggestions, printed dimly
-- `"off"` - Completely disabled, not even checked
+**Severities:** `error` (fails build), `warn` (yellow), `info` (blue), `hint` (dim), `off` (disabled)
 
 ## Usage
 
