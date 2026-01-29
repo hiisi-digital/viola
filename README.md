@@ -24,6 +24,61 @@ Think of it like a test runner that doesn't include any test assertions - you br
 deno add jsr:@hiisi/viola
 ```
 
+## Integration Examples
+
+### Deno Test Suite
+
+```ts
+// conventions_test.ts
+import { runViola } from "@hiisi/viola";
+import { assertEquals } from "@std/assert";
+
+Deno.test("no underscore functions", async () => {
+  const results = await runViola({ plugins: ["./linters.ts"], only: ["no-underscore-functions"] });
+  assertEquals(results.violations.length, 0, results.violations.map(v => v.message).join("\n"));
+});
+```
+
+### Pre-commit Hook
+
+```bash
+#!/bin/sh
+deno run -A jsr:@hiisi/viola-cli --plugins ./linters.ts || exit 1
+```
+
+### Build Pipeline Step
+
+```json
+{
+  "tasks": {
+    "build": "deno task lint:conventions && deno task compile",
+    "lint:conventions": "deno run -A jsr:@hiisi/viola-cli"
+  }
+}
+```
+
+### CI Workflow
+
+```yaml
+- name: Convention Lint
+  run: deno run -A jsr:@hiisi/viola-cli --report-only
+```
+
+### Watch Mode (Development)
+
+```bash
+deno run --watch -A jsr:@hiisi/viola-cli --plugins ./linters.ts
+```
+
+### Monorepo (Per-Package Linting)
+
+```ts
+for (const pkg of ["packages/core", "packages/cli"]) {
+  const results = await runViola({ projectRoot: pkg, plugins: ["../../linters.ts"] });
+  console.log(`${pkg}: ${results.violations.length} issues`);
+}
+```
+
 ## Usage
 
 ### Programmatic API
