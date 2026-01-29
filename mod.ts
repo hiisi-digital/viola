@@ -12,23 +12,25 @@
  *
  * ```ts
  * // viola.config.ts
- * import { viola, withDefaults } from "@hiisi/viola";
+ * import { viola, report, when } from "@hiisi/viola";
  * import defaultLints from "@hiisi/viola-default-lints";
  *
  * export default viola()
- *   .use(withDefaults(defaultLints))  // use plugin with its default rules
- *   .rule(report.off, when.in("**\/*_test.ts"));  // your overrides
+ *   .use(defaultLints)  // plugin adds linters + default rules
+ *   .rule(report.off, when.in("**\/*_test.ts"));  // your overrides (last wins!)
  * ```
+ *
+ * Rules use "last wins" semantics (like CSS) - later rules override earlier ones.
  *
  * ### Without Plugin Defaults
  *
  * ```ts
  * // Define all rules yourself
  * import { viola, report, when, Impact } from "@hiisi/viola";
- * import defaultLints from "@hiisi/viola-default-lints";
+ * import { linters } from "@hiisi/viola-default-lints";
  *
  * export default viola()
- *   .use(defaultLints)  // just linters, no default rules
+ *   .add(linters)  // just linters, no default rules
  *   .rule(report.error, when.impact.atLeast(Impact.Major))
  *   .rule(report.warn, when.impact.is(Impact.Minor))
  *   .rule(report.off, when.in("**\/*_test.ts"));
@@ -66,7 +68,7 @@
  *
  * Issues emitted by linters are evaluated against configuration rules to
  * determine their report level (error, warn, info, hint, off, skip).
- * Rules are evaluated in order - first match wins.
+ * Rules use "last wins" semantics - later rules override earlier ones.
  *
  * @module
  */

@@ -8,13 +8,13 @@
  *
  * export default viola()
  *   .use(defaultLints)  // plugin adds linters + default rules
- *   .rule(report.off, when.in("**\/*_test.ts"));  // user overrides
+ *   .rule(report.off, when.in("**\/*_test.ts"));  // your overrides
  * ```
  *
- * Rules are evaluated with "first match wins" semantics. User rules are
- * always checked before plugin rules, regardless of the order in code.
- * This lets users write the natural "base then overrides" order while
- * still having their overrides take precedence.
+ * Rules are evaluated with "last wins" semantics (like CSS). Rules defined
+ * later override earlier ones. This matches the intuitive mental model:
+ * - Base rules first (from plugins)
+ * - Overrides later (your rules)
  *
  * @module
  */
@@ -137,45 +137,35 @@ function isLinter(value: unknown): value is BaseLinter {
  * Main viola configuration builder.
  *
  * Collects linters, rules, and settings from plugins and user configuration.
- * Rules are ordered so user rules are checked before plugin rules (first match wins).
+ * Rules use "last wins" semantics - later rules override earlier ones.
  */
 export class ViolaBuilder {
   private _linters: BaseLinter[] = [];
-  private _userRules: Frozen<Rule>[] = [];
-  private _pluginRules: Frozen<Rule>[] = [];
-  private _userSettings: Frozen<LinterSetting>[] = [];
-  private _pluginSettings: Frozen<LinterSetting>[] = [];
-  private _inPlugin = false;
+  private _rules: Frozen<Rule>[] = [];
+  private _settings: Frozen<LinterSetting>[] = [];
 
   /**
    * Add a plugin that configures this builder.
    *
-   * Plugins can add linters, rules, and settings. Plugin rules are evaluated
-   * AFTER user rules, so user overrides always take precedence.
+   * Plugins add linters, rules, and settings. Rules defined later
+   * (including your rules after .use()) take precedence over earlier ones.
    *
    * @example
    * ```ts
    * viola()
-   *   .use(defaultLints)  // plugin's rules become fallbacks
-   *   .rule(report.off, when.in("**\/*_test.ts"));  // user override (checked first)
+   *   .use(defaultLints)  // plugin's rules (base)
+   *   .rule(report.off, when.in("**\/*_test.ts"));  // your override (wins)
    * ```
    */
   use(plugin: PluginInput): this {
-    const wasInPlugin = this._inPlugin;
-    this._inPlugin = true;
-
-    try {
-      if (isPluginObject(plugin)) {
-        plugin.build(this);
-      } else if (isPluginFn(plugin)) {
-        plugin(this);
-      } else {
-        throw new Error(
-          "Invalid plugin: expected an object with build() method or a function"
-        );
-      }
-    } finally {
-      this._inPlugin = wasInPlugin;
+    if (isPluginObject(plugin)) {
+      plugin.build(this);
+    } else if (isPluginFn(plugin)) {
+      plugin(this);
+    } else {
+      throw new Error(
+        "Invalid plugin: expected an object with build() method or a function"
+      );
     }
 
     return this;
@@ -207,6 +197,8 @@ export class ViolaBuilder {
   /**
    * Configure a linter setting.
    *
+   * Later settings override earlier ones for the same key.
+   *
    * @example
    * ```ts
    * viola()
@@ -215,21 +207,19 @@ export class ViolaBuilder {
    * ```
    */
   set(key: string, value: unknown): this {
-    const settings = this._inPlugin ? this._pluginSettings : this._userSettings;
-
     const dotIndex = key.indexOf(".");
     if (dotIndex === -1) {
       // key is linter id, value is full config object
       if (typeof value === "object" && value !== null) {
         for (const [k, v] of Object.entries(value)) {
-          settings.push(deepFreeze({ linter: key, key: k, value: v }));
+          this._settings.push(deepFreeze({ linter: key, key: k, value: v }));
         }
       }
     } else {
       // dot notation: "linter.option"
       const linter = key.slice(0, dotIndex);
       const option = key.slice(dotIndex + 1);
-      settings.push(deepFreeze({ linter, key: option, value }));
+      this._settings.push(deepFreeze({ linter, key: option, value }));
     }
     return this;
   }
@@ -237,13 +227,13 @@ export class ViolaBuilder {
   /**
    * Add a classification rule.
    *
-   * User rules are checked before plugin rules (first match wins).
+   * Rules use "last wins" semantics - later rules override earlier ones.
    *
    * @example
    * ```ts
    * viola()
-   *   .use(defaultLints)  // plugin rules (fallback)
-   *   .rule(report.off, when.in("**\/*_test.ts"))  // user rule (checked first)
+   *   .use(defaultLints)  // plugin rules (base)
+   *   .rule(report.off, when.in("**\/*_test.ts"))  // your rule (wins)
    * ```
    */
   rule(action: Frozen<RuleAction>, condition: ConditionExpr): this {
@@ -252,11 +242,7 @@ export class ViolaBuilder {
       condition: condition.condition,
     });
 
-    if (this._inPlugin) {
-      this._pluginRules.push(rule);
-    } else {
-      this._userRules.push(rule);
-    }
+    this._rules.push(rule);
 
     return this;
   }
@@ -264,16 +250,14 @@ export class ViolaBuilder {
   /**
    * Build the final configuration.
    *
-   * Rules are ordered: user rules first, then plugin rules.
-   * Settings are merged: plugin settings first, then user settings (user wins).
+   * Rules are stored in definition order. The evaluator processes them
+   * in reverse (last to first) so later rules take precedence.
    */
   build(): ViolaBuilderConfig {
     return {
       linters: this._linters,
-      // User rules first (checked first with first-match-wins)
-      rules: [...this._userRules, ...this._pluginRules],
-      // Plugin settings first, user settings override
-      settings: [...this._pluginSettings, ...this._userSettings],
+      rules: this._rules,
+      settings: this._settings,
     };
   }
 }
