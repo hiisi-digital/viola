@@ -50,6 +50,12 @@
  * }
  * ```
  *
+ * ## Rule Evaluation
+ *
+ * Issues emitted by linters are evaluated against configuration rules to
+ * determine their report level (error, warn, info, hint, off, skip).
+ * Rules are evaluated in order - first match wins.
+ *
  * @module
  */
 
@@ -180,8 +186,21 @@ export {
 // High-Level API
 // =============================================================================
 
-import { formatValidationErrors, mergeLinterConfig, validateLinterConfig } from "./src/config/mod.ts";
-import type { LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
+import type { Frozen } from "@hiisi/flash-freeze";
+import {
+    countByLevel,
+    type EvaluatedIssue,
+    evaluateIssues,
+    filterReportableIssues,
+    formatValidationErrors,
+    hasErrors as hasErrorLevel,
+    type IssueCatalog,
+    mergeLinterConfig,
+    ReportLevel,
+    type Rule,
+    validateLinterConfig
+} from "./src/config/mod.ts";
+import type { Issue, LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
@@ -199,6 +218,22 @@ export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> 
   inherit?: string[];
   /** Per-linter configuration options (merged with preset configs) */
   linterConfig?: Record<string, Record<string, unknown>>;
+  /** Rules for classifying issues (from builder config) */
+  rules?: readonly Frozen<Rule>[];
+  /** Issue catalogs for rule evaluation (linter ID -> catalog) */
+  catalogs?: Map<string, IssueCatalog>;
+}
+
+/**
+ * Extended results with evaluated issues.
+ */
+export interface EvaluatedResults extends LintResults {
+  /** Issues with report levels applied */
+  evaluatedIssues: EvaluatedIssue[];
+  /** Counts by report level */
+  levelCounts: Record<ReportLevel, number>;
+  /** Whether any issue has error level */
+  hasErrorLevel: boolean;
 }
 
 /**
@@ -379,11 +414,82 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
 
   const results = await runLinters(data, runOptions);
 
+  // If rules are provided, evaluate issues against them
+  if (options.rules && options.rules.length > 0) {
+    const catalogs = options.catalogs ?? buildCatalogsFromRegistry();
+    const allIssues: Issue[] = [];
+
+    for (const result of results.results) {
+      allIssues.push(...result.issues);
+    }
+
+    const evaluatedIssues = evaluateIssues(
+      allIssues,
+      options.rules,
+      catalogs,
+      ReportLevel.Warn
+    );
+
+    const reportable = filterReportableIssues(evaluatedIssues);
+    const levelCounts = countByLevel(evaluatedIssues);
+    const hasErr = hasErrorLevel(reportable);
+
+    return {
+      ...results,
+      evaluatedIssues,
+      levelCounts,
+      hasErrorLevel: hasErr,
+      // Override hasErrors based on evaluated issues
+      hasErrors: hasErr || results.hasErrors,
+    } as EvaluatedResults;
+  }
+
   return results;
 }
 
 /**
+ * Build catalogs map from registered linters.
+ */
+function buildCatalogsFromRegistry(): Map<string, IssueCatalog> {
+  const catalogs = new Map<string, IssueCatalog>();
+  for (const linter of registry.getAll()) {
+    if (linter.catalog) {
+      catalogs.set(linter.meta.id, linter.catalog);
+    }
+  }
+  return catalogs;
+}
+
+/**
+ * Check if results have evaluated issues.
+ */
+function isEvaluatedResults(results: LintResults): results is EvaluatedResults {
+  return "evaluatedIssues" in results;
+}
+
+/**
+ * Get display prefix for a report level.
+ */
+function levelPrefix(level: ReportLevel): string {
+  switch (level) {
+    case ReportLevel.Error:
+      return "ERROR";
+    case ReportLevel.Warn:
+      return "WARN";
+    case ReportLevel.Info:
+      return "INFO";
+    case ReportLevel.Hint:
+      return "HINT";
+    default:
+      return "";
+  }
+}
+
+/**
  * Format check results for console output.
+ *
+ * If results include evaluated issues (from rule evaluation), formats with
+ * report levels. Otherwise, formats raw issues.
  *
  * @param results - Check results to format
  * @returns Formatted string
@@ -400,6 +506,104 @@ export function formatResults(results: LintResults): string {
   lines.push(`Total time: ${results.totalDurationMs.toFixed(1)}ms`);
   lines.push("");
 
+  // Check if we have evaluated issues
+  if (isEvaluatedResults(results)) {
+    return formatEvaluatedResults(results, lines);
+  }
+
+  // Fall back to raw issue formatting
+  return formatRawResults(results, lines);
+}
+
+/**
+ * Format results with evaluated issues and report levels.
+ */
+function formatEvaluatedResults(results: EvaluatedResults, lines: string[]): string {
+  const reportable = filterReportableIssues(results.evaluatedIssues);
+
+  if (reportable.length === 0) {
+    lines.push("All clear.");
+    lines.push("");
+    return lines.join("\n");
+  }
+
+  // Show summary by level
+  const counts = results.levelCounts;
+  const summaryParts: string[] = [];
+  if (counts[ReportLevel.Error] > 0) summaryParts.push(`${counts[ReportLevel.Error]} error(s)`);
+  if (counts[ReportLevel.Warn] > 0) summaryParts.push(`${counts[ReportLevel.Warn]} warning(s)`);
+  if (counts[ReportLevel.Info] > 0) summaryParts.push(`${counts[ReportLevel.Info]} info`);
+  if (counts[ReportLevel.Hint] > 0) summaryParts.push(`${counts[ReportLevel.Hint]} hint(s)`);
+
+  lines.push(`Found ${reportable.length} issue(s): ${summaryParts.join(", ")}`);
+  lines.push("");
+
+  // Group by level, then by linter
+  const byLevel = new Map<ReportLevel, EvaluatedIssue[]>();
+  for (const issue of reportable) {
+    const group = byLevel.get(issue.level) ?? [];
+    group.push(issue);
+    byLevel.set(issue.level, group);
+  }
+
+  // Output in severity order
+  const levelOrder = [ReportLevel.Error, ReportLevel.Warn, ReportLevel.Info, ReportLevel.Hint];
+
+  for (const level of levelOrder) {
+    const issues = byLevel.get(level);
+    if (!issues || issues.length === 0) continue;
+
+    lines.push("-".repeat(80));
+    lines.push(`${levelPrefix(level)} (${issues.length})`);
+    lines.push("-".repeat(80));
+    lines.push("");
+
+    for (const evaluated of issues) {
+      const issue = evaluated.issue;
+      lines.push(`[${issue.kind}] ${issue.location.file}:${issue.location.line}`);
+      lines.push(`    ${issue.message}`);
+      lines.push(`    (confidence: ${issue.confidence}%)`);
+
+      if (issue.suggestion) {
+        lines.push("");
+        for (const line of issue.suggestion.split("\n")) {
+          lines.push(`    ${line}`);
+        }
+      }
+
+      if (issue.relatedLocations && issue.relatedLocations.length > 0) {
+        lines.push("");
+        lines.push("    Related:");
+        for (const loc of issue.relatedLocations.slice(0, 3)) {
+          lines.push(`      - ${loc.file}:${loc.line}`);
+        }
+        if (issue.relatedLocations.length > 3) {
+          lines.push(`      ... and ${issue.relatedLocations.length - 3} more`);
+        }
+      }
+
+      lines.push("");
+    }
+  }
+
+  lines.push("=".repeat(80));
+
+  if (results.hasErrorLevel) {
+    lines.push("Errors found. Fix before continuing.");
+  } else if (reportable.length > 0) {
+    lines.push("Issues found. Review and address as needed.");
+  }
+
+  lines.push("=".repeat(80));
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+/**
+ * Format results with raw issues (no rule evaluation).
+ */
+function formatRawResults(results: LintResults, lines: string[]): string {
   if (results.totalIssues === 0) {
     lines.push("All clear.");
     lines.push("");
@@ -495,6 +699,8 @@ export {
 export type {
     // New API
     Condition,
+    EvaluatedIssue,
+    EvaluationContext,
     LinterPlugin,
     LinterSetting,
     ReportAction,
@@ -503,4 +709,16 @@ export type {
     // Legacy
     ValidationError,
     ValidationResult, ViolaBuilderConfig
+} from "./src/config/mod.ts";
+
+export {
+    // Rule evaluation
+    countByLevel,
+    createEvaluationContext,
+    evaluateCondition,
+    evaluateIssue,
+    evaluateIssues,
+    filterReportableIssues,
+    groupByLevel,
+    hasErrors as hasErrorLevelIssues
 } from "./src/config/mod.ts";
