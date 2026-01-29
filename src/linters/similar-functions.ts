@@ -102,8 +102,8 @@ function compareParams(
 
   let matchCount = 0;
   for (let i = 0; i < paramsA.length; i++) {
-    const a = paramsA[i];
-    const b = paramsB[i];
+    const a = paramsA[i]!;
+    const b = paramsB[i]!;
 
     // Check type match (if both have types)
     if (a.type && b.type && a.type === b.type) {
@@ -189,8 +189,8 @@ export class SimilarFunctionsLinter extends BaseLinter {
 
     for (let i = 0; i < functions.length; i++) {
       for (let j = i + 1; j < functions.length; j++) {
-        const funcA = functions[i];
-        const funcB = functions[j];
+        const funcA = functions[i]!;
+        const funcB = functions[j]!;
 
         // Create a unique key for this pair to avoid duplicates
         const pairKey = [

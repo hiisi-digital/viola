@@ -233,7 +233,7 @@ function parseParam(param: string): FunctionParam | null {
   if (rest) param = param.slice(3);
 
   // Split by = for default value
-  const [mainPart, defaultValue] = param.split("=").map((s) => s.trim());
+  const _splitParts = param.split("=").map((s) => s.trim()); const mainPart = _splitParts[0] ?? ""; const defaultValue = _splitParts[1];
 
   // Split by : for type
   const colonIndex = mainPart.indexOf(":");
@@ -303,8 +303,8 @@ function parseTypeFields(body: string): TypeField[] {
     );
     if (match) {
       fields.push({
-        name: match[2],
-        type: match[4].trim(),
+        name: match[2]!,
+        type: match[4]!.trim(),
         optional: !!match[3],
         readonly: !!match[1],
       });
@@ -450,7 +450,7 @@ function extractArrowFunctions(
     let bodyStart = arrowIndex + 2;
 
     // Skip whitespace
-    while (bodyStart < content.length && /\s/.test(content[bodyStart])) {
+    while (bodyStart < content.length && /\s/.test(content[bodyStart]!)) {
       bodyStart++;
     }
 
@@ -477,6 +477,7 @@ function extractArrowFunctions(
 
     const normalizedBody = normalizeCode(body);
     const jsDoc = extractPrecedingJsDoc(content, startIndex);
+    if (!name) continue;
 
     functions.push({
       name,
@@ -521,6 +522,7 @@ function extractInterfaces(
 
     const normalizedBody = normalizeCode(body);
     const jsDoc = extractPrecedingJsDoc(content, startIndex);
+    if (!name) continue;
 
     types.push({
       name,
@@ -586,6 +588,7 @@ function extractTypeAliases(
     if (body.startsWith("{")) {
       fields = parseTypeFields(body);
     }
+    if (!name) continue;
 
     types.push({
       name,
@@ -734,6 +737,7 @@ function extractImports(
       fromModule,
     ] = match;
     const line = getLineNumber(content, match.index);
+    if (!fromModule) continue;
 
     if (namespaceImport) {
       // import * as X from "module"
@@ -789,6 +793,7 @@ function extractDeprecations(
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+    if (!line) continue;
     const lineNum = i + 1;
 
     // Check if line matches any deprecation pattern

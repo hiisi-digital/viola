@@ -267,7 +267,7 @@ export class DuplicateStringsLinter extends BaseLinter {
     _options: DuplicateStringsOptions
   ): Violation {
     const count = occurrences.length;
-    const firstOccurrence = occurrences[0];
+    const firstOccurrence = occurrences[0]!;
     const suggestedName = suggestConstName(value);
 
     // Get unique files where this string appears

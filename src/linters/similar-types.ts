@@ -216,8 +216,8 @@ export class SimilarTypesLinter extends BaseLinter {
 
     for (let i = 0; i < types.length; i++) {
       for (let j = i + 1; j < types.length; j++) {
-        const typeA = types[i];
-        const typeB = types[j];
+        const typeA = types[i]!;
+        const typeB = types[j]!;
 
         // Create a unique key for this pair to avoid duplicates
         const pairKey = [
@@ -412,8 +412,8 @@ export class SimilarTypesLinter extends BaseLinter {
 
     for (let i = 0; i < typesWithFields.length; i++) {
       for (let j = i + 1; j < typesWithFields.length; j++) {
-        const typeA = typesWithFields[i];
-        const typeB = typesWithFields[j];
+        const typeA = typesWithFields[i]!;
+        const typeB = typesWithFields[j]!;
 
         // Skip same name (handled above)
         if (typeA.name === typeB.name) continue;
