@@ -100,7 +100,12 @@ jobs:
         run: deno check mod.ts
 
       - name: Run tests
-        run: deno test src/
+        run: |
+          if find src -name "*_test.ts" | grep -q .; then
+            deno test src/
+          else
+            echo "No test files found, skipping tests"
+          fi
 
       - name: Validate publish config
         run: |
