@@ -2,34 +2,18 @@
 /**
  * Dogfooding script - run viola on itself.
  *
- * Since viola has no "built-in" linters, we must explicitly load them
- * as plugins before running.
+ * Loads linters via the plugin system from @hiisi/viola-default-lints.
  */
 
-import { formatResults, loadPlugins, runViola } from "../mod.ts";
+import { formatResults, runViola } from "../mod.ts";
 
 const strict = Deno.args.includes("--strict");
 const verbose = Deno.args.includes("--verbose") || Deno.args.includes("-v");
 
-// Load linters from the local packages directory via import map alias
-// In a real project, this would be a published package like "jsr:@hiisi/viola-linters"
-const pluginResults = await loadPlugins(
-  ["@hiisi/viola-linters"],
-  { verbose }
-);
-
-if (!pluginResults.allSucceeded) {
-  console.error("Failed to load linter plugins");
-  Deno.exit(1);
-}
-
-if (verbose) {
-  console.log(`Loaded ${pluginResults.totalLinters} linter(s)\n`);
-}
-
 const results = await runViola({
   projectRoot: Deno.cwd(),
   include: ["src"],
+  plugins: ["@hiisi/viola-default-lints"],
   verbose,
   // Skip linters that are too noisy for viola's own codebase:
   // - type-location: designed for monorepos with packages/types structure
