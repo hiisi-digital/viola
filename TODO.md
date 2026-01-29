@@ -194,9 +194,9 @@ Per-linter configuration options. Keys are linter IDs.
 
 - [x] Parse `inherit` field
 - [x] Parse `config` field
-- [ ] Implement preset resolution (find preset by name across plugins)
-- [ ] Implement config merging (presets -> user config)
-- [ ] Auto-apply `"default"` presets from loaded plugins
+- [x] Implement preset resolution (find preset by name across plugins)
+- [x] Implement config merging (presets -> user config)
+- [x] Auto-apply `"default"` presets from loaded plugins
 
 ### Phase 5: Config Validation
 
@@ -206,17 +206,17 @@ Per-linter configuration options. Keys are linter IDs.
 
 ### Phase 6: Runtime Integration
 
-- [ ] Update `runViola()` to:
+- [x] Update `runViola()` to:
   1. Load plugins (using full discovery)
   2. Collect default presets
   3. Resolve explicit inherits
   4. Merge configs (presets underlaid, user on top)
-  5. Validate linter configs against schemas
-  6. Run linters with merged config
+  - [ ] Validate linter configs against schemas
+  - [ ] Pass merged linter config to linters
 
 ### Phase 7: Clean Up Viola Core
 
-- [ ] Remove any remaining "builtin" references
+- [x] Remove any remaining "builtin" references (only linter-internal refs remain, which are fine)
 - [ ] Remove linter implementations from `src/linters/` (keep only base, registry, types)
 - [x] Update dogfooding to use `@hiisi/viola-default-lints` from JSR
 - [ ] Update README to reflect plugin-only architecture
