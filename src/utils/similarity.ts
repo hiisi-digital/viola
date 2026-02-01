@@ -7,6 +7,19 @@
  * @module
  */
 
+import type {
+    SimilarityLevel,
+    SimilarityMatch,
+    SimilarityThresholds
+} from "./types/similarity.types.ts";
+
+// Re-export types for convenience
+export type {
+    SimilarityLevel,
+    SimilarityMatch,
+    SimilarityThresholds
+} from "./types/similarity.types.ts";
+
 // =============================================================================
 // Levenshtein Distance
 // =============================================================================
@@ -171,17 +184,7 @@ export function tokenSimilarity(a: string, b: string): number {
 // Combined Similarity
 // =============================================================================
 
-/**
- * Similarity thresholds for classification.
- */
-export interface SimilarityThresholds {
-  /** Below this = no match */
-  readonly low: number;
-  /** Above this = warning (medium similarity) */
-  readonly medium: number;
-  /** Above this = error (high similarity) */
-  readonly high: number;
-}
+
 
 /**
  * Default thresholds for name comparison.
@@ -201,10 +204,7 @@ export const BODY_SIMILARITY_THRESHOLDS: SimilarityThresholds = {
   high: 0.95,
 };
 
-/**
- * Similarity classification result.
- */
-export type SimilarityLevel = "none" | "low" | "medium" | "high" | "exact";
+
 
 /**
  * Classify similarity score against thresholds.
@@ -417,17 +417,7 @@ export function compareCodeBodies(
 // Batch Comparison
 // =============================================================================
 
-/**
- * Result of comparing an item against many others.
- */
-export interface SimilarityMatch<T> {
-  /** The matched item */
-  readonly item: T;
-  /** Similarity score */
-  readonly similarity: number;
-  /** Similarity level */
-  readonly level: SimilarityLevel;
-}
+
 
 /**
  * Find similar items in a collection.
