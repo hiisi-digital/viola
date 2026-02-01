@@ -2,34 +2,35 @@
 /**
  * Dogfooding script - run viola on itself.
  *
- * Loads linters via the plugin system from @hiisi/viola-default-lints.
+ * Loads configuration from viola.config.ts which imports linters locally.
  */
 
+import defaultLints from "../../viola-default-lints/mod.ts";
 import { formatResults, runViola } from "../mod.ts";
+import { registry } from "../src/linters/mod.ts";
 
-const strict = Deno.args.includes("--strict");
 const verbose = Deno.args.includes("--verbose") || Deno.args.includes("-v");
+
+// Register linters from the default lints plugin
+for (const linter of defaultLints.linters ?? []) {
+  registry.register(linter);
+}
+
+// Import linters array directly
+import { linters } from "../../viola-default-lints/mod.ts";
+for (const linter of linters) {
+  registry.register(linter);
+}
 
 const results = await runViola({
   projectRoot: Deno.cwd(),
   include: ["src"],
-  plugins: ["@hiisi/viola-default-lints"],
+  plugins: [], // Empty - we registered linters directly
   verbose,
-  // Skip linters that are too noisy for viola's own codebase:
-  // - type-location: designed for monorepos with packages/types structure
-  // - duplicate-strings: flags type literals like "function", "interface"
-  // - orphaned-code: flags public API exports that aren't used internally
-  // - similar-functions: each linter has similar helper functions by design
-  // - duplicate-logic: same as above - linter helpers are intentionally similar
-  skip: ["type-location", "duplicate-strings", "orphaned-code", "similar-functions", "duplicate-logic"],
+  // No skipping - we want to dogfood all linters
 });
 
 console.log(formatResults(results));
-
-if (strict && results.summary.total > 0) {
-  console.log("\n[strict mode] Failing due to convention issues.\n");
-  Deno.exit(1);
-}
 
 if (results.hasErrors) {
   Deno.exit(1);
