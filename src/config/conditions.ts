@@ -9,94 +9,28 @@
 
 import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
 import { Category, Impact } from "./enums.ts";
+import type {
+    CategoryCondition,
+    Condition,
+    ConfidenceCondition,
+    FileCondition,
+    ImpactCondition,
+    LinterCondition,
+} from "./types/conditions.types.ts";
 
-// =============================================================================
-// Condition Types
-// =============================================================================
-
-/**
- * Operators for combining conditions.
- */
-export type ConditionOperator = "and" | "or" | "not";
-
-/**
- * Base condition interface.
- */
-export interface BaseCondition {
-  readonly type: string;
-}
-
-/**
- * Impact comparison condition.
- */
-export interface ImpactCondition extends BaseCondition {
-  readonly type: "impact";
-  readonly operator: "=" | "!=" | ">=" | "<=" | ">" | "<";
-  readonly value: Impact;
-}
-
-/**
- * Category filter condition.
- */
-export interface CategoryCondition extends BaseCondition {
-  readonly type: "category";
-  readonly include?: readonly Category[];
-  readonly exclude?: readonly Category[];
-}
-
-/**
- * File pattern condition.
- */
-export interface FileCondition extends BaseCondition {
-  readonly type: "file";
-  readonly patterns: readonly string[];
-}
-
-/**
- * Linter filter condition.
- */
-export interface LinterCondition extends BaseCondition {
-  readonly type: "linter";
-  readonly patterns: readonly string[];
-}
-
-/**
- * Confidence filter condition.
- */
-export interface ConfidenceCondition extends BaseCondition {
-  readonly type: "confidence";
-  readonly min?: number;
-  readonly max?: number;
-}
-
-/**
- * Compound condition (AND, OR).
- */
-export interface CompoundCondition extends BaseCondition {
-  readonly type: "compound";
-  readonly operator: "and" | "or";
-  readonly conditions: readonly Condition[];
-}
-
-/**
- * Negation condition (NOT).
- */
-export interface NotCondition extends BaseCondition {
-  readonly type: "not";
-  readonly condition: Condition;
-}
-
-/**
- * Union of all condition types.
- */
-export type Condition =
-  | ImpactCondition
-  | CategoryCondition
-  | FileCondition
-  | LinterCondition
-  | ConfidenceCondition
-  | CompoundCondition
-  | NotCondition;
+// Re-export types for convenience
+export type {
+    BaseCondition,
+    CategoryCondition,
+    CompoundCondition,
+    Condition,
+    ConditionOperator,
+    ConfidenceCondition,
+    FileCondition,
+    ImpactCondition,
+    LinterCondition,
+    NotCondition
+} from "./types/conditions.types.ts";
 
 // =============================================================================
 // Condition Wrapper (for fluent chaining of operators)
@@ -349,30 +283,51 @@ export const when = deepFreeze({
 // Type Guards
 // =============================================================================
 
+/**
+ * Check if a condition is an impact condition.
+ */
 export function isImpactCondition(c: Condition): c is ImpactCondition {
   return c.type === "impact";
 }
 
+/**
+ * Check if a condition is a category condition.
+ */
 export function isCategoryCondition(c: Condition): c is CategoryCondition {
   return c.type === "category";
 }
 
+/**
+ * Check if a condition is a file pattern condition.
+ */
 export function isFileCondition(c: Condition): c is FileCondition {
   return c.type === "file";
 }
 
+/**
+ * Check if a condition is a linter filter condition.
+ */
 export function isLinterCondition(c: Condition): c is LinterCondition {
   return c.type === "linter";
 }
 
+/**
+ * Check if a condition is a confidence condition.
+ */
 export function isConfidenceCondition(c: Condition): c is ConfidenceCondition {
   return c.type === "confidence";
 }
 
-export function isCompoundCondition(c: Condition): c is CompoundCondition {
+/**
+ * Check if a condition is a compound (AND/OR) condition.
+ */
+export function isCompoundCondition(c: Condition): c is import("./types/conditions.types.ts").CompoundCondition {
   return c.type === "compound";
 }
 
-export function isNotCondition(c: Condition): c is NotCondition {
+/**
+ * Check if a condition is a NOT condition.
+ */
+export function isNotCondition(c: Condition): c is import("./types/conditions.types.ts").NotCondition {
   return c.type === "not";
 }

@@ -67,11 +67,13 @@ export {
 
 // Actions
 export type {
+    GrammarRelationshipAction,
     ReportAction,
     RuleAction
 } from "./actions.ts";
 
 export {
+    isGrammarRelationshipAction,
     isReportAction,
     report
 } from "./actions.ts";
@@ -108,15 +110,24 @@ export type {
     PluginInput,
     Rule,
     ViolaBuilderConfig,
+    ViolaBuilderConfigExtended,
     ViolaPlugin,
     ViolaPluginFn
 } from "./builder.ts";
+
+// Re-export AddInput and AddResult from builder.types for backwards compatibility
+export type { AddInput, AddResult } from "./types/builder.types.ts";
 
 export {
     plugin,
     viola,
     ViolaBuilder
 } from "./builder.ts";
+
+// Grammar Reference
+export type { GrammarRelationshipBuilder } from "./grammar-ref.ts";
+
+export { grammar, isGrammarRelationship } from "./grammar-ref.ts";
 
 // Evaluator
 export type {

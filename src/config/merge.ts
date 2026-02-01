@@ -13,36 +13,15 @@ import type {
     PluginsDiscoveryResult,
     ViolaConfigPreset,
 } from "../types/plugin.ts";
+import { parsePattern, resolvePatternValue } from "./pattern.ts";
 import type {
-    PatternValue,
     ResolvedConfig,
-    ResolvedPatternValue,
     ResolvedScope
 } from "./types.ts";
+import type { MergeOptions, MergeResult } from "./types/merge.types.ts";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-/**
- * Result of merging presets with user config.
- */
-export interface MergeResult {
-  /** Merged scopes (presets first, then user) */
-  scopes: ResolvedScope[];
-  /** Warnings generated during merge */
-  warnings: string[];
-  /** Presets that were applied */
-  appliedPresets: string[];
-}
-
-/**
- * Options for merging configuration.
- */
-export interface MergeOptions {
-  /** Whether to log verbose output */
-  verbose?: boolean;
-}
+// Re-export types for convenience
+export type { MergeOptions, MergeResult } from "./types/merge.types.ts";
 
 // =============================================================================
 // Preset Resolution
@@ -98,81 +77,7 @@ export function collectDefaultPresets(
 // Config Merging
 // =============================================================================
 
-/**
- * Parse a pattern string into components.
- * (Duplicated from loader.ts to avoid circular deps - consider extracting to shared)
- */
-function parsePattern(pattern: string): {
-  raw: string;
-  linter: string;
-  issue: string;
-  category?: string;
-  impact?: { operator: string; value: string };
-} | null {
-  const CATEGORIES = ["correctness", "maintainability", "consistency", "performance", "style"];
-  const IMPACTS = ["critical", "major", "minor", "trivial"];
 
-  let remaining = pattern;
-  let linter = "*";
-  let issue = "*";
-  let category: string | undefined;
-  let impact: { operator: string; value: string } | undefined;
-
-  // Extract category filter (::category)
-  const categoryMatch = remaining.match(/::(\w+)/);
-  if (categoryMatch) {
-    const cat = categoryMatch[1];
-    if (cat && CATEGORIES.includes(cat)) {
-      category = cat;
-    }
-    remaining = remaining.replace(categoryMatch[0], "");
-  }
-
-  // Extract impact comparison (>=major, =minor, !=trivial, etc.)
-  const impactMatch = remaining.match(/(>=|<=|>|<|!=|=)(critical|major|minor|trivial)/);
-  if (impactMatch) {
-    const operator = impactMatch[1];
-    const value = impactMatch[2];
-    if (operator && value && IMPACTS.includes(value)) {
-      impact = { operator, value };
-    }
-    remaining = remaining.replace(impactMatch[0], "");
-  }
-
-  // Parse linter/issue
-  remaining = remaining.trim();
-  if (remaining) {
-    const slashIdx = remaining.indexOf("/");
-    if (slashIdx !== -1) {
-      linter = remaining.slice(0, slashIdx) || "*";
-      issue = remaining.slice(slashIdx + 1) || "*";
-    } else {
-      linter = remaining;
-      issue = "*";
-    }
-  }
-
-  return {
-    raw: pattern,
-    linter,
-    issue,
-    category,
-    impact,
-  };
-}
-
-/**
- * Resolve a pattern value to normalized form.
- */
-function resolvePatternValue(value: PatternValue): ResolvedPatternValue {
-  if (typeof value === "string") {
-    return { severity: value, minConfidence: 0 };
-  }
-  return {
-    severity: value.severity,
-    minConfidence: value.minConfidence ?? 0,
-  };
-}
 
 /**
  * Convert a preset's scope config into ResolvedScope format.
@@ -187,17 +92,8 @@ function presetToScopes(preset: ViolaConfigPreset): ResolvedScope[] {
       const parsed = parsePattern(patternStr);
       if (!parsed) continue;
 
-      // Convert to full ParsedPattern type
-      const pattern = {
-        raw: parsed.raw,
-        linter: parsed.linter,
-        issue: parsed.issue,
-        category: parsed.category as "correctness" | "maintainability" | "consistency" | "performance" | "style" | undefined,
-        impact: parsed.impact as { operator: "=" | "!=" | ">=" | "<=" | ">" | "<"; value: "critical" | "major" | "minor" | "trivial" } | undefined,
-      };
-
       const value = resolvePatternValue(patternValue);
-      patterns.push({ pattern, value });
+      patterns.push({ pattern: parsed, value });
     }
 
     if (patterns.length > 0) {
