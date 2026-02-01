@@ -6,17 +6,23 @@
 [![GitHub Issues](https://img.shields.io/github/issues/hiisi-digital/viola.svg)](https://github.com/hiisi-digital/viola/issues)
 ![License](https://img.shields.io/github/license/hiisi-digital/viola?color=%23009689)
 
-> Convention linter runtime for codebases. Plugin-based, zero opinions.
+> Language-agnostic convention linter runtime. Plugin-based, zero opinions.
 
 </div>
 
 ## What is Viola?
 
-Viola is a **runtime and framework** for convention linting. It crawls your codebase once, extracts structured data (functions, types, imports, strings), and runs linter plugins against it.
+Viola is a **runtime and framework** for convention linting that works with **any programming language**. It uses tree-sitter grammars to parse source code and extract structured data (functions, types, imports, strings), then runs linter plugins against that data.
 
-Viola itself has **no built-in linters** and **no opinions**. You bring your own linters - whether that's your own custom rules, third-party plugins, or the `@hiisi/viola-default-lints` package.
+Viola itself has **no built-in linters** and **no opinions**. You bring your own linters and grammars - whether that's your own custom rules, third-party plugins, or the `@hiisi/viola-default-lints` package.
 
-Think of it like a test runner that doesn't include any test assertions - you bring the assertions (linters) you need.
+### Key Features
+
+- **Language-agnostic**: Support any language via tree-sitter grammar packages
+- **Single-pass crawling**: Parse each file once, run multiple linters
+- **Grammar relationships**: Configure override/supplement semantics between grammars
+- **Fluent API**: Builder-pattern configuration with composable conditions
+- **Plugin system**: Extend with linters, grammars, and presets
 
 ## Installation
 
@@ -24,120 +30,75 @@ Think of it like a test runner that doesn't include any test assertions - you br
 deno add jsr:@hiisi/viola
 ```
 
-## Configuration
+## Quick Start
 
 Create a `viola.config.ts` in your project root:
 
 ```ts
-import { viola, report, when } from "@hiisi/viola";
+import { viola, report, when, grammar } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
+import typescript from "@hiisi/viola-grammar-ts";
+import javascript from "@hiisi/viola-grammar-js";
 
 export default viola()
-  .use(defaultLints)  // plugin adds linters + default rules
-  .rule(report.off, when.in("**/*_test.ts"));  // your overrides
-```
-
-Rules use **"last wins" semantics** (like CSS). Rules defined later override earlier ones. This means:
-- Plugin rules come first (base configuration)
-- Your rules come after (overrides)
-
-### Full Example
-
-```ts
-import { viola, report, when, Impact, Category } from "@hiisi/viola";
-import defaultLints from "@hiisi/viola-default-lints";
-import { myCustomLinter } from "./lints/my-custom.ts";
-
-export default viola()
-  // Plugins (add linters + their default rules)
+  // Grammars (how to parse files)
+  .add(typescript).as("ts")
+  .add(javascript).as("js")
+  
+  // Grammar relationships
+  .rule(grammar("ts").overrides("js"), when.in("*.ts", "*.tsx"))
+  .rule(grammar("ts").supplements("js"), when.in("*.js", "*.jsx"))
+  
+  // Linter plugin
   .use(defaultLints)
   
-  // Individual linters (no default rules)
-  .add(myCustomLinter)
-  
-  // Linter settings
-  .set("similar-functions.threshold", 0.85)
-  .set("duplicate-strings", { minLength: 12, threshold: 3 })
-  
-  // Your rules (override plugin defaults - last wins!)
-  // File-scoped rules
-  .rule(report.off, when.in("**/*_test.ts"))
-  .rule(report.off, when.in("**/*.spec.ts"))
-  .rule(report.skip, when.in("src/generated/**"))
-  
-  // Category rules
-  .rule(report.error, when.category.is(Category.Correctness))
-  .rule(report.hint, when.category.is(Category.Style))
-  
-  // Combine conditions
-  .rule(report.error, when.in("packages/core/**").and(when.impact.atLeast(Impact.Minor)))
-  
-  // Confidence filtering
-  .rule(report.off, when.confidence.below(50));
+  // Your rules (last wins!)
+  .rule(report.off, when.in("**/*_test.ts"));
 ```
 
-### Without Plugin Defaults
+## Configuration
 
-If you want just linters without a plugin's default rules:
-
-```ts
-import { viola, report, when, Impact } from "@hiisi/viola";
-import { linters } from "@hiisi/viola-default-lints";
-
-export default viola()
-  .add(linters)  // just linters, no default rules
-  .rule(report.error, when.impact.atLeast(Impact.Critical))
-  .rule(report.warn, when.impact.atLeast(Impact.Major))
-  .rule(report.info, when.impact.is(Impact.Minor));
-```
-
-## Rule Evaluation
-
-Rules are evaluated with **"last wins"** semantics:
+### The Builder API
 
 ```ts
 viola()
-  .rule(report.warn, when.impact.atLeast(Impact.Minor))   // base rule
-  .rule(report.off, when.in("**/*_test.ts"))              // override for tests
-  .rule(report.error, when.in("packages/core/**"))        // override for core
+  // Add grammars and linters
+  .add(grammar).as("alias")    // Register a grammar with alias
+  .add(linter)                  // Register a linter
+  .add([linter1, linter2])     // Register multiple linters
+  
+  // Use plugins (add linters + default rules)
+  .use(plugin)
+  
+  // Configure linter settings
+  .set("linter.option", value)
+  .set("linter", { option1: v1, option2: v2 })
+  
+  // Add rules (last wins!)
+  .rule(action, condition)
+  
+  // Build final config
+  .build()
 ```
 
-For an issue in `packages/core/utils_test.ts`:
-1. First rule matches (it's Minor+ impact) → warn
-2. Second rule matches (it's a test file) → off
-3. Third rule matches (it's in core) → error
+### Grammar Relationships
 
-**Result: error** (last matching rule wins)
-
-This matches the mental model of `{...defaults, ...overrides}` - what you write later takes precedence.
-
-## API
-
-### Core Imports
+When multiple grammars match a file, you can control how they interact:
 
 ```ts
-import { 
-  viola,          // Config builder
-  plugin,         // Create plugin from function
-  report,         // Report level actions
-  when,           // Condition builders
-  Impact,         // Impact levels enum
-  Category,       // Category enum
-  runViola,       // Run linters
-  formatResults,  // Format output
-} from "@hiisi/viola";
+// TypeScript completely replaces JavaScript for .ts files
+.rule(grammar("ts").overrides("js"), when.in("*.ts", "*.tsx"))
+
+// TypeScript supplements JavaScript for .js files (fills gaps)
+.rule(grammar("ts").supplements("js"), when.in("*.js", "*.jsx"))
 ```
 
-### `viola()` - Config Builder
+**Semantics:**
+- **Default**: All matching grammars run in parallel, results merged
+- **overrides**: Primary grammar replaces secondary entirely
+- **supplements**: Primary runs first, secondary fills in gaps (elements not captured by primary)
 
-| Method | Description |
-|--------|-------------|
-| `.use(plugin)` | Add a plugin (linters + rules) |
-| `.add(linter)` | Add a linter or array of linters |
-| `.set(key, value)` | Configure a linter (`"linter.option"` or `"linter", { options }`) |
-| `.rule(action, condition)` | Add a classification rule |
-
-### `report` - Report Actions
+### Report Actions
 
 | Action | Description |
 |--------|-------------|
@@ -146,111 +107,122 @@ import {
 | `report.info` | Blue, informational |
 | `report.hint` | Dim, subtle suggestion |
 | `report.off` | Suppress, don't show |
-| `report.skip` | Don't run linters at all (file-scope only) |
+| `report.skip` | Don't run linters at all (file-scope) |
 
-### `when` - Condition Builders
-
-**By impact:**
-```ts
-when.impact.atLeast(Impact.Major)  // >= major
-when.impact.atMost(Impact.Minor)   // <= minor
-when.impact.is(Impact.Critical)    // exactly critical
-when.impact.not(Impact.Trivial)    // not trivial
-when.impact.above(Impact.Minor)    // > minor
-when.impact.below(Impact.Major)    // < major
-```
-
-**By category:**
-```ts
-when.category.is(Category.Correctness)
-when.category.not(Category.Style)
-when.category.in(Category.Correctness, Category.Maintainability)
-```
+### Conditions (`when`)
 
 **By file pattern:**
 ```ts
-when.in("**/*_test.ts")
-when.in("src/**", "lib/**")  // multiple patterns
+when.in("*.ts", "*.tsx")
+when.in("**/tests/**")
+when.in("src/**")
 ```
 
-**By linter:**
+**By issue source:**
 ```ts
-when.linter("similar-functions")
-when.linter("similar-*")  // glob
+when.issue.by(similarFunctions)        // By linter reference
+when.issue.by("similar-functions")     // By linter ID string
+```
+
+**By impact:**
+```ts
+when.issue.impact(atLeast(Impact.Major))
+when.issue.impact(equals(Impact.Critical))
+when.issue.impact(oneOf(Impact.Minor, Impact.Major))
 ```
 
 **By confidence:**
 ```ts
-when.confidence.atLeast(80)
-when.confidence.below(50)
+when.issue.confidence(atLeast(80))
+when.issue.confidence(between(50, 90))
+```
+
+**By category:**
+```ts
+when.issue.category(equals(Category.Security))
+when.issue.category(oneOf(Category.Correctness, Category.Performance))
+```
+
+**By environment:**
+```ts
+when.env("CI").exists()
+when.env("NODE_ENV").is(equals("production"))
+when.env("TIMEOUT").is(atLeast(30))
 ```
 
 **Combining conditions:**
 ```ts
-when.in("packages/core/**").and(when.impact.atLeast(Impact.Minor))
-when.category.is(Category.Style).or(when.category.is(Category.Consistency))
+when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
+when.env("CI").exists().or(when.in("packages/core/**"))
 when.in("**/*_test.ts").not()
-when.all(when.in("src/**"), when.impact.atLeast(Impact.Major))
-when.any(when.in("**/*_test.ts"), when.in("**/*.spec.ts"))
 ```
 
-### Enums
+### Comparison Primitives
 
-**Impact** (how urgent):
+All comparisons support `.and()`, `.or()`, `.not()` for composition:
+
 ```ts
-enum Impact {
-  Critical,  // Must fix, blocks release
-  Major,     // Should fix soon
-  Minor,     // Fix when convenient
-  Trivial,   // Nice to have
-}
+equals(value)           // Exact equality
+atLeast(min)            // >= comparison
+atMost(max)             // <= comparison
+lessThan(bound)         // < comparison
+moreThan(bound)         // > comparison
+between(min, max)       // Inclusive range
+oneOf(...values)        // Match any value
+noneOf(...values)       // Exclude values
+contains(substring)     // String contains
+startsWith(prefix)      // String prefix
+endsWith(suffix)        // String suffix
+matches(regex)          // Regex match
+always()                // Always true
+never()                 // Always false
 ```
 
-**Category** (what kind of problem):
-```ts
-enum Category {
-  Correctness,     // Code is wrong
-  Maintainability, // Harder to work with
-  Consistency,     // Breaks conventions
-  Performance,     // Slower than needed
-  Style,           // Cosmetic
-}
-```
+## Writing Grammars
 
-## Writing Plugins
-
-Plugins configure the builder with linters, rules, and settings:
+Grammar packages provide tree-sitter queries and optional transforms:
 
 ```ts
-import { plugin, report, when, Impact, type ViolaPlugin } from "@hiisi/viola";
-import { myLinter } from "./my-linter.ts";
+import type { GrammarDefinition } from "@hiisi/viola/grammars";
 
-// Object form
-export const myPlugin: ViolaPlugin = {
-  build(viola) {
-    viola
-      .add(myLinter)
-      .rule(report.error, when.impact.atLeast(Impact.Major))
-      .set("my-linter.threshold", 0.9);
-  }
+export const typescript: GrammarDefinition = {
+  meta: {
+    id: "typescript",
+    name: "TypeScript",
+    extensions: [".ts", ".tsx", ".mts", ".cts"],
+  },
+  grammar: {
+    source: "npm",
+    package: "tree-sitter-typescript",
+    wasm: "tree-sitter-typescript.wasm",
+  },
+  queries: {
+    functions: `
+      (function_declaration
+        name: (identifier) @function.name
+        parameters: (formal_parameters) @function.params
+        body: (statement_block) @function.body)
+    `,
+    strings: `(string) @string.value`,
+    imports: `
+      (import_statement
+        (import_clause (identifier) @import.name)?
+        source: (string) @import.from)
+    `,
+  },
+  transforms: {
+    parseParams: parseTypeScriptParams,
+    extractReturnType: extractTSReturnType,
+  },
 };
-
-// Function form
-export const myPlugin = plugin((viola) => {
-  viola
-    .add(myLinter)
-    .rule(report.error, when.impact.atLeast(Impact.Major));
-});
 ```
-
-Plugin rules are added to the builder in order. Users can override them by adding their own rules after `.use()`.
 
 ## Writing Linters
 
-Linters define a **catalog** of issue kinds (with category, impact, description). When they find problems, they create issues referencing those kinds.
+Linters receive structured data and return issues:
 
 ```ts
-import { BaseLinter, type CodebaseData, type Issue, type IssueCatalog } from "@hiisi/viola";
+import { BaseLinter, type CodebaseData, type Issue } from "@hiisi/viola";
 
 class NoUnderscoreFunctions extends BaseLinter {
   readonly meta = {
@@ -259,7 +231,7 @@ class NoUnderscoreFunctions extends BaseLinter {
     description: "Disallow function names starting with underscore",
   };
 
-  readonly catalog: IssueCatalog = {
+  readonly catalog = {
     "no-underscore-functions/underscore-prefix": {
       category: "consistency",
       impact: "minor",
@@ -283,21 +255,51 @@ class NoUnderscoreFunctions extends BaseLinter {
 export const noUnderscoreFunctions = new NoUnderscoreFunctions();
 ```
 
-### Data Requirements
+## Writing Plugins
 
-Declare what data your linter needs:
+Plugins can add grammars, linters, and default rules:
 
 ```ts
-readonly requirements = {
-  functions: true,   // FunctionInfo[]
-  types: true,       // TypeInfo[]
-  strings: true,     // StringLiteral[]
-  exports: true,     // ExportInfo[]
-  imports: true,     // ImportInfo[]
-  schemas: true,     // SchemaInfo[]
-  files: true,       // FileInfo[]
-};
+import { plugin, report, when, Impact, grammar } from "@hiisi/viola";
+import { typescript } from "./grammar.ts";
+import { myLinter } from "./linter.ts";
+
+export default plugin((viola) => {
+  viola
+    .add(typescript).as("ts")
+    .add(myLinter)
+    .rule(report.error, when.issue.impact(atLeast(Impact.Critical)))
+    .set("my-linter.threshold", 0.9);
+});
 ```
+
+## Programmatic API
+
+```ts
+import { runViola, formatResults } from "@hiisi/viola";
+
+const results = await runViola({ projectRoot: "." });
+console.log(formatResults(results));
+if (results.hasErrors) Deno.exit(1);
+```
+
+## Rule Evaluation
+
+Rules use **"last wins"** semantics (like CSS):
+
+```ts
+viola()
+  .rule(report.warn, when.issue.impact(atLeast(Impact.Minor)))  // base
+  .rule(report.off, when.in("**/*_test.ts"))                    // override for tests
+  .rule(report.error, when.in("packages/core/**"))              // override for core
+```
+
+For an issue in `packages/core/utils_test.ts`:
+1. First rule matches → warn
+2. Second rule matches → off
+3. Third rule matches → error
+
+**Result: error** (last matching rule wins)
 
 ## Integration
 
@@ -326,14 +328,37 @@ deno run -A jsr:@hiisi/viola-cli || exit 1
   run: deno run -A jsr:@hiisi/viola-cli
 ```
 
-## Programmatic API
+## Architecture
 
-```ts
-import { runViola, formatResults } from "@hiisi/viola";
+Viola uses a **single tree-sitter engine** at its core:
 
-const results = await runViola({ projectRoot: "." });
-console.log(formatResults(results));
-if (results.hasErrors) Deno.exit(1);
+```
+┌─────────────────────────────────────────────────────────────┐
+│                       viola core                             │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │              tree-sitter engine (WASM)                  │ │
+│  └─────────────────────────────────────────────────────────┘ │
+│      ↑               ↑                ↑                      │
+│  ┌───────┐      ┌────────┐       ┌────────┐                  │
+│  │  TS   │      │   JS   │       │  Bash  │    ← grammars    │
+│  │grammar│      │grammar │       │grammar │                  │
+│  └───────┘      └────────┘       └────────┘                  │
+│      │               │                │                      │
+│      └───────────────┼────────────────┘                      │
+│                      ↓                                       │
+│            ┌─────────────────┐                               │
+│            │  CodebaseData   │   ← unified data              │
+│            │  (functions,    │                               │
+│            │   types, etc.)  │                               │
+│            └─────────────────┘                               │
+│                      ↓                                       │
+│      ┌───────────────┼───────────────┐                       │
+│      ↓               ↓               ↓                       │
+│  ┌───────┐      ┌────────┐      ┌────────┐                   │
+│  │Linter │      │Linter  │      │Linter  │   ← linters       │
+│  │  A    │      │   B    │      │   C    │                   │
+│  └───────┘      └────────┘      └────────┘                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Support
