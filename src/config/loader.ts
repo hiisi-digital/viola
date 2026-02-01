@@ -10,23 +10,25 @@ import {
     type ViolaBuilderConfig
 } from "./builder.ts";
 import {
-    IMPACT_ORDER,
+    matchesFilePattern,
+    matchesIssuePattern,
+    parsePattern,
+    resolvePatternValue,
+} from "./pattern.ts";
+import {
     type ConfigSource,
     type IssueCategory,
     type IssueImpact,
-    type ParsedPattern,
-    type PatternValue,
     type ResolvedConfig,
     type ResolvedPatternValue,
     type ResolvedScope,
     type ScopeConfig,
     type Severity,
-    type ViolaConfig,
+    type ViolaConfig
 } from "./types.ts";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
 const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
-const CATEGORIES: IssueCategory[] = ["correctness", "maintainability", "consistency", "performance", "style"];
 
 /**
  * Load configuration, preferring viola.config.ts over deno.json.
@@ -243,171 +245,8 @@ function resolveConfig(config: ViolaConfig): ResolvedConfig {
   };
 }
 
-/**
- * Parse a pattern string into components.
- * 
- * Formats:
- * - `linter/issue` - exact match
- * - `linter/*` - all issues from linter
- * - `*::category` - category filter
- * - `*>=impact` - impact comparison
- * - `linter/*::category>=impact` - combined
- */
-function parsePattern(pattern: string): ParsedPattern | null {
-  let remaining = pattern;
-  let linter = "*";
-  let issue = "*";
-  let category: IssueCategory | undefined;
-  let impact: ParsedPattern["impact"];
-
-  // Extract category filter (::category)
-  const categoryMatch = remaining.match(/::(\w+)/);
-  if (categoryMatch) {
-    const cat = categoryMatch[1] as IssueCategory;
-    if (CATEGORIES.includes(cat)) {
-      category = cat;
-    }
-    remaining = remaining.replace(categoryMatch[0], "");
-  }
-
-  // Extract impact comparison (>=major, =minor, !=trivial, etc.)
-  const impactMatch = remaining.match(/(>=|<=|>|<|!=|=)(critical|major|minor|trivial)/);
-  if (impactMatch) {
-    const operator = impactMatch[1] as ParsedPattern["impact"] extends undefined ? never : NonNullable<ParsedPattern["impact"]>["operator"];
-    const value = impactMatch[2] as IssueImpact;
-    if (IMPACT_ORDER.includes(value)) {
-      impact = { operator, value };
-    }
-    remaining = remaining.replace(impactMatch[0], "");
-  }
-
-  // Parse linter/issue
-  remaining = remaining.trim();
-  if (remaining) {
-    const slashIdx = remaining.indexOf("/");
-    if (slashIdx !== -1) {
-      linter = remaining.slice(0, slashIdx) || "*";
-      issue = remaining.slice(slashIdx + 1) || "*";
-    } else {
-      // Just a linter name or "*"
-      linter = remaining;
-      issue = "*";
-    }
-  }
-
-  return {
-    raw: pattern,
-    linter,
-    issue,
-    category,
-    impact,
-  };
-}
-
-/**
- * Resolve a pattern value to normalized form.
- */
-function resolvePatternValue(value: PatternValue): ResolvedPatternValue {
-  if (typeof value === "string") {
-    return { severity: value, minConfidence: 0 };
-  }
-  return {
-    severity: value.severity,
-    minConfidence: value.minConfidence ?? 0,
-  };
-}
-
-/**
- * Check if a file matches a glob pattern.
- */
-export function matchesFilePattern(filePath: string, pattern: string): boolean {
-  const regex = new RegExp(
-    "^" +
-      pattern
-        .replace(/\./g, "\\.")
-        .replace(/\*\*/g, "{{DOUBLESTAR}}")
-        .replace(/\*/g, "[^/]*")
-        .replace(/{{DOUBLESTAR}}/g, ".*") +
-      "$"
-  );
-  return regex.test(filePath);
-}
-
-/**
- * Check if an issue matches a parsed pattern.
- */
-export function matchesIssuePattern(
-  issueKind: string,
-  issueCategory: IssueCategory,
-  issueImpact: IssueImpact,
-  pattern: ParsedPattern
-): boolean {
-  // Parse issue kind (linter/issue format)
-  const slashIdx = issueKind.indexOf("/");
-  const linterId = slashIdx !== -1 ? issueKind.slice(0, slashIdx) : issueKind;
-  const issueName = slashIdx !== -1 ? issueKind.slice(slashIdx + 1) : "*";
-
-  // Check linter match
-  if (pattern.linter !== "*" && !matchesGlob(linterId, pattern.linter)) {
-    return false;
-  }
-
-  // Check issue match
-  if (pattern.issue !== "*" && !matchesGlob(issueName, pattern.issue)) {
-    return false;
-  }
-
-  // Check category
-  if (pattern.category && pattern.category !== issueCategory) {
-    return false;
-  }
-
-  // Check impact
-  if (pattern.impact) {
-    const issueIdx = IMPACT_ORDER.indexOf(issueImpact);
-    const patternIdx = IMPACT_ORDER.indexOf(pattern.impact.value);
-
-    switch (pattern.impact.operator) {
-      case "=":
-        if (issueIdx !== patternIdx) return false;
-        break;
-      case "!=":
-        if (issueIdx === patternIdx) return false;
-        break;
-      case ">=":
-        // Higher impact = lower index
-        if (issueIdx > patternIdx) return false;
-        break;
-      case "<=":
-        if (issueIdx < patternIdx) return false;
-        break;
-      case ">":
-        if (issueIdx >= patternIdx) return false;
-        break;
-      case "<":
-        if (issueIdx <= patternIdx) return false;
-        break;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Simple glob matching for linter/issue names.
- */
-function matchesGlob(value: string, pattern: string): boolean {
-  if (pattern === "*") return true;
-  
-  const regex = new RegExp(
-    "^" +
-      pattern
-        .replace(/\*/g, ".*")
-        .replace(/\?/g, ".") +
-      "$"
-  );
-  return regex.test(value);
-}
+// Re-export shared pattern utilities for backwards compatibility
+export { matchesFilePattern, matchesIssuePattern } from "./pattern.ts";
 
 /**
  * Resolve the severity for an issue given a config and file path.

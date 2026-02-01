@@ -8,21 +8,18 @@
 
 import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
 import { ReportLevel } from "./enums.ts";
+import type { ReportAction } from "./types/actions.types.ts";
+import {
+    isGrammarRelationshipAction,
+    isReportAction,
+} from "./types/actions.types.ts";
 
-/**
- * Base interface for all rule actions.
- */
-export interface RuleAction {
-  readonly type: string;
-}
-
-/**
- * Report action - classify issues to a report level.
- */
-export interface ReportAction extends RuleAction {
-  readonly type: "report";
-  readonly level: ReportLevel;
-}
+// Re-export types and type guards for convenience
+export type {
+    GrammarRelationshipAction, ReportAction,
+    RuleAction
+} from "./types/actions.types.ts";
+export { isGrammarRelationshipAction, isReportAction };
 
 /**
  * Create a report action.
@@ -57,10 +54,3 @@ export const report = deepFreeze({
   /** Don't run linters at all (file-scope only) */
   skip: createReportAction(ReportLevel.Skip),
 });
-
-/**
- * Type guard for report actions.
- */
-export function isReportAction(action: RuleAction): action is ReportAction {
-  return action.type === "report";
-}

@@ -3,11 +3,16 @@
  *
  * @example
  * ```ts
- * import { viola } from "@hiisi/viola";
+ * import { viola, grammar, when, report } from "@hiisi/viola";
  * import defaultLints from "@hiisi/viola-default-lints";
+ * import typescript from "@hiisi/viola-grammar-ts";
+ * import javascript from "@hiisi/viola-grammar-js";
  *
  * export default viola()
  *   .use(defaultLints)  // plugin adds linters + default rules
+ *   .add(typescript).as("ts")  // register grammar with alias
+ *   .add(javascript).as("js")
+ *   .rule(grammar("ts").overrides("js"), when.in("*.ts", "*.tsx"))
  *   .rule(report.off, when.in("**\/*_test.ts"));  // your overrides
  * ```
  *
@@ -20,77 +25,58 @@
  */
 
 import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
+import { GrammarRegistry } from "../grammars/registry.ts";
+import type { GrammarDefinition } from "../grammars/types.ts";
 import type { BaseLinter } from "../linters/base.ts";
-import type { RuleAction } from "./actions.ts";
-import type { Condition, ConditionExpr } from "./conditions.ts";
+import type { ConditionExpr } from "./conditions.ts";
+import type {
+    GrammarRelationshipAction,
+    RuleAction,
+} from "./types/actions.types.ts";
+import type {
+    LinterSetting,
+    PluginInput,
+    Rule,
+    ViolaBuilderConfig,
+    ViolaPlugin,
+    ViolaPluginFn
+} from "./types/builder.types.ts";
+
+// Re-export types for convenience
+export type {
+    LinterInput,
+    LinterSetting,
+    PluginInput,
+    Rule,
+    ViolaBuilderConfig,
+    ViolaPlugin,
+    ViolaPluginFn
+} from "./types/builder.types.ts";
 
 // =============================================================================
 // Types
 // =============================================================================
 
 /**
- * A linter setting (configuration option).
+ * Input that can be passed to .add() - a linter, grammar, or array of linters.
  */
-export interface LinterSetting {
-  readonly linter: string;
-  readonly key: string;
-  readonly value: unknown;
+export type AddInput = BaseLinter | BaseLinter[] | GrammarDefinition;
+
+/**
+ * Extended builder config that includes grammars.
+ */
+export interface ViolaBuilderConfigExtended extends ViolaBuilderConfig {
+  /** Grammar registry with all registered grammars */
+  readonly grammarRegistry: GrammarRegistry;
+  /** Grammar relationship rules */
+  readonly grammarRules: readonly Frozen<{
+    action: Frozen<GrammarRelationshipAction>;
+    condition: Frozen<Condition>;
+  }>[];
 }
 
-/**
- * A rule: action + condition.
- */
-export interface Rule {
-  readonly action: Frozen<RuleAction>;
-  readonly condition: Frozen<Condition>;
-}
-
-/**
- * A viola plugin that configures the builder.
- *
- * Plugins add linters, rules, and settings by calling methods on the builder.
- * This is similar to Bevy's plugin system - plugins directly modify the app/builder.
- *
- * @example
- * ```ts
- * const myPlugin: ViolaPlugin = {
- *   build(viola) {
- *     viola
- *       .add(myLinter)
- *       .rule(report.error, when.impact.atLeast(Impact.Critical))
- *       .set("my-linter.threshold", 0.9);
- *   }
- * };
- * ```
- */
-export interface ViolaPlugin {
-  /** Configure the builder with this plugin's linters, rules, and settings. */
-  build(viola: ViolaBuilder): void;
-}
-
-/**
- * Function form of a plugin.
- */
-export type ViolaPluginFn = (viola: ViolaBuilder) => void;
-
-/**
- * Something that can be passed to .use() - a plugin object or function.
- */
-export type PluginInput = ViolaPlugin | ViolaPluginFn;
-
-/**
- * Something that can be passed to .add() - a single linter or array.
- */
-export type LinterInput = BaseLinter | BaseLinter[];
-
-/**
- * The resolved configuration from the builder.
- */
-export interface ViolaBuilderConfig {
-  readonly linters: readonly BaseLinter[];
-  readonly settings: readonly Frozen<LinterSetting>[];
-  readonly rules: readonly Frozen<Rule>[];
-}
+// Import Condition type
+import type { Condition } from "./types/conditions.types.ts";
 
 // =============================================================================
 // Type Guards
@@ -129,6 +115,30 @@ function isLinter(value: unknown): value is BaseLinter {
   );
 }
 
+/**
+ * Check if a value is a GrammarDefinition.
+ */
+function isGrammarDefinition(value: unknown): value is GrammarDefinition {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    "meta" in value &&
+    "grammar" in value &&
+    "queries" in value &&
+    typeof (value as GrammarDefinition).meta === "object" &&
+    "id" in (value as GrammarDefinition).meta
+  );
+}
+
+/**
+ * Check if an action is a grammar relationship action.
+ */
+function isGrammarRelationshipAction(
+  action: RuleAction
+): action is GrammarRelationshipAction {
+  return action.type === "grammar-relationship";
+}
+
 // =============================================================================
 // Builder
 // =============================================================================
@@ -136,18 +146,28 @@ function isLinter(value: unknown): value is BaseLinter {
 /**
  * Main viola configuration builder.
  *
- * Collects linters, rules, and settings from plugins and user configuration.
+ * Collects linters, grammars, rules, and settings from plugins and user configuration.
  * Rules use "last wins" semantics - later rules override earlier ones.
  */
 export class ViolaBuilder {
   private _linters: BaseLinter[] = [];
+  private _linterAliases = new Map<string, string>(); // alias -> linter id
+  private _grammarRegistry = new GrammarRegistry();
   private _rules: Frozen<Rule>[] = [];
+  private _grammarRules: Frozen<{
+    action: Frozen<GrammarRelationshipAction>;
+    condition: Frozen<Condition>;
+  }>[] = [];
   private _settings: Frozen<LinterSetting>[] = [];
+
+  /** Track the last added item for .as() chaining */
+  private _lastAddedType: "linter" | "grammar" | null = null;
+  private _lastAddedId: string | null = null;
 
   /**
    * Add a plugin that configures this builder.
    *
-   * Plugins add linters, rules, and settings. Rules defined later
+   * Plugins add linters, grammars, rules, and settings. Rules defined later
    * (including your rules after .use()) take precedence over earlier ones.
    *
    * @example
@@ -172,25 +192,90 @@ export class ViolaBuilder {
   }
 
   /**
-   * Add a linter or array of linters.
+   * Add a linter, grammar, or array of linters.
+   *
+   * Chain with `.as(alias)` to give an alias to the last added item.
    *
    * @example
    * ```ts
    * viola()
    *   .add(myLinter)
    *   .add([linterA, linterB])
+   *   .add(typescript).as("ts")  // grammar with alias
+   *   .add(bash)  // no alias needed, continues chaining
    * ```
    */
-  add(input: LinterInput): this {
+  add(input: AddInput): this {
+    // Reset last added tracking
+    this._lastAddedType = null;
+    this._lastAddedId = null;
+
     if (Array.isArray(input)) {
+      // Array of linters
       for (const linter of input) {
         if (isLinter(linter)) {
           this._linters.push(linter);
+          // Track last for potential .as() on array (uses last item)
+          this._lastAddedType = "linter";
+          this._lastAddedId = linter.meta.id;
         }
       }
+    } else if (isGrammarDefinition(input)) {
+      // Grammar definition
+      this._grammarRegistry.add(input);
+      this._lastAddedType = "grammar";
+      this._lastAddedId = input.meta.id;
     } else if (isLinter(input)) {
+      // Single linter
       this._linters.push(input);
+      this._lastAddedType = "linter";
+      this._lastAddedId = input.meta.id;
+    } else {
+      throw new Error(
+        "Invalid input: expected a linter, grammar, or array of linters"
+      );
     }
+
+    return this;
+  }
+
+  /**
+   * Set an alias for the last added item (grammar or linter).
+   *
+   * For grammars, the alias is used in `grammar()` references.
+   * For linters, the alias provides an alternate name for settings.
+   *
+   * @param alias - The alias name
+   * @returns The builder for chaining
+   *
+   * @example
+   * ```ts
+   * viola()
+   *   .add(typescript).as("ts")
+   *   .add(javascript).as("js")
+   *   .rule(grammar("ts").overrides("js"), when.in("*.ts"));
+   * ```
+   */
+  as(alias: string): this {
+    if (this._lastAddedType === null || this._lastAddedId === null) {
+      throw new Error("No item to alias. Call .add() before .as()");
+    }
+
+    if (this._lastAddedType === "grammar") {
+      // Grammar alias is handled by the registry's internal .as()
+      const entry = this._grammarRegistry.get(this._lastAddedId);
+      if (entry) {
+        this._grammarRegistry.add(entry.definition).as(alias);
+      }
+    } else if (this._lastAddedType === "linter") {
+      // Store linter alias mapping
+      this._linterAliases.set(alias, this._lastAddedId);
+    }
+
+    // Clear tracking
+    this._lastAddedType = null;
+    this._lastAddedId = null;
+
     return this;
   }
 
@@ -225,7 +310,7 @@ export class ViolaBuilder {
   }
 
   /**
-   * Add a classification rule.
+   * Add a rule (classification rule or grammar relationship).
    *
    * Rules use "last wins" semantics - later rules override earlier ones.
    *
@@ -233,18 +318,37 @@ export class ViolaBuilder {
    * ```ts
    * viola()
    *   .use(defaultLints)  // plugin rules (base)
-   *   .rule(report.off, when.in("**\/*_test.ts"))  // your rule (wins)
+   *   .rule(report.off, when.in("**\/*_test.ts"))  // report rule
+   *   .rule(grammar("ts").overrides("js"), when.in("*.ts"))  // grammar rule
    * ```
    */
   rule(action: Frozen<RuleAction>, condition: ConditionExpr): this {
-    const rule = deepFreeze({
-      action,
-      condition: condition.condition,
-    });
-
-    this._rules.push(rule);
+    if (isGrammarRelationshipAction(action)) {
+      // Grammar relationship rule
+      this._grammarRules.push(
+        deepFreeze({
+          action: action as Frozen<GrammarRelationshipAction>,
+          condition: condition.condition,
+        })
+      );
+    } else {
+      // Regular report rule
+      const rule = deepFreeze({
+        action,
+        condition: condition.condition,
+      });
+      this._rules.push(rule);
+    }
 
     return this;
+  }
+
+  /**
+   * Get the grammar registry.
+   * Useful for plugins that need to inspect or add grammars.
+   */
+  get grammars(): GrammarRegistry {
+    return this._grammarRegistry;
   }
 
   /**
@@ -253,11 +357,13 @@ export class ViolaBuilder {
    * Rules are stored in definition order. The evaluator processes them
    * in reverse (last to first) so later rules take precedence.
    */
-  build(): ViolaBuilderConfig {
+  build(): ViolaBuilderConfigExtended {
     return {
       linters: this._linters,
       rules: this._rules,
       settings: this._settings,
+      grammarRegistry: this._grammarRegistry,
+      grammarRules: this._grammarRules,
     };
   }
 }
@@ -271,11 +377,13 @@ export class ViolaBuilder {
  *
  * @example
  * ```ts
- * import { viola } from "@hiisi/viola";
+ * import { viola, grammar, when, report } from "@hiisi/viola";
  * import defaultLints from "@hiisi/viola-default-lints";
+ * import typescript from "@hiisi/viola-grammar-ts";
  *
  * export default viola()
  *   .use(defaultLints)
+ *   .add(typescript).as("ts")
  *   .rule(report.off, when.in("**\/*_test.ts"));
  * ```
  */

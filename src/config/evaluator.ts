@@ -11,7 +11,6 @@
 import type { Frozen } from "@hiisi/flash-freeze";
 import type { Issue } from "../data/types.ts";
 import { isReportAction } from "./actions.ts";
-import type { Rule } from "./builder.ts";
 import {
     isCategoryCondition,
     isCompoundCondition,
@@ -20,85 +19,25 @@ import {
     isImpactCondition,
     isLinterCondition,
     isNotCondition,
-    type CategoryCondition,
-    type CompoundCondition,
-    type Condition,
-    type ConfidenceCondition,
-    type FileCondition,
-    type ImpactCondition,
-    type LinterCondition,
-    type NotCondition,
 } from "./conditions.ts";
 import { Category, Impact, impactValue, ReportLevel } from "./enums.ts";
-import type { IssueCatalog, IssueDef } from "./types.ts";
+import { matchesAnyGlob } from "./pattern.ts";
+import type { IssueCatalog } from "./types.ts";
+import type { Rule } from "./types/builder.types.ts";
+import type {
+    CategoryCondition,
+    CompoundCondition,
+    Condition,
+    ConfidenceCondition,
+    FileCondition,
+    ImpactCondition,
+    LinterCondition,
+    NotCondition,
+} from "./types/conditions.types.ts";
+import type { EvaluatedIssue, EvaluationContext } from "./types/evaluator.types.ts";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-/**
- * Context for evaluating conditions against an issue.
- */
-export interface EvaluationContext {
-  /** The issue being evaluated */
-  readonly issue: Issue;
-  /** Issue definition from catalog (if found) */
-  readonly issueDef?: IssueDef;
-  /** Linter ID (extracted from issue.kind) */
-  readonly linterId: string;
-  /** Issue name (extracted from issue.kind) */
-  readonly issueName: string;
-}
-
-/**
- * Result of evaluating an issue against rules.
- */
-export interface EvaluatedIssue {
-  /** Original issue */
-  readonly issue: Issue;
-  /** Determined report level */
-  readonly level: ReportLevel;
-  /** Which rule matched (index in rules array), or -1 for default */
-  readonly matchedRule: number;
-}
-
-// =============================================================================
-// Glob Matching
-// =============================================================================
-
-/**
- * Convert a glob pattern to a regex.
- * Supports: * (any chars except /), ** (any chars including /), ? (single char)
- */
-function globToRegex(pattern: string): RegExp {
-  let regex = pattern
-    // Escape special regex chars (except * and ?)
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    // ** matches anything including /
-    .replace(/\*\*/g, "<<<DOUBLESTAR>>>")
-    // * matches anything except /
-    .replace(/\*/g, "[^/]*")
-    // ? matches single char
-    .replace(/\?/g, ".")
-    // Restore **
-    .replace(/<<<DOUBLESTAR>>>/g, ".*");
-
-  return new RegExp(`^${regex}$`);
-}
-
-/**
- * Check if a string matches a glob pattern.
- */
-function matchesGlob(value: string, pattern: string): boolean {
-  return globToRegex(pattern).test(value);
-}
-
-/**
- * Check if a string matches any of the given patterns.
- */
-function matchesAnyGlob(value: string, patterns: readonly string[]): boolean {
-  return patterns.some((p) => matchesGlob(value, p));
-}
+// Re-export types for convenience
+export type { EvaluatedIssue, EvaluationContext } from "./types/evaluator.types.ts";
 
 // =============================================================================
 // Condition Evaluation

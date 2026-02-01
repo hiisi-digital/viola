@@ -7,34 +7,10 @@
  */
 
 import type { JSONSchema, PluginsDiscoveryResult } from "../types/plugin.ts";
+import type { ValidationError, ValidationResult } from "./types/validate.types.ts";
 
-// =============================================================================
-// Types
-// =============================================================================
-
-/**
- * A validation error.
- */
-export interface ValidationError {
-  /** Path to the invalid value (e.g., "type-location.allowedDirs[0]") */
-  path: string;
-  /** Error message */
-  message: string;
-  /** The invalid value */
-  value?: unknown;
-}
-
-/**
- * Result of validating linter config.
- */
-export interface ValidationResult {
-  /** Whether validation passed */
-  valid: boolean;
-  /** Validation errors (empty if valid) */
-  errors: ValidationError[];
-  /** Warnings (e.g., unknown linter IDs) */
-  warnings: string[];
-}
+// Re-export types for convenience
+export type { ValidationError, ValidationResult } from "./types/validate.types.ts";
 
 // =============================================================================
 // Schema Validation
