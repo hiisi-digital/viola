@@ -700,8 +700,11 @@ export {
     // New API
     Category,
     // Legacy
-    compareImpact, ConditionExpr, formatValidationErrors, Impact, IMPACT_ORDER,
-    impactValue, isReportAction, loadConfig,
+    compareImpact, ConditionExpr, formatValidationErrors,
+    // Grammar reference helper
+    grammar, Impact, IMPACT_ORDER,
+    impactValue, isGrammarRelationship,
+    isGrammarRelationshipAction, isReportAction, loadConfig,
     matchesFilePattern,
     matchesIssuePattern, plugin, report,
     ReportLevel, resolveIssueSeverity,
@@ -712,9 +715,13 @@ export {
 
 export type {
     // New API
+    AddInput,
+    AddResult,
     Condition,
     EvaluatedIssue,
     EvaluationContext,
+    GrammarRelationshipAction,
+    GrammarRelationshipBuilder,
     LinterInput,
     LinterSetting,
     PluginInput,
@@ -724,6 +731,7 @@ export type {
     // Legacy
     ValidationError,
     ValidationResult, ViolaBuilderConfig,
+    ViolaBuilderConfigExtended,
     ViolaPlugin,
     ViolaPluginFn
 } from "./src/config/mod.ts";
@@ -739,3 +747,76 @@ export {
     groupByLevel,
     hasErrors as hasErrorLevelIssues
 } from "./src/config/mod.ts";
+
+// =============================================================================
+// Conditions (new condition API)
+// =============================================================================
+
+export type {
+    Category as ConditionCategory, EvaluationContext as ConditionEvaluationContext, Impact as ConditionImpact, Condition as ConditionInterface,
+    EnvConditionBuilder, FileContext, IssueConditions,
+    IssueContext,
+    WhenBuilder
+} from "./src/conditions/mod.ts";
+
+export type { Comparison } from "./src/conditions/mod.ts";
+
+export {
+    // The when builder and condition helpers
+    always as alwaysCondition, alwaysMatch,
+    atLeast,
+    atMost,
+    between,
+    contains,
+    endsWith,
+    equals,
+    lessThan,
+    matches,
+    moreThan, never as neverCondition, neverMatch,
+    noneOf,
+    oneOf,
+    startsWith, when as whenCondition
+} from "./src/conditions/mod.ts";
+
+// =============================================================================
+// Grammars
+// =============================================================================
+
+export type {
+    ExtractionQueries,
+    GrammarDefinition,
+    GrammarEntry,
+    GrammarMeta,
+    GrammarRelationship,
+    GrammarRelationshipRule,
+    GrammarResolution,
+    GrammarRole,
+    GrammarSource,
+    GrammarTransforms,
+    QueryCaptures,
+    RegisteredGrammar,
+    ResolvedGrammar,
+    SyntaxNode
+} from "./src/grammars/mod.ts";
+
+export {
+    clearCache as clearGrammarCache,
+    createGrammarRegistry,
+    createGrammarResolver,
+    createParser,
+    extractCompleteFileInfo,
+    extractFileData,
+    getParser,
+    GrammarRegistry,
+    GrammarResolver,
+    initTreeSitter,
+    isInitialized as isTreeSitterInitialized,
+    loadGrammar,
+    mergeExtractionResults,
+    queryAll,
+    queryCount,
+    queryFirst,
+    queryHasMatch,
+    reset as resetTreeSitter,
+    runQuery
+} from "./src/grammars/mod.ts";

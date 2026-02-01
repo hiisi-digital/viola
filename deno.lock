@@ -7,7 +7,8 @@
     "jsr:@std/fs@1": "1.0.22",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/path@1": "1.1.4",
-    "jsr:@std/path@^1.1.4": "1.1.4"
+    "jsr:@std/path@^1.1.4": "1.1.4",
+    "npm:web-tree-sitter@0.22.6": "0.22.6"
   },
   "jsr": {
     "@hiisi/flash-freeze@0.1.1": {
@@ -38,13 +39,19 @@
       ]
     }
   },
+  "npm": {
+    "web-tree-sitter@0.22.6": {
+      "integrity": "sha512-hS87TH71Zd6mGAmYCvlgxeGDjqd9GTeqXNqTT+u0Gs51uIozNIaaq/kUAbV/Zf56jb2ZOyG8BxZs2GG9wbLi6Q=="
+    }
+  },
   "workspace": {
     "dependencies": [
       "jsr:@hiisi/flash-freeze@0.1",
       "jsr:@hiisi/viola-default-lints@0.1",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",
-      "jsr:@std/path@1"
+      "jsr:@std/path@1",
+      "npm:web-tree-sitter@0.22.6"
     ]
   }
 }
