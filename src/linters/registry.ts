@@ -9,6 +9,10 @@
 
 import type { CodebaseData, LinterConfig, LinterResult, LintResults } from "../data/types.ts";
 import type { BaseLinter, LinterConstructor, LinterMeta } from "./base.ts";
+import type { RunOptions } from "./types/registry.types.ts";
+
+// Re-export types for convenience
+export type { RunOptions } from "./types/registry.types.ts";
 
 // =============================================================================
 // Registry
@@ -132,21 +136,7 @@ export const registry: LinterRegistry = new LinterRegistry();
 // Runner
 // =============================================================================
 
-/**
- * Options for running linters.
- */
-export interface RunOptions {
-  /** Only run these linters (by ID) */
-  readonly only?: readonly string[];
-  /** Skip these linters (by ID) */
-  readonly skip?: readonly string[];
-  /** Per-linter configuration */
-  readonly config?: Record<string, LinterConfig>;
-  /** Run linters in parallel */
-  readonly parallel?: boolean;
-  /** Verbose output */
-  readonly verbose?: boolean;
-}
+
 
 /**
  * Default linter configuration.

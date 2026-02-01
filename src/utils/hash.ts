@@ -7,6 +7,11 @@
  * @module
  */
 
+import type { CodeFingerprint } from "./types/hash.types.ts";
+
+// Re-export types for convenience
+export type { CodeFingerprint } from "./types/hash.types.ts";
+
 // =============================================================================
 // Simple Hash Functions
 // =============================================================================
@@ -135,22 +140,6 @@ export function hashStructure(code: string): string {
 // =============================================================================
 // Fingerprinting
 // =============================================================================
-
-/**
- * A fingerprint is a collection of hashes for different aspects of code.
- */
-export interface CodeFingerprint {
-  /** Hash of raw content */
-  readonly raw: string;
-  /** Hash of normalized content (whitespace normalized) */
-  readonly normalized: string;
-  /** Hash of structure (identifiers replaced) */
-  readonly structural: string;
-  /** Content length */
-  readonly length: number;
-  /** Line count */
-  readonly lines: number;
-}
 
 /**
  * Create a fingerprint for a piece of code.
