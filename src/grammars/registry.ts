@@ -228,6 +228,21 @@ export class GrammarRegistry {
   }
 
   /**
+   * Get all file extensions registered across all grammars.
+   *
+   * @returns Array of unique extensions (e.g., [".ts", ".tsx", ".sh"])
+   */
+  allExtensions(): readonly string[] {
+    const extensions = new Set<string>();
+    for (const entry of this.entries.values()) {
+      for (const ext of entry.definition.meta.extensions) {
+        extensions.add(ext);
+      }
+    }
+    return Array.from(extensions);
+  }
+
+  /**
    * Clear all registered grammars.
    */
   clear(): void {

@@ -7,7 +7,8 @@
 
 import { resolve } from "@std/path";
 import {
-    type ViolaBuilderConfig
+    type ViolaBuilderConfig,
+    type ViolaBuilderConfigExtended
 } from "./builder.ts";
 import {
     matchesFilePattern,
@@ -36,7 +37,7 @@ const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
 export async function loadConfig(
   dir: string,
   options: { verbose?: boolean; configPath?: string; preloadedModule?: unknown } = {}
-): Promise<{ config: ResolvedConfig; sources: ConfigSource[]; builderConfig?: ViolaBuilderConfig }> {
+): Promise<{ config: ResolvedConfig; sources: ConfigSource[]; builderConfig?: ViolaBuilderConfigExtended }> {
   const sources: ConfigSource[] = [];
 
   // Try viola.config.ts first (or custom config path)
@@ -101,7 +102,7 @@ function isViolaBuilder(obj: unknown): boolean {
 /**
  * Process an already-loaded module default export into builder config.
  */
-function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBuilderConfig | null {
+function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBuilderConfigExtended | null {
   if (!defaultExport) {
     if (verbose) {
       console.log(`[loader] Config has no default export`);
@@ -116,7 +117,7 @@ function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBui
 
   // If it's a ViolaBuilder (duck typing), call build()
   if (isViolaBuilder(defaultExport)) {
-    const built = (defaultExport as { build(): ViolaBuilderConfig }).build();
+    const built = (defaultExport as { build(): ViolaBuilderConfigExtended }).build();
     if (verbose) {
       console.log(`[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`);
     }
@@ -128,7 +129,7 @@ function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBui
     if (verbose) {
       console.log(`[loader] Config is already built`);
     }
-    return defaultExport as ViolaBuilderConfig;
+    return defaultExport as ViolaBuilderConfigExtended;
   }
 
   if (verbose) {
@@ -140,7 +141,7 @@ function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBui
 /**
  * Load viola.config.ts and get the builder config.
  */
-async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBuilderConfig | null> {
+async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBuilderConfigExtended | null> {
   try {
     // Check if file exists
     await Deno.stat(path);
