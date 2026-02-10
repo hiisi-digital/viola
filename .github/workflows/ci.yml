@@ -10,4 +10,4 @@ jobs:
   ci:
     uses: hiisi-digital/.github/.github/workflows/deno-ci.yml@main
     with:
-      test-args: "src/"
+      test-args: "--allow-all src/"

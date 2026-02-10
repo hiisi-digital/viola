@@ -102,7 +102,7 @@ jobs:
       - name: Run tests
         run: |
           if find src -name "*_test.ts" | grep -q .; then
-            deno test src/
+            deno test --allow-all src/
           else
             echo "No test files found, skipping tests"
           fi
