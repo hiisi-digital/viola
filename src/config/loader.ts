@@ -35,18 +35,21 @@ const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
  */
 export async function loadConfig(
   dir: string,
-  options: { verbose?: boolean; configPath?: string } = {}
+  options: { verbose?: boolean; configPath?: string; preloadedModule?: unknown } = {}
 ): Promise<{ config: ResolvedConfig; sources: ConfigSource[]; builderConfig?: ViolaBuilderConfig }> {
   const sources: ConfigSource[] = [];
 
   // Try viola.config.ts first (or custom config path)
   const configTsPath = options.configPath ?? resolve(dir, "viola.config.ts");
-  
+
   if (options.verbose) {
     console.log(`[loader] Looking for config at: ${configTsPath}`);
   }
-  
-  const builderConfig = await loadBuilderConfig(configTsPath, options.verbose);
+
+  // Use pre-loaded module if provided (for when running from non-file context)
+  const builderConfig = options.preloadedModule
+    ? processModuleDefault(options.preloadedModule, options.verbose)
+    : await loadBuilderConfig(configTsPath, options.verbose);
 
   if (builderConfig) {
     sources.push({ path: configTsPath, type: "viola.config.ts" as ConfigSource["type"] });
@@ -96,54 +99,59 @@ function isViolaBuilder(obj: unknown): boolean {
 }
 
 /**
+ * Process an already-loaded module default export into builder config.
+ */
+function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBuilderConfig | null {
+  if (!defaultExport) {
+    if (verbose) {
+      console.log(`[loader] Config has no default export`);
+    }
+    return null;
+  }
+
+  if (verbose) {
+    console.log(`[loader] Default export type: ${typeof defaultExport}`);
+    console.log(`[loader] Is ViolaBuilder: ${isViolaBuilder(defaultExport)}`);
+  }
+
+  // If it's a ViolaBuilder (duck typing), call build()
+  if (isViolaBuilder(defaultExport)) {
+    const built = (defaultExport as { build(): ViolaBuilderConfig }).build();
+    if (verbose) {
+      console.log(`[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`);
+    }
+    return built;
+  }
+
+  // If it's already a built config object
+  if (typeof defaultExport === "object" && "linters" in defaultExport && "rules" in defaultExport) {
+    if (verbose) {
+      console.log(`[loader] Config is already built`);
+    }
+    return defaultExport as ViolaBuilderConfig;
+  }
+
+  if (verbose) {
+    console.log(`[loader] Config format not recognized`);
+  }
+  return null;
+}
+
+/**
  * Load viola.config.ts and get the builder config.
  */
 async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBuilderConfig | null> {
   try {
     // Check if file exists
     await Deno.stat(path);
-    
+
     if (verbose) {
       console.log(`[loader] Found config file: ${path}`);
     }
 
     // Dynamic import the config file
     const module = await import(`file://${path}`);
-    const defaultExport = module.default;
-
-    if (!defaultExport) {
-      if (verbose) {
-        console.log(`[loader] Config has no default export`);
-      }
-      return null;
-    }
-
-    if (verbose) {
-      console.log(`[loader] Default export type: ${typeof defaultExport}`);
-      console.log(`[loader] Is ViolaBuilder: ${isViolaBuilder(defaultExport)}`);
-    }
-
-    // If it's a ViolaBuilder (duck typing), call build()
-    if (isViolaBuilder(defaultExport)) {
-      const built = defaultExport.build();
-      if (verbose) {
-        console.log(`[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`);
-      }
-      return built;
-    }
-
-    // If it's already a built config object
-    if (typeof defaultExport === "object" && "linters" in defaultExport && "rules" in defaultExport) {
-      if (verbose) {
-        console.log(`[loader] Config is already built`);
-      }
-      return defaultExport as ViolaBuilderConfig;
-    }
-
-    if (verbose) {
-      console.log(`[loader] Config format not recognized`);
-    }
-    return null;
+    return processModuleDefault(module.default, verbose);
   } catch (err) {
     if (verbose) {
       console.log(`[loader] Error loading config: ${err}`);
