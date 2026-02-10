@@ -11,6 +11,9 @@ import type { GrammarDefinition } from "../grammars/types.ts";
 import { crawlCodebase } from "./crawler.ts";
 import type { ViolaConfig } from "../data/types.ts";
 
+// Import tree-sitter-typescript so Deno caches the npm package (needed for WASM loading)
+import "tree-sitter-typescript";
+
 // =============================================================================
 // Test Helpers
 // =============================================================================
