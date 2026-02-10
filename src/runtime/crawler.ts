@@ -23,6 +23,13 @@ import type {
     TypeInfo,
     ViolaConfig
 } from "../data/types.ts";
+import {
+    extractCompleteFileInfo,
+    type GrammarRegistry,
+    initTreeSitter,
+    loadGrammar,
+    createParser,
+} from "../grammars/mod.ts";
 import { hashCodeBody } from "../utils/hash.ts";
 import { normalizeCode } from "../utils/similarity.ts";
 
@@ -808,12 +815,31 @@ export const DEFAULT_CONFIG: Partial<ViolaConfig> = {
  * @returns Frozen codebase data
  */
 export async function crawlCodebase(
-  config: ViolaConfig
+  config: ViolaConfig,
+  grammarRegistry?: GrammarRegistry
 ): Promise<Readonly<CodebaseData>> {
   const _startTime = Date.now();
 
-  const extensions = config.extensions.length > 0 ? config.extensions : DEFAULT_CONFIG.extensions!;
+  // Expand extensions with grammar-registered extensions
+  const baseExtensions = config.extensions.length > 0 ? config.extensions : DEFAULT_CONFIG.extensions!;
+  const extensions = [...baseExtensions];
+  if (grammarRegistry && grammarRegistry.size > 0) {
+    for (const ext of grammarRegistry.allExtensions()) {
+      if (!extensions.includes(ext)) {
+        extensions.push(ext);
+      }
+    }
+  }
+
   const excludePatterns = [...(config.exclude || []), ...(DEFAULT_CONFIG.exclude || [])];
+
+  // Initialize tree-sitter if grammars are registered
+  if (grammarRegistry && grammarRegistry.size > 0) {
+    await initTreeSitter();
+    if (config.verbose) {
+      console.log(`Tree-sitter initialized with ${grammarRegistry.size} grammar(s)`);
+    }
+  }
 
   const files: FileInfo[] = [];
   const schemas: SchemaInfo[] = [];
@@ -835,7 +861,35 @@ export async function crawlCodebase(
 
         try {
           const content = await Deno.readTextFile(entry.path);
-          const fileData = extractFileData(content, entry.path, config.projectRoot);
+
+          // Try grammar-based extraction first
+          const matchingGrammars = grammarRegistry?.findMatchingGrammars(relativePath);
+          let fileData: FileInfo;
+
+          if (matchingGrammars && matchingGrammars.length > 0) {
+            // Tree-sitter extraction
+            const grammarEntry = matchingGrammars[0]!;
+            const ext = extname(entry.path);
+            try {
+              const language = await loadGrammar(grammarEntry.definition.grammar);
+              const parser = createParser(grammarEntry.definition.grammar, language);
+              const tree = parser.parse(content);
+              fileData = extractCompleteFileInfo(
+                tree, language, grammarEntry.definition,
+                relativePath, ext, content
+              );
+            } catch (grammarErr) {
+              // Fall back to regex if grammar extraction fails
+              if (config.verbose) {
+                console.error(`Grammar extraction failed for ${entry.path}, falling back to regex:`, grammarErr);
+              }
+              fileData = extractFileData(content, entry.path, config.projectRoot);
+            }
+          } else {
+            // Regex fallback for files without a matching grammar
+            fileData = extractFileData(content, entry.path, config.projectRoot);
+          }
+
           files.push(fileData);
         } catch (err) {
           if (config.verbose) {

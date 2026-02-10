@@ -215,6 +215,7 @@ import {
     validateLinterConfig
 } from "./src/config/mod.ts";
 import type { Issue, LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
+import type { GrammarRegistry } from "./src/grammars/mod.ts";
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
@@ -236,6 +237,8 @@ export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> 
   rules?: readonly Frozen<Rule>[];
   /** Issue catalogs for rule evaluation (linter ID -> catalog) */
   catalogs?: Map<string, IssueCatalog>;
+  /** Grammar registry from builder config (for tree-sitter based extraction) */
+  grammarRegistry?: GrammarRegistry;
 }
 
 /**
@@ -379,7 +382,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     console.log("Crawling codebase...");
   }
 
-  const data = await crawlCodebase(config);
+  const data = await crawlCodebase(config, options.grammarRegistry);
 
   if (config.verbose) {
     console.log(`Crawled ${data.files.length} files`);

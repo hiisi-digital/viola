@@ -366,45 +366,62 @@ async function resolveNpmWasm(
   packageName: string,
   wasmFile: string
 ): Promise<string> {
-  // Try to resolve via import.meta.resolve
-  // This works for packages that are properly configured
+  // Strategy 1: Try import.meta.resolve (works if Deno returns file:// URL)
   try {
-    // For npm packages in Deno, we need to use the npm: specifier
-    const packagePath = `npm:${packageName}/${wasmFile}`;
-
-    // Try to resolve the file path
-    // Note: This may need adjustment based on how the WASM is distributed
-    const resolved = import.meta.resolve(packagePath);
-
-    // Convert file:// URL to path
+    const resolved = import.meta.resolve(`npm:${packageName}/${wasmFile}`);
     if (resolved.startsWith("file://")) {
-      return resolved.slice(7);
+      const path = new URL(resolved).pathname;
+      await Deno.stat(path);
+      return path;
     }
-
-    return resolved;
   } catch {
-    // Fallback: try common locations
-    // Some packages put WASM in different locations
-    const alternatives = [
-      `npm:${packageName}/${wasmFile}`,
-      `npm:${packageName}/tree-sitter-${packageName.replace("tree-sitter-", "")}.wasm`,
-      `npm:${packageName}/dist/${wasmFile}`,
-    ];
-
-    for (const alt of alternatives) {
-      try {
-        const resolved = import.meta.resolve(alt);
-        if (resolved.startsWith("file://")) {
-          return resolved.slice(7);
-        }
-        return resolved;
-      } catch {
-        // Try next alternative
-      }
-    }
-
-    throw new Error(
-      `Could not resolve WASM file for npm package: ${packageName}/${wasmFile}`
-    );
+    // Not a file URL or file doesn't exist
   }
+
+  // Strategy 2: Look in Deno's npm cache (macOS and Linux locations)
+  const cacheRoots = [
+    `${Deno.env.get("DENO_DIR") ?? ""}/npm/registry.npmjs.org`,
+    `${Deno.env.get("HOME")}/Library/Caches/deno/npm/registry.npmjs.org`,
+    `${Deno.env.get("HOME")}/.cache/deno/npm/registry.npmjs.org`,
+  ].filter(p => p && !p.startsWith("/npm/"));
+
+  for (const cacheRoot of cacheRoots) {
+    const packageDir = `${cacheRoot}/${packageName}`;
+    try {
+      // List version directories
+      for await (const entry of Deno.readDir(packageDir)) {
+        if (!entry.isDirectory) continue;
+        const wasmPath = `${packageDir}/${entry.name}/${wasmFile}`;
+        try {
+          await Deno.stat(wasmPath);
+          return wasmPath;
+        } catch {
+          // Try nested dist directory
+          try {
+            const distPath = `${packageDir}/${entry.name}/dist/${wasmFile}`;
+            await Deno.stat(distPath);
+            return distPath;
+          } catch {
+            // WASM not in this version dir
+          }
+        }
+      }
+    } catch {
+      // Cache directory doesn't exist
+    }
+  }
+
+  // Strategy 3: Look in node_modules (if nodeModulesDir is enabled)
+  try {
+    const nmPath = `node_modules/${packageName}/${wasmFile}`;
+    await Deno.stat(nmPath);
+    return nmPath;
+  } catch {
+    // node_modules not available
+  }
+
+  throw new Error(
+    `Could not resolve WASM file for npm package: ${packageName}/${wasmFile}. ` +
+    `Ensure the package is imported in deno.json.`
+  );
 }

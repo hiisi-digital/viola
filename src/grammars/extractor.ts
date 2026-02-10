@@ -22,6 +22,7 @@ import type {
 import type { Language, Tree } from "./loader.ts";
 import { runQuery } from "./query.ts";
 import type { GrammarDefinition } from "./types.ts";
+import { hashCodeBody } from "../utils/hash.ts";
 
 // =============================================================================
 // Helper Functions
@@ -103,19 +104,8 @@ function defaultNormalizeBody(body: string): string {
     .trim();
 }
 
-/**
- * Simple hash function for code bodies.
- * Used for quick equality comparison.
- */
-function hashCode(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return hash.toString(16);
-}
+// Hash function uses hashCodeBody() from utils/hash.ts (imported above)
+// to ensure consistent hashing between regex and grammar extraction paths.
 
 // =============================================================================
 // Extraction Functions
@@ -175,7 +165,7 @@ function extractFunctions(
       returnType,
       body,
       normalizedBody,
-      bodyHash: hashCode(normalizedBody),
+      bodyHash: hashCodeBody(normalizedBody),
       isAsync: transforms?.isAsync?.(node, captures) ?? captures.has("function.async"),
       isGenerator: transforms?.isGenerator?.(node, captures) ?? captures.has("function.generator"),
       isExported: transforms?.isExported?.(node, captures) ?? captures.has("function.export"),
@@ -406,7 +396,7 @@ function extractTypes(
       fields,
       body,
       normalizedBody,
-      bodyHash: hashCode(normalizedBody),
+      bodyHash: hashCodeBody(normalizedBody),
     });
   }
 
@@ -447,39 +437,33 @@ export function extractFileData(
   filePath: string,
   sourceCode: string
 ): Omit<FileInfo, "path" | "extension" | "lineCount" | "content"> {
-  const functions = extractFunctions(
-    tree,
-    language,
-    grammar,
-    filePath,
-    sourceCode
-  );
+  // Each extraction is wrapped in try-catch so a bad query in one category
+  // (e.g., types) doesn't prevent extraction of others (e.g., exports).
+  let functions: FunctionInfo[] = [];
+  let strings: StringLiteral[] = [];
+  let imports: ImportInfo[] = [];
+  let exports: ExportInfo[] = [];
+  let types: TypeInfo[] = [];
 
-  const strings = extractStrings(
-    tree,
-    language,
-    grammar,
-    filePath,
-    sourceCode
-  );
+  try {
+    functions = extractFunctions(tree, language, grammar, filePath, sourceCode);
+  } catch { /* query compilation failed for functions */ }
 
-  const imports = extractImports(
-    tree,
-    language,
-    grammar,
-    filePath,
-    sourceCode
-  );
+  try {
+    strings = extractStrings(tree, language, grammar, filePath, sourceCode);
+  } catch { /* query compilation failed for strings */ }
 
-  const exports = extractExports(
-    tree,
-    language,
-    grammar,
-    filePath,
-    sourceCode
-  );
+  try {
+    imports = extractImports(tree, language, grammar, filePath, sourceCode);
+  } catch { /* query compilation failed for imports */ }
 
-  const types = extractTypes(tree, language, grammar, filePath, sourceCode);
+  try {
+    exports = extractExports(tree, language, grammar, filePath, sourceCode);
+  } catch { /* query compilation failed for exports */ }
+
+  try {
+    types = extractTypes(tree, language, grammar, filePath, sourceCode);
+  } catch { /* query compilation failed for types */ }
 
   return {
     functions,
