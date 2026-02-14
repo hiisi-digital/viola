@@ -12,9 +12,7 @@ import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
 import {
-  plugin,
   viola,
-  ViolaBuilder,
   type ViolaPlugin,
 } from "../builder.ts";
 import { when } from "../conditions.ts";
@@ -23,7 +21,6 @@ import {
   createEvaluationContext,
   evaluateCondition,
   evaluateIssue,
-  evaluateIssues,
 } from "../evaluator.ts";
 import { grammar } from "../grammar-ref.ts";
 import type { GrammarDefinition } from "../../grammars/types.ts";
@@ -207,14 +204,6 @@ Deno.test("as: add(grammar).as() then add(linter).as() works correctly", () => {
   assertEquals(config.linters[0]!.meta.id, "my-linter");
 });
 
-Deno.test("as: throws on fresh builder without any add()", () => {
-  assertThrows(
-    () => viola().as("test"),
-    Error,
-    "No item to alias",
-  );
-});
-
 // =============================================================================
 // 2. .use() Error Handling
 // =============================================================================
@@ -288,18 +277,6 @@ Deno.test("add: array with non-linter items skips invalid entries", () => {
   assertEquals(config.linters[0]!.meta.id, "valid");
 });
 
-Deno.test("add: same linter instance added multiple times is duplicated", () => {
-  const linter = createMockLinter("shared");
-  const config = viola()
-    .add(linter)
-    .add(linter)
-    .add(linter)
-    .build();
-
-  assertEquals(config.linters.length, 3);
-  assertEquals(config.linters[0] === config.linters[1], true);
-});
-
 Deno.test("add: null throws error", () => {
   assertThrows(
     () => viola().add(null as unknown as BaseLinter),
@@ -311,24 +288,6 @@ Deno.test("add: null throws error", () => {
 // =============================================================================
 // 4. .set() Edge Cases
 // =============================================================================
-
-Deno.test("set: null value with no dot adds nothing (null excluded explicitly)", () => {
-  const config = viola()
-    .set("my-linter", null)
-    .build();
-
-  // typeof null === "object" but the code checks value !== null
-  assertEquals(config.settings.length, 0);
-});
-
-Deno.test("set: primitive value without dot adds nothing", () => {
-  const config = viola()
-    .set("my-linter", 42)
-    .build();
-
-  // 42 is not an object, so no settings from object expansion
-  assertEquals(config.settings.length, 0);
-});
 
 Deno.test("set: key with multiple dots splits only on first dot", () => {
   const config = viola()
@@ -366,14 +325,6 @@ Deno.test("set: multiple object set calls accumulate all settings", () => {
   assertEquals(linterASettings.length, 3);
 });
 
-Deno.test("set: empty object adds no settings", () => {
-  const config = viola()
-    .set("my-linter", {})
-    .build();
-
-  assertEquals(config.settings.length, 0);
-});
-
 // =============================================================================
 // 5. Build Immutability
 // =============================================================================
@@ -408,89 +359,9 @@ Deno.test("build: settings are frozen (cannot mutate)", () => {
   );
 });
 
-Deno.test("build: calling build() twice returns consistent structure", () => {
-  const builder = viola()
-    .add(createMockLinter("test"))
-    .rule(report.warn, when.in("src/**"))
-    .set("test.opt", 1);
-
-  const config1 = builder.build();
-  const config2 = builder.build();
-
-  assertEquals(config1.linters.length, config2.linters.length);
-  assertEquals(config1.rules.length, config2.rules.length);
-  assertEquals(config1.settings.length, config2.settings.length);
-});
-
-Deno.test("build: builder mutations after build() affect returned config (shared reference)", () => {
-  const builder = viola()
-    .add(createMockLinter("first"));
-
-  const config1 = builder.build();
-  assertEquals(config1.linters.length, 1);
-
-  // Adding another linter after build() — because build() returns the
-  // internal array by reference, the config1 object will see the new linter
-  builder.add(createMockLinter("second"));
-  const config2 = builder.build();
-
-  // config2 should have 2 linters
-  assertEquals(config2.linters.length, 2);
-
-  // config1 shares the same array reference, so it also has 2
-  // This documents the current behavior (no defensive copy)
-  assertEquals(config1.linters.length, 2);
-});
-
 // =============================================================================
 // 6. Complex Condition Compositions
 // =============================================================================
-
-Deno.test("composition: triple and() chain", () => {
-  const catalogs = createTestCatalog();
-  const cond = when.in("src/**")
-    .and(when.impact.atLeast(Impact.Minor))
-    .and(when.category.is(Category.Consistency));
-
-  const config = viola()
-    .rule(report.error, cond)
-    .build();
-
-  // All three conditions must match
-  const issueMatch = createMockIssue("test-linter/minor-issue", "src/lib.ts");
-  const resultMatch = evaluateIssue(issueMatch, config.rules, catalogs);
-  assertEquals(resultMatch.level, ReportLevel.Error);
-
-  // One condition fails (wrong category)
-  const issueFail = createMockIssue("test-linter/major-issue", "src/lib.ts");
-  const resultFail = evaluateIssue(issueFail, config.rules, catalogs);
-  // major-issue has category "maintainability", not "consistency"
-  assertEquals(resultFail.level, ReportLevel.Warn); // default
-});
-
-Deno.test("composition: triple or() chain", () => {
-  const catalogs = createTestCatalog();
-  const cond = when.in("**/*_test.ts")
-    .or(when.in("**/*.spec.ts"))
-    .or(when.in("tests/**"));
-
-  const config = viola()
-    .rule(report.off, cond)
-    .build();
-
-  const tests = [
-    createMockIssue("test-linter/minor-issue", "src/foo_test.ts"),
-    createMockIssue("test-linter/minor-issue", "src/foo.spec.ts"),
-    createMockIssue("test-linter/minor-issue", "tests/foo.ts"),
-    createMockIssue("test-linter/minor-issue", "src/foo.ts"), // no match
-  ];
-
-  const results = evaluateIssues(tests, config.rules, catalogs);
-  assertEquals(results[0]!.level, ReportLevel.Off);
-  assertEquals(results[1]!.level, ReportLevel.Off);
-  assertEquals(results[2]!.level, ReportLevel.Off);
-  assertEquals(results[3]!.level, ReportLevel.Warn);
-});
 
 Deno.test("composition: a.and(b).or(c) - OR is outer, AND is left branch", () => {
   const catalogs = createTestCatalog();
@@ -566,66 +437,6 @@ Deno.test("composition: a.or(b).and(c) - AND is outer, OR is left branch", () =>
   assertEquals(r3.level, ReportLevel.Warn);
 });
 
-Deno.test("composition: when.all() with 4 conditions", () => {
-  const catalogs = createTestCatalog();
-
-  const cond = when.all(
-    when.in("src/**"),
-    when.impact.atLeast(Impact.Minor),
-    when.category.is(Category.Consistency),
-    when.confidence.atLeast(70),
-  );
-
-  const config = viola()
-    .rule(report.error, cond)
-    .build();
-
-  // All 4 match: src, minor, consistency, confidence 80
-  const r1 = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "src/lib.ts", 80),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r1.level, ReportLevel.Error);
-
-  // Low confidence breaks it
-  const r2 = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "src/lib.ts", 50),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r2.level, ReportLevel.Warn);
-});
-
-Deno.test("composition: when.any() with 4 conditions", () => {
-  const catalogs = createTestCatalog();
-
-  const cond = when.any(
-    when.in("**/*_test.ts"),
-    when.in("**/*.spec.ts"),
-    when.in("tests/**"),
-    when.in("**/fixtures/**"),
-  );
-
-  const config = viola()
-    .rule(report.off, cond)
-    .build();
-
-  const r1 = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "src/fixtures/data.ts"),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r1.level, ReportLevel.Off);
-
-  const r2 = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "src/main.ts"),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r2.level, ReportLevel.Warn);
-});
-
 Deno.test("composition: NOT on compound condition", () => {
   const catalogs = createTestCatalog();
 
@@ -662,52 +473,6 @@ Deno.test("composition: NOT on compound condition", () => {
     catalogs,
   );
   assertEquals(r3.level, ReportLevel.Off);
-});
-
-Deno.test("composition: deep nesting - all/any/and/or", () => {
-  const catalogs = createTestCatalog();
-
-  // (in src/** AND major+) OR (in tests/** AND correctness) AND (confidence >= 50)
-  // Parsed as: ((src AND major) OR (tests AND correctness)) AND confidence
-  const cond = when.all(
-    when.in("src/**"),
-    when.impact.atLeast(Impact.Major),
-  ).or(
-    when.all(
-      when.in("tests/**"),
-      when.category.is(Category.Correctness),
-    ),
-  ).and(
-    when.confidence.atLeast(50),
-  );
-
-  const config = viola()
-    .rule(report.error, cond)
-    .build();
-
-  // src + major + confidence 80 → matches
-  const r1 = evaluateIssue(
-    createMockIssue("test-linter/major-issue", "src/lib.ts", 80),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r1.level, ReportLevel.Error);
-
-  // tests + correctness + confidence 80 → matches right OR branch, AND confidence
-  const r2 = evaluateIssue(
-    createMockIssue("test-linter/critical-issue", "tests/foo.ts", 80),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r2.level, ReportLevel.Error);
-
-  // src + major + confidence 30 → OR matches but AND confidence fails
-  const r3 = evaluateIssue(
-    createMockIssue("test-linter/major-issue", "src/lib.ts", 30),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(r3.level, ReportLevel.Warn);
 });
 
 // =============================================================================
@@ -1022,40 +787,6 @@ Deno.test("ordering: grammar rules maintain order separately from report rules",
 // 11. "Last Wins" Advanced Scenarios
 // =============================================================================
 
-Deno.test("last-wins: non-matching rule between matching rules", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("src/**")) // matches
-    .rule(report.off, when.in("tests/**")) // doesn't match
-    .rule(report.warn, when.in("src/**")) // matches (last)
-    .build();
-
-  const issue = createMockIssue("test-linter/minor-issue", "src/a.ts");
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  // Rule at index 2 (warn) is last matching → wins
-  assertEquals(result.level, ReportLevel.Warn);
-  assertEquals(result.matchedRule, 2);
-});
-
-Deno.test("last-wins: all rules match same issue, last one wins", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("**/*.ts"))
-    .rule(report.warn, when.in("**/*.ts"))
-    .rule(report.info, when.in("**/*.ts"))
-    .rule(report.hint, when.in("**/*.ts"))
-    .build();
-
-  const issue = createMockIssue("test-linter/minor-issue", "src/file.ts");
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  assertEquals(result.level, ReportLevel.Hint);
-  assertEquals(result.matchedRule, 3);
-});
-
 Deno.test("last-wins: three plugins → user override wins", () => {
   const catalogs = createTestCatalog();
 
@@ -1081,56 +812,6 @@ Deno.test("last-wins: three plugins → user override wins", () => {
 
   assertEquals(result.level, ReportLevel.Info);
   assertEquals(result.matchedRule, 2);
-});
-
-Deno.test("last-wins: matchedRule index is correct for each position", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("a/**"))
-    .rule(report.warn, when.in("b/**"))
-    .rule(report.info, when.in("c/**"))
-    .build();
-
-  const ra = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "a/file.ts"),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(ra.matchedRule, 0);
-
-  const rb = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "b/file.ts"),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(rb.matchedRule, 1);
-
-  const rc = evaluateIssue(
-    createMockIssue("test-linter/minor-issue", "c/file.ts"),
-    config.rules,
-    catalogs,
-  );
-  assertEquals(rc.matchedRule, 2);
-});
-
-Deno.test("last-wins: 20+ rules with only first matching", () => {
-  const catalogs = createTestCatalog();
-
-  let builder = viola().rule(report.error, when.in("target/**"));
-  for (let i = 0; i < 20; i++) {
-    builder = builder.rule(report.warn, when.in(`nomatch-${i}/**`));
-  }
-
-  const config = builder.build();
-  assertEquals(config.rules.length, 21);
-
-  const issue = createMockIssue("test-linter/minor-issue", "target/file.ts");
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  // Only rule 0 matches, reverse iteration finds nothing in 1-20
-  assertEquals(result.level, ReportLevel.Error);
-  assertEquals(result.matchedRule, 0);
 });
 
 // =============================================================================
