@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "exports": {
     ".": "./mod.ts",
     "./config": "./src/config/mod.ts",
