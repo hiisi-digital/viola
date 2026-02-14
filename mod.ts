@@ -237,8 +237,8 @@ export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> 
   rules?: readonly Frozen<Rule>[];
   /** Issue catalogs for rule evaluation (linter ID -> catalog) */
   catalogs?: Map<string, IssueCatalog>;
-  /** Grammar registry from builder config (for tree-sitter based extraction) */
-  grammarRegistry?: GrammarRegistry;
+  /** Grammar registry for tree-sitter based extraction (required) */
+  grammarRegistry: GrammarRegistry;
 }
 
 /**
