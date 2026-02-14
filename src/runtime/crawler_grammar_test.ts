@@ -1,11 +1,11 @@
 /**
  * Integration tests for grammar-aware extraction in the crawler.
  *
- * Tests that tree-sitter grammars are correctly used for extraction
- * when registered, with fallback to regex for unmatched files.
+ * Tests that tree-sitter grammars are correctly used for extraction.
+ * Grammar registration is required — files without a matching grammar are skipped.
  */
 
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { GrammarRegistry } from "../grammars/registry.ts";
 import type { GrammarDefinition } from "../grammars/types.ts";
 import { crawlCodebase } from "./crawler.ts";
@@ -89,7 +89,7 @@ function createTestTsGrammar(): GrammarDefinition {
           name: (type_identifier) @type.name
           type_parameters: (type_parameters)? @type.type_params
           (extends_type_clause)? @type.extends
-          body: (object_type) @type.body) @type
+          body: (interface_body) @type.body) @type
 
         (type_alias_declaration
           name: (type_identifier) @type.name
@@ -192,35 +192,24 @@ Deno.test("crawler with grammar registry - extracts async function exports corre
   }
 });
 
-Deno.test("crawler without grammar registry - falls back to regex", async () => {
-  const tmpDir = await createTestFixture();
+Deno.test("crawler without grammars registered - throws error", async () => {
+  const registry = new GrammarRegistry();
 
-  try {
-    const config: ViolaConfig = {
-      projectRoot: tmpDir,
-      include: ["src"],
-      exclude: [],
-      extensions: [".ts"],
-      linters: {},
-      reportOnly: false,
-      verbose: false,
-    };
+  const config: ViolaConfig = {
+    projectRoot: "/tmp/nonexistent",
+    include: ["src"],
+    exclude: [],
+    extensions: [".ts"],
+    linters: {},
+    reportOnly: false,
+    verbose: false,
+  };
 
-    // No grammar registry — regex fallback
-    const data = await crawlCodebase(config);
-
-    // Should still find files
-    assertEquals(data.files.length > 0, true, "Should find at least one file");
-
-    // Regex has the known bug: "async" extracted as name for export async function
-    const asyncFile = data.files.find(f => f.path.includes("async-exports"));
-    assertExists(asyncFile, "Should find async-exports.ts");
-
-    // The regex extractor SHOULD find some exports
-    assertEquals(asyncFile.exports.length > 0, true, "Should find exports");
-  } finally {
-    await cleanupFixture(tmpDir);
-  }
+  await assertRejects(
+    () => crawlCodebase(config, registry),
+    Error,
+    "No grammars registered",
+  );
 });
 
 Deno.test("GrammarRegistry.allExtensions - returns all registered extensions", () => {
