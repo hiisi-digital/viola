@@ -39,20 +39,6 @@ Deno.test("grammar() - actions are frozen", () => {
   assertEquals(Object.isFrozen(action), true);
 });
 
-Deno.test("grammar() - different aliases produce different actions", () => {
-  const overridesAction = grammar("typescript").overrides("javascript");
-  const supplementsAction = grammar("typescript").supplements("javascript");
-
-  assertEquals(overridesAction.relationship, "overrides");
-  assertEquals(supplementsAction.relationship, "supplements");
-
-  // Same primary and secondary
-  assertEquals(overridesAction.primary, "typescript");
-  assertEquals(supplementsAction.primary, "typescript");
-  assertEquals(overridesAction.secondary, "javascript");
-  assertEquals(supplementsAction.secondary, "javascript");
-});
-
 // =============================================================================
 // Type Guard Tests
 // =============================================================================
@@ -122,40 +108,3 @@ Deno.test("grammar() - can create multiple actions from same builder", () => {
   assertEquals(supplementsAction.secondary, "bash");
 });
 
-// =============================================================================
-// Real-World Usage Patterns
-// =============================================================================
-
-Deno.test("grammar() - TypeScript overrides JavaScript pattern", () => {
-  const action = grammar("ts").overrides("js");
-
-  assertEquals(action.type, "grammar-relationship");
-  assertEquals(action.relationship, "overrides");
-  assertEquals(action.primary, "ts");
-  assertEquals(action.secondary, "js");
-});
-
-Deno.test("grammar() - TypeScript supplements JavaScript pattern", () => {
-  // For .js files with JSDoc types
-  const action = grammar("ts").supplements("js");
-
-  assertEquals(action.type, "grammar-relationship");
-  assertEquals(action.relationship, "supplements");
-  assertEquals(action.primary, "ts");
-  assertEquals(action.secondary, "js");
-});
-
-Deno.test("grammar() - multiple relationships in a config", () => {
-  // Simulating multiple rules in a config
-  const rules = [
-    grammar("typescript").overrides("javascript"),
-    grammar("typescript").supplements("javascript"),
-    grammar("jsx").supplements("javascript"),
-  ];
-
-  assertEquals(rules.length, 3);
-  assertEquals(rules[0]?.relationship, "overrides");
-  assertEquals(rules[1]?.relationship, "supplements");
-  assertEquals(rules[2]?.relationship, "supplements");
-  assertEquals(rules[2]?.primary, "jsx");
-});

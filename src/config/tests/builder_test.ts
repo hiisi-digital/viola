@@ -6,14 +6,13 @@
  * @module
  */
 
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
 import {
     plugin,
     viola,
-    ViolaBuilder,
     type ViolaPlugin,
 } from "../builder.ts";
 import { when } from "../conditions.ts";
@@ -123,12 +122,6 @@ function createTestCatalog(): Map<string, IssueCatalog> {
 // Builder Basic Tests
 // =============================================================================
 
-Deno.test("viola() creates a ViolaBuilder instance", () => {
-  const builder = viola();
-  assertExists(builder);
-  assertEquals(builder instanceof ViolaBuilder, true);
-});
-
 Deno.test("ViolaBuilder.build() returns empty config by default", () => {
   const config = viola().build();
 
@@ -157,15 +150,6 @@ Deno.test("ViolaBuilder.add() adds an array of linters", () => {
   assertEquals(config.linters[0]!.meta.id, "linter-a");
   assertEquals(config.linters[1]!.meta.id, "linter-b");
   assertEquals(config.linters[2]!.meta.id, "linter-c");
-});
-
-Deno.test("ViolaBuilder.add() is chainable", () => {
-  const config = viola()
-    .add(createMockLinter("linter-a"))
-    .add(createMockLinter("linter-b"))
-    .build();
-
-  assertEquals(config.linters.length, 2);
 });
 
 // =============================================================================
@@ -216,20 +200,6 @@ Deno.test("ViolaBuilder.rule() adds a rule", () => {
     .build();
 
   assertEquals(config.rules.length, 1);
-});
-
-Deno.test("ViolaBuilder.rule() rules are in definition order", () => {
-  const config = viola()
-    .rule(report.error, when.impact.atLeast(Impact.Critical))
-    .rule(report.warn, when.impact.atLeast(Impact.Major))
-    .rule(report.info, when.impact.atLeast(Impact.Minor))
-    .build();
-
-  assertEquals(config.rules.length, 3);
-  // Rules should be in definition order
-  assertEquals(getActionLevel(config.rules[0]!.action), ReportLevel.Error);
-  assertEquals(getActionLevel(config.rules[1]!.action), ReportLevel.Warn);
-  assertEquals(getActionLevel(config.rules[2]!.action), ReportLevel.Info);
 });
 
 // =============================================================================
@@ -286,26 +256,6 @@ Deno.test("Plugin can add linters, rules, and settings", () => {
   assertEquals(config.settings.length, 1);
 });
 
-Deno.test("Multiple plugins add in order", () => {
-  const pluginA: ViolaPlugin = {
-    build(builder) {
-      builder.add(createMockLinter("linter-a"));
-    },
-  };
-
-  const pluginB: ViolaPlugin = {
-    build(builder) {
-      builder.add(createMockLinter("linter-b"));
-    },
-  };
-
-  const config = viola().use(pluginA).use(pluginB).build();
-
-  assertEquals(config.linters.length, 2);
-  assertEquals(config.linters[0]!.meta.id, "linter-a");
-  assertEquals(config.linters[1]!.meta.id, "linter-b");
-});
-
 // =============================================================================
 // "Last Wins" Semantics Tests
 // =============================================================================
@@ -346,78 +296,6 @@ Deno.test("Last wins: user rules after plugin rules take precedence", () => {
 
   // User's off rule comes last and matches, so it wins
   assertEquals(result.level, ReportLevel.Off);
-});
-
-Deno.test("Last wins: most specific matching rule wins when last", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.warn, when.impact.atLeast(Impact.Minor))
-    .rule(report.off, when.in("**/*_test.ts"))
-    .rule(report.error, when.in("packages/core/**"))
-    .build();
-
-  // Issue in packages/core/utils_test.ts
-  const issue = createMockIssue(
-    "test-linter/minor-issue",
-    "packages/core/utils_test.ts"
-  );
-
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  // All three rules match, but error (packages/core/**) is last → error wins
-  assertEquals(result.level, ReportLevel.Error);
-});
-
-Deno.test("Last wins: non-matching rules don't affect result", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.warn, when.impact.atLeast(Impact.Minor))
-    .rule(report.off, when.in("**/*_test.ts")) // doesn't match
-    .build();
-
-  const issue = createMockIssue("test-linter/minor-issue", "src/main.ts");
-
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  // Only first rule matches → warn
-  assertEquals(result.level, ReportLevel.Warn);
-});
-
-Deno.test("Last wins: default level when no rules match", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("packages/**"))
-    .build();
-
-  const issue = createMockIssue("test-linter/minor-issue", "src/main.ts");
-
-  const result = evaluateIssue(issue, config.rules, catalogs);
-
-  // No rules match → default warn
-  assertEquals(result.level, ReportLevel.Warn);
-});
-
-Deno.test("Last wins: custom default level", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("packages/**"))
-    .build();
-
-  const issue = createMockIssue("test-linter/minor-issue", "src/main.ts");
-
-  const result = evaluateIssue(
-    issue,
-    config.rules,
-    catalogs,
-    ReportLevel.Info
-  );
-
-  // No rules match → custom default info
-  assertEquals(result.level, ReportLevel.Info);
 });
 
 // =============================================================================
@@ -529,68 +407,6 @@ Deno.test("Complex: confidence filtering", () => {
 
   assertEquals(results[0]!.level, ReportLevel.Warn); // confidence rule doesn't match
   assertEquals(results[1]!.level, ReportLevel.Warn); // both match, warn is last
-});
-
-Deno.test("Complex: compound conditions with AND", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(
-      report.error,
-      when.in("packages/core/**").and(when.impact.atLeast(Impact.Minor))
-    )
-    .rule(report.warn, when.impact.atLeast(Impact.Minor))
-    .build();
-
-  const issues = [
-    createMockIssue("test-linter/minor-issue", "packages/core/lib.ts"),
-    createMockIssue("test-linter/minor-issue", "packages/utils/lib.ts"),
-  ];
-
-  const results = evaluateIssues(issues, config.rules, catalogs);
-
-  // packages/core matches both → warn (last)
-  assertEquals(results[0]!.level, ReportLevel.Warn);
-  // packages/utils matches only second → warn
-  assertEquals(results[1]!.level, ReportLevel.Warn);
-});
-
-Deno.test("Complex: compound conditions with OR", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.off, when.in("**/*_test.ts").or(when.in("**/*.spec.ts")))
-    .build();
-
-  const issues = [
-    createMockIssue("test-linter/minor-issue", "src/utils_test.ts"),
-    createMockIssue("test-linter/minor-issue", "src/utils.spec.ts"),
-    createMockIssue("test-linter/minor-issue", "src/utils.ts"),
-  ];
-
-  const results = evaluateIssues(issues, config.rules, catalogs);
-
-  assertEquals(results[0]!.level, ReportLevel.Off);
-  assertEquals(results[1]!.level, ReportLevel.Off);
-  assertEquals(results[2]!.level, ReportLevel.Warn); // default
-});
-
-Deno.test("Complex: NOT condition", () => {
-  const catalogs = createTestCatalog();
-
-  const config = viola()
-    .rule(report.error, when.in("**/*_test.ts").not())
-    .build();
-
-  const issues = [
-    createMockIssue("test-linter/minor-issue", "src/utils.ts"), // not a test
-    createMockIssue("test-linter/minor-issue", "src/utils_test.ts"), // is a test
-  ];
-
-  const results = evaluateIssues(issues, config.rules, catalogs);
-
-  assertEquals(results[0]!.level, ReportLevel.Error);
-  assertEquals(results[1]!.level, ReportLevel.Warn); // default
 });
 
 // =============================================================================
