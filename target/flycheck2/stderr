@@ -1,12 +1,66 @@
-   0.140395500s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: stale: changed "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs"
-   0.140591833s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:           (vs) "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-core-d970e11214560e9f/dep-lib-viola_core"
-   0.140595500s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776947158, nanos: 793097493 } < FileTime { seconds: 1776947632, nanos: 141930811 }
-   0.141177083s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("viola_core", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", Edition2021) }
-   0.142372208s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-core-d970e11214560e9f/dep-lib-viola_core", reference_mtime: FileTime { seconds: 1776947158, nanos: 793097493 }, stale: "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", stale_mtime: FileTime { seconds: 1776947632, nanos: 141930811 } }))
-   0.152419500s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: stale: changed "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs"
-   0.152426375s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:           (vs) "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-core-0e164bf7185c16c8/dep-test-lib-viola_core"
-   0.152428333s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776947158, nanos: 793095076 } < FileTime { seconds: 1776947632, nanos: 141930811 }
-   0.153468125s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("viola_core", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", Edition2021) }
-   0.153476916s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-core-0e164bf7185c16c8/dep-test-lib-viola_core", reference_mtime: FileTime { seconds: 1776947158, nanos: 793095076 }, stale: "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", stale_mtime: FileTime { seconds: 1776947632, nanos: 141930811 } }))
+   0.083625208s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint: stale: changed "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs"
+   0.083633458s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint:           (vs) "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-plugin-abi-455db163426ab1c2/dep-lib-viola_plugin_abi"
+   0.083636542s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776946998, nanos: 533868909 } < FileTime { seconds: 1776947835, nanos: 112185216 }
+   0.083695125s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint: fingerprint error for viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("viola_bridge_deno", ["cdylib", "rlib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno/src/lib.rs", Edition2021) }
+   0.083706708s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-bridge-deno-dc92dd412b901f7f/lib-viola_bridge_deno`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   0.086692417s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("viola_plugin_abi", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs", Edition2024) }
+   0.086701792s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-plugin-abi-455db163426ab1c2/dep-lib-viola_plugin_abi", reference_mtime: FileTime { seconds: 1776946998, nanos: 533868909 }, stale: "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs", stale_mtime: FileTime { seconds: 1776947835, nanos: 112185216 } }))
+   0.086865917s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint: fingerprint error for viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("viola_bridge_deno", ["cdylib", "rlib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno/src/lib.rs", Edition2021) }
+   0.086871417s  INFO prepare_target{force=false package_id=viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno) target="viola_bridge_deno"}: cargo::core::compiler::fingerprint:     err: failed to read `/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-bridge-deno-87413e466c2d7ba6/test-lib-viola_bridge_deno`
+
+Caused by:
+    No such file or directory (os error 2)
+
+Stack backtrace:
+   0: std::backtrace::Backtrace::create
+   1: cargo_util::paths::read_bytes
+   2: cargo_util::paths::read
+   3: cargo::core::compiler::fingerprint::_compare_old_fingerprint
+   4: cargo::core::compiler::fingerprint::prepare_target
+   5: cargo::core::compiler::compile
+   6: <cargo::core::compiler::build_runner::BuildRunner>::compile
+   7: cargo::ops::cargo_compile::compile_ws
+   8: cargo::ops::cargo_compile::compile_with_exec
+   9: cargo::ops::cargo_compile::compile
+  10: cargo::commands::check::exec
+  11: <cargo::cli::Exec>::exec
+  12: cargo::main
+  13: std::sys::backtrace::__rust_begin_short_backtrace::<fn(), ()>
+  14: std::rt::lang_start::<()>::{closure#0}
+  15: std::rt::lang_start_internal
+  16: _main
+   0.089199583s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core)/Check { test: false }/TargetInner { name_inferred: true, ..: lib_target("viola_core", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", Edition2021) }
+   0.089208667s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(48) })
+   0.093015292s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("viola_core", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core/src/lib.rs", Edition2021) }
+   0.093027792s  INFO prepare_target{force=false package_id=viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core) target="viola_core"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleDepFingerprint { unit: UnitIndex(48) })
+   0.093542917s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint: stale: changed "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs"
+   0.093546542s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint:           (vs) "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-plugin-abi-9e7ecf72b3c60769/dep-test-lib-viola_plugin_abi"
+   0.093548750s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint:                FileTime { seconds: 1776946998, nanos: 533939823 } < FileTime { seconds: 1776947835, nanos: 112185216 }
+   0.094411042s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint: fingerprint dirty for viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi)/Check { test: true }/TargetInner { name_inferred: true, ..: lib_target("viola_plugin_abi", ["lib"], "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs", Edition2024) }
+   0.094417125s  INFO prepare_target{force=false package_id=viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi) target="viola_plugin_abi"}: cargo::core::compiler::fingerprint:     dirty: FsStatusOutdated(StaleItem(ChangedFile { reference: "/Users/orgrinrt/Dev/clause-dev/viola/target/debug/.fingerprint/viola-plugin-abi-9e7ecf72b3c60769/dep-test-lib-viola_plugin_abi", reference_mtime: FileTime { seconds: 1776946998, nanos: 533939823 }, stale: "/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi/src/lib.rs", stale_mtime: FileTime { seconds: 1776947835, nanos: 112185216 } }))
+    Checking viola-plugin-abi v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-plugin-abi)
     Checking viola-core v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-core)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.05s
+    Checking viola-bridge-deno v0.1.0 (/Users/orgrinrt/Dev/clause-dev/viola/crates/viola-bridge-deno)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s

@@ -1,0 +1,11 @@
+[package]
+name = "viola-bridge-deno"
+version = "0.1.0"
+edition = "2021"
+description = "Deno bridge plugin for Viola"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+viola-plugin-abi = { path = "../viola-plugin-abi" }
