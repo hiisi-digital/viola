@@ -44,3 +44,7 @@ pub struct PluginDescriptor {
     /// The operations provided by this plugin.
     pub ops: PluginOperations,
 }
+
+// Safety: PluginDescriptor is a read-only ABI manifest exported as a static.
+unsafe impl Send for PluginDescriptor {}
+unsafe impl Sync for PluginDescriptor {}
