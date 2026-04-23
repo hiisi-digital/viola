@@ -8,6 +8,9 @@
 // by robust cross-platform implementations from the `hilavitkutin-extensions`
 // and `hilavitkutin-plugins` crates once those are published.
 
+pub mod crawler;
+pub mod models;
+
 use std::path::Path;
 
 /// A loaded plugin instance.
