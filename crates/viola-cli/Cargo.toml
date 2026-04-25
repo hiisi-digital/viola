@@ -3,7 +3,7 @@ name = "viola-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Viola host CLI executable. Implementation scheduled for #195."
+description = "Viola host CLI executable. no_std no_main entry on libc; reads viola.toml, loads configured plugins via ExtensionHost, runs pipeline, emits sorted diagnostics, exits with status."
 repository.workspace = true
 
 [[bin]]
@@ -13,6 +13,9 @@ test = false
 
 [dependencies]
 viola-core = { path = "../viola-core" }
+viola-config = { path = "../viola-config" }
+notko.workspace = true
+arvo.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
