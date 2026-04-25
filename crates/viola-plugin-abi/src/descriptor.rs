@@ -8,6 +8,7 @@
 
 use core::ffi::c_void;
 
+use crate::bytes_ref::BytesRef;
 use crate::capability::CapabilityEntry;
 use crate::config::ConfigSchemaRef;
 use crate::error::AbiStatus;
@@ -17,25 +18,16 @@ use crate::version::{ManifestVersion, PluginVersion};
 
 /// Static identity record for the plugin.
 ///
-/// Carries the human-readable id and display name as `(ptr, len)`
-/// pairs into plugin-owned static memory. `plugin_id` follows the
-/// `org.viola.<role>.<short>` convention but the host treats it as
-/// opaque.
+/// `plugin_id` follows the `org.viola.<role>.<short>` convention but
+/// the host treats it as opaque; equality and ordering are
+/// byte-comparison.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PluginIdentity {
-    pub plugin_id_ptr: *const u8,
-    pub plugin_id_len: usize,
-
-    pub display_name_ptr: *const u8,
-    pub display_name_len: usize,
-
+    pub plugin_id: BytesRef,
+    pub display_name: BytesRef,
     pub plugin_version: PluginVersion,
 }
-
-// SAFETY: plugin-owned static memory.
-unsafe impl Send for PluginIdentity {}
-unsafe impl Sync for PluginIdentity {}
 
 /// Top-level plugin descriptor.
 ///
@@ -52,11 +44,9 @@ unsafe impl Sync for PluginIdentity {}
 /// 4. Configuration: `config_schema`.
 /// 5. Lifecycle: `init_fn`, `shutdown_fn`.
 ///
-/// All `(ptr, len)` slots point at plugin-owned static memory whose
-/// lifetime equals the loaded library. `init_fn` and `shutdown_fn` are
-/// `Option`-wrapped to allow representation as null pointers across
-/// the FFI boundary; absent lifecycle handlers are valid for plugins
-/// with no init/shutdown work.
+/// `init_fn` and `shutdown_fn` are `Option`-wrapped to allow a null
+/// representation across the FFI boundary; absent lifecycle handlers
+/// are valid for plugins with no init/shutdown work.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct PluginDescriptor {
