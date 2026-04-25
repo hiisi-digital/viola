@@ -51,7 +51,11 @@
 use notko::{Maybe, Outcome};
 
 mod parse;
+pub mod issue_pattern;
 
+pub use issue_pattern::{
+    Category, Impact, IssuePattern, IssuePatternError, parse_issue_pattern,
+};
 pub use parse::{ConfigError, parse};
 
 /// Resolved viola configuration with caller-provided fixed geometry.
@@ -109,6 +113,12 @@ pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
     /// The plugin parses its own config from `raw_body` at runtime.
     pub lint_configs: [LintConfigBlock<'a>; MAX_PLUGINS],
     pub lint_configs_len: arvo::USize,
+    /// Severity rules from `[[severity]]` array-of-tables entries.
+    /// Evaluated top-to-bottom against each (issue, file, gate,
+    /// confidence) tuple at runtime; later matches override earlier
+    /// matches (CSS-style "last wins").
+    pub severity_rules: [SeverityRule<'a>; MAX_PLUGINS],
+    pub severity_rules_len: arvo::USize,
 }
 
 /// Per-gate severity threshold. Each field holds the raw severity
@@ -177,6 +187,46 @@ impl LintConfigBlock<'_> {
     };
 }
 
+/// Maximum number of file globs a single `[[severity]]` rule can
+/// carry in its `files = [...]` array. Keeps the rule type bounded
+/// for the no-alloc copy-storage shape.
+pub const SEVERITY_FILES_CAP: usize = 8;
+
+/// One `[[severity]]` rule. Flat shape: applies to diagnostics
+/// matching `issue` (raw pattern), in any of `files` (globs), at
+/// the named `gate` (or every gate when `Maybe::Isnt`), and only
+/// when the diagnostic's confidence is >= `min_confidence`. The
+/// `level` field gives the severity to apply when the rule fires.
+///
+/// The compound shape (`all` / `any` / `not`) is reserved for a
+/// future PR; this struct lands the flat shape.
+#[derive(Copy, Clone)]
+pub struct SeverityRule<'a> {
+    pub issue: Maybe<&'a [u8]>,
+    pub files: [&'a [u8]; SEVERITY_FILES_CAP],
+    pub files_len: arvo::USize,
+    pub gate: Maybe<&'a [u8]>,
+    pub level: Maybe<&'a [u8]>,
+    pub min_confidence: Maybe<arvo::USize>,
+}
+
+impl SeverityRule<'_> {
+    pub const EMPTY: Self = Self {
+        issue: Maybe::Isnt,
+        files: [&[]; SEVERITY_FILES_CAP],
+        files_len: arvo::USize(0),
+        gate: Maybe::Isnt,
+        level: Maybe::Isnt,
+        min_confidence: Maybe::Isnt,
+    };
+}
+
+impl<'a> SeverityRule<'a> {
+    pub fn files_slice(&self) -> &[&'a [u8]] {
+        &self.files[..self.files_len.0]
+    }
+}
+
 impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// Empty config. All slots are absent / zero-length.
     pub const fn empty() -> Self {
@@ -197,6 +247,8 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
             gate_overrides_len: arvo::USize(0),
             lint_configs: [LintConfigBlock::EMPTY; MAX_PLUGINS],
             lint_configs_len: arvo::USize(0),
+            severity_rules: [SeverityRule::EMPTY; MAX_PLUGINS],
+            severity_rules_len: arvo::USize(0),
         }
     }
 }
@@ -230,6 +282,11 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// View the populated `[lint.<lint-id>]` config blocks as a slice.
     pub fn lint_configs_slice(&self) -> &[LintConfigBlock<'_>] {
         &self.lint_configs[..self.lint_configs_len.0]
+    }
+
+    /// View the populated `[[severity]]` rules as a slice.
+    pub fn severity_rules_slice(&self) -> &[SeverityRule<'_>] {
+        &self.severity_rules[..self.severity_rules_len.0]
     }
 }
 
