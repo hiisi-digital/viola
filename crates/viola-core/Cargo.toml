@@ -1,21 +1,13 @@
 [package]
 name = "viola-core"
-version = "0.1.0"
-edition = "2021"
-license = "MPL-2.0"
-description = "Viola host runtime: cdylib plugin loader, lifecycle, and capability dispatch."
-repository = "https://github.com/hiisi-digital/viola"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Viola host runtime: viola-domain layering over hilavitkutin-extensions (cdylib loading, lifecycle, capability dispatch, deterministic diagnostic aggregation)."
+repository.workspace = true
 
 [dependencies]
-anyhow = "1.0"
-ignore = "0.4"
-libloading = "0.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "1.0"
-toml = "0.8"
+hilavitkutin-extensions.workspace = true
+notko.workspace = true
+arvo.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }
-
-[dev-dependencies]
-viola-plugin-abi-macros = { path = "../viola-plugin-abi-macros" }
-viola-test-plugin-fixture = { path = "../viola-test-plugin-fixture" }

@@ -1,13 +1,18 @@
 [package]
 name = "viola-test-plugin-fixture"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 publish = false
-description = "Internal cdylib fixture exercising the v1 plugin ABI for host loader integration tests. Not published."
+description = "Internal cdylib fixture exercising the v1 viola plugin shape against hilavitkutin-extensions. Not published."
+repository.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 [dependencies]
+hilavitkutin-extensions.workspace = true
+hilavitkutin-extensions-macros.workspace = true
+notko.workspace = true
+arvo.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }
-viola-plugin-abi-macros = { path = "../viola-plugin-abi-macros" }

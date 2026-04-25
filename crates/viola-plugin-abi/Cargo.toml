@@ -1,9 +1,12 @@
 [package]
 name = "viola-plugin-abi"
-version = "0.1.0"
-edition = "2024"
-description = "Viola plugin ABI v1: stable C-ABI contracts for runner, grammar, and lint plugins"
-license = "MPL-2.0"
-repository = "https://github.com/orgrinrt/viola"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Viola plugin contract — viola-specific roles, capabilities, vtables, NAM, and diagnostics layered over hilavitkutin-extensions."
+repository.workspace = true
 
 [dependencies]
+hilavitkutin-extensions.workspace = true
+notko.workspace = true
+arvo.workspace = true
