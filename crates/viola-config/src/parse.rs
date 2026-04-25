@@ -31,7 +31,8 @@
 use notko::{Maybe, Outcome};
 
 use crate::{
-    GateOverride, GateThresholds, LintConfigBlock, SeverityRule, ViolaConfig,
+    CompoundOp, GateOverride, GateThresholds, LintConfigBlock, PartialSeverityRule,
+    SEVERITY_COMPOUND_CAP, SeverityRule, ViolaConfig,
     issue_pattern::{IssuePatternError, parse_issue_pattern},
 };
 
@@ -443,6 +444,15 @@ fn parse_severity_entry<'a, const N: usize>(
     key: &'a [u8],
     key_start: usize,
 ) -> Outcome<(), ConfigError> {
+    // Flat-field handlers (issue/files/gate/min_confidence) refuse
+    // to run after a compound key (all/any/not) was already set on
+    // the same rule. set_compound enforces the reverse direction.
+    let is_flat_condition = matches!(key, b"issue" | b"files" | b"gate" | b"min_confidence");
+    if is_flat_condition && matches!(cfg.severity_rules[idx].compound, Maybe::Is(_)) {
+        return Outcome::Err(ConfigError::Unexpected {
+            offset: arvo::USize(key_start),
+        });
+    }
     match key {
         b"issue" => {
             if matches!(cfg.severity_rules[idx].issue, Maybe::Is(_)) {
@@ -553,10 +563,127 @@ fn parse_severity_entry<'a, const N: usize>(
             cfg.severity_rules[idx].min_confidence = Maybe::Is(arvo::USize(n));
             Outcome::Ok(())
         }
+        b"all" | b"any" => {
+            let op = if key == b"all" { CompoundOp::All } else { CompoundOp::Any };
+            parse_compound_array(p, &mut cfg.severity_rules[idx], op, key_start)
+        }
+        b"not" => parse_compound_not(p, &mut cfg.severity_rules[idx], key_start),
         _ => Outcome::Err(ConfigError::UnknownKey {
             offset: arvo::USize(key_start),
         }),
     }
+}
+
+/// Set the compound operator for a rule, rejecting both
+/// double-compound (e.g. `all = ...` then `any = ...`) and the
+/// flat-vs-compound mix (`issue = "..."` alongside `all = ...`).
+fn set_compound<'a>(
+    rule: &mut SeverityRule<'a>,
+    op: CompoundOp,
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    if matches!(rule.compound, Maybe::Is(_)) {
+        return Outcome::Err(ConfigError::DuplicateKey {
+            offset: arvo::USize(key_start),
+        });
+    }
+    if matches!(rule.issue, Maybe::Is(_))
+        || rule.files_len.0 > 0
+        || matches!(rule.gate, Maybe::Is(_))
+        || matches!(rule.min_confidence, Maybe::Is(_))
+    {
+        // Flat fields and compound keys are mutually exclusive.
+        // Surface as Unexpected at the compound key's offset so
+        // the user sees where the violation was introduced.
+        return Outcome::Err(ConfigError::Unexpected {
+            offset: arvo::USize(key_start),
+        });
+    }
+    rule.compound = Maybe::Is(op);
+    Outcome::Ok(())
+}
+
+fn parse_compound_array<'a>(
+    p: &mut Parser<'a>,
+    rule: &mut SeverityRule<'a>,
+    op: CompoundOp,
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    if let Outcome::Err(e) = set_compound(rule, op, key_start) {
+        return Outcome::Err(e);
+    }
+    let opening = p.offset;
+    if !p.consume_byte(b'[') {
+        return Outcome::Err(ConfigError::TypeMismatch {
+            offset: arvo::USize(p.offset),
+        });
+    }
+    loop {
+        p.skip_ws_and_comments();
+        if p.at_end() {
+            return Outcome::Err(ConfigError::UnterminatedArray {
+                offset: arvo::USize(opening),
+            });
+        }
+        if p.peek() == b']' {
+            p.advance();
+            return Outcome::Ok(());
+        }
+        if p.peek() != b'{' {
+            return Outcome::Err(ConfigError::Unexpected {
+                offset: arvo::USize(p.offset),
+            });
+        }
+        if rule.partials_len.0 >= SEVERITY_COMPOUND_CAP {
+            return Outcome::Err(ConfigError::Capacity {
+                offset: arvo::USize(p.offset),
+            });
+        }
+        let slot = rule.partials_len.0;
+        rule.partials[slot] = PartialSeverityRule::EMPTY;
+        if let Outcome::Err(e) = p.parse_inline_partial(&mut rule.partials[slot]) {
+            return Outcome::Err(e);
+        }
+        rule.partials_len = arvo::USize(slot + 1);
+        p.skip_ws_and_comments();
+        if p.consume_byte(b',') {
+            continue;
+        }
+        p.skip_ws_and_comments();
+        if p.at_end() {
+            return Outcome::Err(ConfigError::UnterminatedArray {
+                offset: arvo::USize(opening),
+            });
+        }
+        if p.peek() == b']' {
+            p.advance();
+            return Outcome::Ok(());
+        }
+        return Outcome::Err(ConfigError::Unexpected {
+            offset: arvo::USize(p.offset),
+        });
+    }
+}
+
+fn parse_compound_not<'a>(
+    p: &mut Parser<'a>,
+    rule: &mut SeverityRule<'a>,
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    if let Outcome::Err(e) = set_compound(rule, CompoundOp::Not, key_start) {
+        return Outcome::Err(e);
+    }
+    if p.at_end() || p.peek() != b'{' {
+        return Outcome::Err(ConfigError::TypeMismatch {
+            offset: arvo::USize(p.offset),
+        });
+    }
+    rule.partials[0] = PartialSeverityRule::EMPTY;
+    if let Outcome::Err(e) = p.parse_inline_partial(&mut rule.partials[0]) {
+        return Outcome::Err(e);
+    }
+    rule.partials_len = arvo::USize(1);
+    Outcome::Ok(())
 }
 
 fn is_gate_token(s: &[u8]) -> bool {
@@ -883,16 +1010,168 @@ impl<'a> Parser<'a> {
             self.offset += 1;
         }
         // Reject trailing non-terminator junk (e.g. `2abc`) so a typo
-        // does not silently coerce.
+        // does not silently coerce. Accept whitespace, comment start,
+        // and the inline-table terminators `}` and `,` so integers
+        // inside an inline partial parse without requiring a space
+        // before the closing brace.
         if !self.at_end() {
             let b = self.input[self.offset];
-            if !(b == b' ' || b == b'\t' || b == b'\r' || b == b'\n' || b == b'#') {
+            if !(b == b' '
+                || b == b'\t'
+                || b == b'\r'
+                || b == b'\n'
+                || b == b'#'
+                || b == b'}'
+                || b == b',')
+            {
                 return Outcome::Err(ConfigError::InvalidInteger {
                     offset: arvo::USize(start),
                 });
             }
         }
         Outcome::Ok(value)
+    }
+
+    /// Parse one inline partial-rule table `{ key = value, ... }`
+    /// into the supplied `dst`. Recognised keys: `issue`, `files`
+    /// (string or array), `gate`, `min_confidence`. `level` is not
+    /// permitted in a partial: the parent rule carries the level.
+    fn parse_inline_partial<'b>(
+        &mut self,
+        dst: &'b mut PartialSeverityRule<'a>,
+    ) -> Outcome<(), ConfigError> {
+        let opening = self.offset;
+        if !self.consume_byte(b'{') {
+            return Outcome::Err(ConfigError::TypeMismatch {
+                offset: arvo::USize(self.offset),
+            });
+        }
+        loop {
+            self.skip_ws();
+            // Inline tables disallow newlines per TOML spec; bare
+            // skip_ws (no newline) is the right choice.
+            if self.at_end() {
+                return Outcome::Err(ConfigError::UnterminatedArray {
+                    offset: arvo::USize(opening),
+                });
+            }
+            if self.peek() == b'}' {
+                self.advance();
+                return Outcome::Ok(());
+            }
+            let key_start = self.offset;
+            let key = match self.parse_key() {
+                Outcome::Ok(k) => k,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            self.skip_ws();
+            if !self.consume_byte(b'=') {
+                return Outcome::Err(ConfigError::Unexpected {
+                    offset: arvo::USize(self.offset),
+                });
+            }
+            self.skip_ws();
+            match key {
+                b"issue" => {
+                    if matches!(dst.issue, Maybe::Is(_)) {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(key_start),
+                        });
+                    }
+                    let value_offset = self.offset;
+                    let v = match self.parse_string() {
+                        Outcome::Ok(v) => v,
+                        Outcome::Err(e) => return Outcome::Err(e),
+                    };
+                    if let Outcome::Err(kind) = parse_issue_pattern(v) {
+                        return Outcome::Err(ConfigError::InvalidIssuePattern {
+                            offset: arvo::USize(value_offset),
+                            kind,
+                        });
+                    }
+                    dst.issue = Maybe::Is(v);
+                }
+                b"files" => {
+                    if dst.files_len.0 > 0 {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(key_start),
+                        });
+                    }
+                    if !self.at_end() && self.peek() == b'"' {
+                        let v = match self.parse_string() {
+                            Outcome::Ok(v) => v,
+                            Outcome::Err(e) => return Outcome::Err(e),
+                        };
+                        dst.files[0] = v;
+                        dst.files_len = arvo::USize(1);
+                    } else {
+                        let count = match self.parse_string_array(&mut dst.files) {
+                            Outcome::Ok(n) => n,
+                            Outcome::Err(e) => return Outcome::Err(e),
+                        };
+                        dst.files_len = count;
+                    }
+                }
+                b"gate" => {
+                    if matches!(dst.gate, Maybe::Is(_)) {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(key_start),
+                        });
+                    }
+                    let value_offset = self.offset;
+                    let v = match self.parse_string() {
+                        Outcome::Ok(v) => v,
+                        Outcome::Err(e) => return Outcome::Err(e),
+                    };
+                    if !is_gate_token(v) {
+                        return Outcome::Err(ConfigError::Unexpected {
+                            offset: arvo::USize(value_offset),
+                        });
+                    }
+                    dst.gate = Maybe::Is(v);
+                }
+                b"min_confidence" => {
+                    if matches!(dst.min_confidence, Maybe::Is(_)) {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(key_start),
+                        });
+                    }
+                    let value_offset = self.offset;
+                    let n = match self.parse_integer() {
+                        Outcome::Ok(n) => n,
+                        Outcome::Err(e) => return Outcome::Err(e),
+                    };
+                    if n > 100 {
+                        return Outcome::Err(ConfigError::InvalidInteger {
+                            offset: arvo::USize(value_offset),
+                        });
+                    }
+                    dst.min_confidence = Maybe::Is(arvo::USize(n));
+                }
+                _ => {
+                    return Outcome::Err(ConfigError::UnknownKey {
+                        offset: arvo::USize(key_start),
+                    });
+                }
+            }
+            self.skip_ws();
+            if self.consume_byte(b',') {
+                continue;
+            }
+            self.skip_ws();
+            if self.at_end() {
+                return Outcome::Err(ConfigError::UnterminatedArray {
+                    offset: arvo::USize(opening),
+                });
+            }
+            if self.peek() == b'}' {
+                self.advance();
+                return Outcome::Ok(());
+            }
+            return Outcome::Err(ConfigError::Unexpected {
+                offset: arvo::USize(self.offset),
+            });
+        }
     }
 
     /// Consume one value (string / array of strings / integer) and
@@ -1434,6 +1713,200 @@ level = \"warn\"
             Outcome::Err(e) => e,
         };
         assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    // ----- [[severity]] compound rules -----
+
+    #[test]
+    fn severity_compound_all() {
+        let input = b"\
+[[severity]]
+level = \"warn\"
+all = [
+  { issue = \"duplicate-logic/*\" },
+  { files = \"src/**\" },
+]
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert!(matches!(r.compound, Maybe::Is(crate::CompoundOp::All)));
+        assert_eq!(r.partials_len.0, 2);
+        assert!(matches!(r.partials[0].issue, Maybe::Is(b"duplicate-logic/*")));
+        assert_eq!(r.partials[1].files_len.0, 1);
+        assert_eq!(r.partials[1].files_slice()[0], b"src/**");
+    }
+
+    #[test]
+    fn severity_compound_any() {
+        let input = b"\
+[[severity]]
+level = \"off\"
+any = [
+  { files = \"**/*_test.ts\" },
+  { files = \"**/fixtures/**\" },
+]
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert!(matches!(r.compound, Maybe::Is(crate::CompoundOp::Any)));
+        assert_eq!(r.partials_len.0, 2);
+    }
+
+    #[test]
+    fn severity_compound_not() {
+        let input = b"\
+[[severity]]
+level = \"off\"
+not = { files = \"**/*.generated.ts\" }
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert!(matches!(r.compound, Maybe::Is(crate::CompoundOp::Not)));
+        assert_eq!(r.partials_len.0, 1);
+        assert_eq!(r.partials[0].files_slice()[0], b"**/*.generated.ts");
+    }
+
+    #[test]
+    fn severity_compound_with_min_confidence_inside_partial() {
+        let input = b"\
+[[severity]]
+level = \"warn\"
+all = [
+  { issue = \"*::correctness>=major\", min_confidence = 80 },
+]
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert!(matches!(r.partials[0].min_confidence, Maybe::Is(arvo::USize(80))));
+    }
+
+    #[test]
+    fn severity_compound_partial_files_array() {
+        let input = b"\
+[[severity]]
+level = \"warn\"
+all = [
+  { files = [\"src/**\", \"lib/**\"] },
+]
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert_eq!(r.partials[0].files_len.0, 2);
+    }
+
+    #[test]
+    fn severity_flat_then_compound_fails() {
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nissue = \"*\"\nall = [{ files = \"x\" }]\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Unexpected { .. }));
+    }
+
+    #[test]
+    fn severity_compound_then_flat_fails() {
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ files = \"x\" }]\nissue = \"*\"\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Unexpected { .. }));
+    }
+
+    #[test]
+    fn severity_double_compound_fails() {
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ files = \"x\" }]\nany = [{ files = \"y\" }]\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    #[test]
+    fn severity_compound_unknown_partial_key_fails() {
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ bogus = \"x\" }]\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    #[test]
+    fn severity_compound_capacity_exhausted() {
+        // SEVERITY_COMPOUND_CAP = 4; five entries triggers Capacity.
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [\
+              { files = \"a\" }, { files = \"b\" }, { files = \"c\" },\
+              { files = \"d\" }, { files = \"e\" }]\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Capacity { .. }));
+    }
+
+    #[test]
+    fn severity_compound_integer_no_space_before_brace() {
+        // Regression: `{ min_confidence = 80 }` parsed; `{
+        // min_confidence = 80}` (no space before `}`) used to fail
+        // with InvalidInteger because parse_integer's terminator
+        // set did not include `}`.
+        let cfg = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ min_confidence = 80}]\n",
+        ) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert!(matches!(
+            cfg.severity_rules_slice()[0].partials[0].min_confidence,
+            Maybe::Is(arvo::USize(80))
+        ));
+    }
+
+    #[test]
+    fn severity_compound_integer_no_space_before_comma() {
+        let cfg = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ min_confidence = 80,issue = \"*\" }]\n",
+        ) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let p = &cfg.severity_rules_slice()[0].partials[0];
+        assert!(matches!(p.min_confidence, Maybe::Is(arvo::USize(80))));
+        assert!(matches!(p.issue, Maybe::Is(b"*")));
+    }
+
+    #[test]
+    fn severity_compound_invalid_issue_pattern_fails() {
+        let err = match parse16(
+            b"[[severity]]\nlevel = \"warn\"\nall = [{ issue = \"bogus\" }]\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::InvalidIssuePattern { .. }));
     }
 
     // ----- ts section still works under v2 -----
