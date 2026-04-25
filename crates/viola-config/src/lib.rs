@@ -192,6 +192,56 @@ impl LintConfigBlock<'_> {
 /// for the no-alloc copy-storage shape.
 pub const SEVERITY_FILES_CAP: usize = 8;
 
+/// Maximum number of partial-rule entries in a compound severity
+/// rule's `all = [...]` or `any = [...]` array. Smaller than
+/// SEVERITY_FILES_CAP to keep nested storage bounded.
+pub const SEVERITY_COMPOUND_CAP: usize = 4;
+
+/// Maximum number of file globs in a single partial-rule entry
+/// inside a compound rule. Smaller than the top-level cap; deeply
+/// nested glob lists are rare in practice.
+pub const SEVERITY_PARTIAL_FILES_CAP: usize = 4;
+
+/// The compound boolean operator on a `[[severity]]` rule: `all`,
+/// `any`, or `not`. Mutually exclusive with the rule's flat
+/// `issue` / `files` fields; a rule sets either flat conditions or
+/// a compound, never both.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum CompoundOp {
+    All,
+    Any,
+    Not,
+}
+
+/// One partial rule inside a compound rule's array. Same condition
+/// vocabulary as a flat [`SeverityRule`] minus `level` (the level
+/// lives on the parent rule, not on each partial). Capped at
+/// [`SEVERITY_PARTIAL_FILES_CAP`] file globs.
+#[derive(Copy, Clone)]
+pub struct PartialSeverityRule<'a> {
+    pub issue: Maybe<&'a [u8]>,
+    pub files: [&'a [u8]; SEVERITY_PARTIAL_FILES_CAP],
+    pub files_len: arvo::USize,
+    pub gate: Maybe<&'a [u8]>,
+    pub min_confidence: Maybe<arvo::USize>,
+}
+
+impl PartialSeverityRule<'_> {
+    pub const EMPTY: Self = Self {
+        issue: Maybe::Isnt,
+        files: [&[]; SEVERITY_PARTIAL_FILES_CAP],
+        files_len: arvo::USize(0),
+        gate: Maybe::Isnt,
+        min_confidence: Maybe::Isnt,
+    };
+}
+
+impl<'a> PartialSeverityRule<'a> {
+    pub fn files_slice(&self) -> &[&'a [u8]] {
+        &self.files[..self.files_len.0]
+    }
+}
+
 /// One `[[severity]]` rule. Flat shape: applies to diagnostics
 /// matching `issue` (raw pattern), in any of `files` (globs), at
 /// the named `gate` (or every gate when `Maybe::Isnt`), and only
@@ -208,6 +258,13 @@ pub struct SeverityRule<'a> {
     pub gate: Maybe<&'a [u8]>,
     pub level: Maybe<&'a [u8]>,
     pub min_confidence: Maybe<arvo::USize>,
+    /// Compound operator. When `Maybe::Isnt`, the rule is flat: the
+    /// fields above carry the conditions. When `Maybe::Is(op)`, the
+    /// flat condition fields are mutually exclusive with this and
+    /// the rule's conditions live in `partials`.
+    pub compound: Maybe<CompoundOp>,
+    pub partials: [PartialSeverityRule<'a>; SEVERITY_COMPOUND_CAP],
+    pub partials_len: arvo::USize,
 }
 
 impl SeverityRule<'_> {
@@ -218,12 +275,18 @@ impl SeverityRule<'_> {
         gate: Maybe::Isnt,
         level: Maybe::Isnt,
         min_confidence: Maybe::Isnt,
+        compound: Maybe::Isnt,
+        partials: [PartialSeverityRule::EMPTY; SEVERITY_COMPOUND_CAP],
+        partials_len: arvo::USize(0),
     };
 }
 
 impl<'a> SeverityRule<'a> {
     pub fn files_slice(&self) -> &[&'a [u8]] {
         &self.files[..self.files_len.0]
+    }
+    pub fn partials_slice(&self) -> &[PartialSeverityRule<'a>] {
+        &self.partials[..self.partials_len.0]
     }
 }
 
