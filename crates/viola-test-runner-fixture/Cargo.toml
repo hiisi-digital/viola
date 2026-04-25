@@ -1,0 +1,23 @@
+[package]
+name = "viola-test-runner-fixture"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Internal cdylib fixture exposing CAP_RUNNER_EXECUTE_SCOPE. Pairs with viola-test-plugin-fixture to exercise pipeline::run end-to-end."
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hilavitkutin-extensions.workspace = true
+hilavitkutin-extensions-macros.workspace = true
+notko.workspace = true
+arvo.workspace = true
+viola-plugin-abi = { path = "../viola-plugin-abi" }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", default-features = false }
+
+[build-dependencies]

@@ -15,3 +15,7 @@ viola-plugin-abi = { path = "../viola-plugin-abi" }
 [[test]]
 name = "host_loader"
 path = "tests/host_loader.rs"
+
+[[test]]
+name = "pipeline_e2e"
+path = "tests/pipeline_e2e.rs"
