@@ -356,9 +356,19 @@ Once this memo lands, implementation splits into:
    bytes / TOML subtree handed to plugins via `LintConfig`.
 3. **PR-C**: `[[severity]]` rules, both flat and compound. Issue
    pattern parser. `min_confidence` field.
-4. **PR-D**: viola-cli wires the new config through the runtime:
-   gate threshold against captured severities; severity-rule
-   evaluation in DiagnosticSink; preset inheritance lookup.
+4. **PR-D**: viola-cli wires the new config through the runtime,
+   sliced as it lands:
+   - **PR-D-1** (landed): v2 plugin loading with role classification
+     by descriptor capability.
+   - **PR-D-2** (landed): `--gate <name>` argument + gate-threshold
+     filtering against captured severities. `[gates.<lint>].<gate>`
+     -> `[gates].<gate>` -> built-in `error` chain via
+     `ViolaConfig::resolve_gate_threshold`.
+   - **PR-D-3**: severity-rule evaluation in `DiagnosticSink` (the
+     `[[severity]]` table override pass).
+   - **PR-D-4**: pass `[lint.<id>]` raw bodies through to plugins
+     via `LintConfig`.
+   - **PR-D-5**: preset inheritance resolution.
 5. **PR-E**: docs + examples + tests against fixture configs ported
    from the TS-side example.
 

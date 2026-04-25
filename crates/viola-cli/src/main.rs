@@ -76,7 +76,8 @@ pub extern "C" fn main(_argc: i32, _argv: *const *const u8) -> i32 {
 #[cfg(unix)]
 #[unsafe(no_mangle)]
 pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
-    let config_path = resolve_config_path(argc, argv);
+    let args = parse_args(argc, argv);
+    let config_path = args.config_path;
 
     let mut config_buf = [0u8; MAX_CONFIG_BYTES];
     let bytes_read = io::read_file(config_path, &mut config_buf);
@@ -105,11 +106,12 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     // walk `plugins = [...]` and categorise each loaded plugin by
     // descriptor capability (runner / lint). v2 ignores the v1-only
     // `runner` / `grammars` / `lints` keys (the parser already
-    // rejects them under version=2). [[severity]] / [gates] / [lint]
-    // are parsed but not yet evaluated; full semantic wiring lands
-    // in subsequent #221 PR-D slices.
+    // rejects them under version=2). `[gates]` / `[gates.<lint>]`
+    // are evaluated when `--gate <name>` is supplied (PR-D-2);
+    // `[[severity]]` and `[lint.<id>]` plugin-config wiring lands
+    // in PR-D-3 / PR-D-4.
     if matches!(cfg.version, notko::Maybe::Is(arvo::USize(2))) {
-        return run_v2(&cfg);
+        return run_v2(&cfg, args.gate);
     }
 
     // Pure-TS path with explicit viola.toml [ts] but no Rust plugins:
@@ -312,11 +314,16 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
 ///   "lint-only" runs that auto-synthesise an empty NAM, but that is
 ///   #221 PR-D follow-up scope; today, no runner means no work.
 ///
-/// `[[severity]]` / `[gates]` / `[lint.<id>]` are parsed but not yet
-/// evaluated. Diagnostics are emitted at their plugin-declared
-/// severity; the gate threshold check is the next slice.
+/// `[gates]` / `[gates.<lint>]` are evaluated when `gate` is
+/// `Maybe::Is(<name>)` (PR-D-2); without a `--gate` flag, exit-code
+/// behaviour matches v1 (any captured diagnostic flips to
+/// `EXIT_DIAG`). `[[severity]]` rules and `[lint.<id>]` plugin
+/// configs are still parsed-only; PR-D-3 / PR-D-4 wire those.
 #[cfg(unix)]
-fn run_v2<'a>(cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
+fn run_v2<'a>(
+    cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>,
+    gate: notko::Maybe<&[u8]>,
+) -> i32 {
     let host_caps: &'static [CapabilityId] = &[];
     let host = ExtensionHost::new(host_caps);
 
@@ -463,7 +470,23 @@ fn run_v2<'a>(cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
             io::eprintln(b"viola-cli: one or more lints failed during run");
         }
 
-        if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+        // Gate-threshold filtering (PR-D-2). When `--gate <name>` is
+        // present, walk captured diagnostics and count how many block
+        // the named gate per the resolution chain in
+        // docs/VIOLA-TOML-V2-SCHEMA.md §"Gate resolution model":
+        // `[gates.<plugin_id>].<gate>` -> `[gates].<gate>` -> built-in
+        // "error" default. A diagnostic blocks iff its severity index
+        // is <= the threshold's severity index (smaller = more
+        // severe). Without `--gate`, fall back to v1 semantics: any
+        // captured diagnostic flips the exit code.
+        match gate {
+            notko::Maybe::Is(g) => {
+                if sink.count_blocking(cfg, g) > 0 { EXIT_DIAG } else { EXIT_OK }
+            }
+            notko::Maybe::Isnt => {
+                if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+            }
+        }
     };
 
     drop_v2_holder(&mut holder, loaded);
@@ -471,7 +494,10 @@ fn run_v2<'a>(cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
 }
 
 #[cfg(not(unix))]
-fn run_v2<'a>(_cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
+fn run_v2<'a>(
+    _cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>,
+    _gate: notko::Maybe<&[u8]>,
+) -> i32 {
     io::eprintln(b"viola-cli: v2 plugin loading requires unix");
     EXIT_PLUGIN
 }
@@ -492,22 +518,98 @@ fn drop_v2_holder(
     }
 }
 
+/// Parsed CLI arguments. The host has exactly two flag-shaped inputs
+/// today: a positional config-path (defaults to `./viola.toml`) and
+/// `--gate <name>` (defaults to absent, meaning "no gate-threshold
+/// filter; any captured diagnostic flips the exit code"). The flag
+/// may appear before or after the positional argument.
+struct ParsedArgs {
+    config_path: &'static [u8],
+    gate: notko::Maybe<&'static [u8]>,
+}
+
 #[cfg(unix)]
-fn resolve_config_path(argc: i32, argv: *const *const u8) -> &'static [u8] {
-    if argc >= 2 && !argv.is_null() {
-        // SAFETY: argv[1] points to a process-lifetime null-terminated
-        // C-string when argc >= 2. We treat it as such and find the
-        // length by scanning to the null byte (cap at MAX_PATH_BYTES).
-        unsafe {
-            let p1 = *argv.add(1);
-            if !p1.is_null() {
-                if let Some(slice) = c_str_with_nul(p1) {
-                    return slice;
-                }
-            }
-        }
+fn parse_args(argc: i32, argv: *const *const u8) -> ParsedArgs {
+    let mut config_path: &'static [u8] = DEFAULT_CONFIG_PATH;
+    let mut gate: notko::Maybe<&'static [u8]> = notko::Maybe::Isnt;
+    let mut config_seen = false;
+
+    if argc < 2 || argv.is_null() {
+        return ParsedArgs { config_path, gate };
     }
-    DEFAULT_CONFIG_PATH
+
+    let n = argc as usize;
+    let mut i = 1usize;
+    while i < n {
+        // SAFETY: argv[i] is a process-lifetime null-terminated
+        // C-string for i in [0, argc). We resolve it to a borrowed
+        // 'static slice. argv-resident strings are guaranteed to
+        // outlive every borrow that escapes from main().
+        let pi = unsafe { *argv.add(i) };
+        if pi.is_null() {
+            i += 1;
+            continue;
+        }
+        let arg = match unsafe { c_str_with_nul(pi) } {
+            Some(s) => s,
+            None => {
+                i += 1;
+                continue;
+            }
+        };
+        // c_str_with_nul includes the trailing NUL; strip it for the
+        // flag-name comparison, but keep the NUL-terminated form for
+        // anything that needs to feed back into libc later.
+        let arg_no_nul = match arg.last() {
+            Some(&0) => &arg[..arg.len() - 1],
+            _ => arg,
+        };
+
+        if arg_no_nul == b"--gate" {
+            // Next argv slot is the gate value. Keep it NUL-terminated
+            // for symmetry, but strip on store (downstream comparisons
+            // run against bare bytes).
+            i += 1;
+            if i >= n {
+                io::eprintln(b"viola-cli: --gate requires a value");
+                break;
+            }
+            let pj = unsafe { *argv.add(i) };
+            if pj.is_null() {
+                io::eprintln(b"viola-cli: --gate requires a value");
+                i += 1;
+                continue;
+            }
+            if let Some(s) = unsafe { c_str_with_nul(pj) } {
+                let stripped = match s.last() {
+                    Some(&0) => &s[..s.len() - 1],
+                    _ => s,
+                };
+                gate = notko::Maybe::Is(stripped);
+            }
+            i += 1;
+            continue;
+        }
+
+        // Anything else is the positional config path. First wins;
+        // a second positional is silently ignored (matches typical
+        // CLI behaviour and keeps the parser branch-free).
+        if !config_seen {
+            config_path = arg;
+            config_seen = true;
+        }
+        i += 1;
+    }
+
+    ParsedArgs { config_path, gate }
+}
+
+#[cfg(not(unix))]
+fn parse_args(_argc: i32, _argv: *const *const u8) -> ParsedArgs {
+    ParsedArgs {
+        config_path: DEFAULT_CONFIG_PATH,
+        gate: notko::Maybe::Isnt,
+    }
 }
 
 const DEFAULT_CONFIG_PATH: &[u8] = b"./viola.toml\0";
@@ -772,6 +874,35 @@ impl CaptureSink {
         self.count
     }
 
+    /// Count diagnostics that block the named `gate` per the v2
+    /// gate-resolution model. For each captured diagnostic, resolve
+    /// its effective threshold via
+    /// `[gates.<plugin_id>].<gate>` -> `[gates].<gate>` -> `"error"`,
+    /// then compare the diagnostic's severity index to the threshold
+    /// index (see [`severity_index`] / [`threshold_index`]). A
+    /// diagnostic blocks iff its index is `<=` the threshold index.
+    fn count_blocking<'a, const N: usize>(
+        &self,
+        cfg: &viola_config::ViolaConfig<'a, N>,
+        gate: &[u8],
+    ) -> usize {
+        let n = self.count;
+        let mut blocking = 0usize;
+        let mut k = 0;
+        while k < n {
+            // SAFETY: slot k was populated; arena-borrowed BytesRefs
+            // live as long as &self.
+            let d: &Diagnostic = unsafe { self.items[k].assume_init_ref() };
+            let plugin_id = bytes_ref_as_slice(&d.plugin_id);
+            let threshold = cfg.resolve_gate_threshold(plugin_id, gate);
+            if blocks_at_threshold(d.severity, threshold) {
+                blocking += 1;
+            }
+            k += 1;
+        }
+        blocking
+    }
+
     fn sort(&mut self) {
         let n = self.count;
         // SAFETY: slots [0..n) were populated via push. The Diagnostic
@@ -944,3 +1075,67 @@ fn severity_label(s: viola_core::DiagnosticSeverity) -> &'static [u8] {
         viola_core::DiagnosticSeverity::Error => b"error",
     }
 }
+
+/// Borrow the bytes a [`BytesRef`] points at, as a `&[u8]`. Empty /
+/// null-data refs return `&[]`.
+fn bytes_ref_as_slice(b: &BytesRef) -> &[u8] {
+    if b.data.is_null() || b.len.0 == 0 {
+        return &[];
+    }
+    // SAFETY: BytesRef in CaptureSink slots is arena-backed (see
+    // `copy_bytes_ref`); the pointer is valid for at least len bytes
+    // for as long as the sink lives.
+    unsafe { core::slice::from_raw_parts(b.data, b.len.0) }
+}
+
+/// Severity ordering per `docs/VIOLA-TOML-V2-SCHEMA.md`: smaller
+/// index = more severe. The runtime today only emits `Info` / `Warn`
+/// / `Error`; the threshold tokens add `hint` and `off` (and the
+/// short-circuit-only `skip`).
+fn severity_index(s: viola_core::DiagnosticSeverity) -> u8 {
+    match s {
+        viola_core::DiagnosticSeverity::Error => 0,
+        viola_core::DiagnosticSeverity::Warn => 1,
+        viola_core::DiagnosticSeverity::Info => 2,
+    }
+}
+
+/// Sentinel index used by [`threshold_index`] for the `"skip"`
+/// threshold token, which the schema documents as "never blocks".
+/// Any value larger than the largest real severity index works;
+/// `u8::MAX` makes the "never blocks" branch obvious at the
+/// comparison site.
+const SKIP_SENTINEL: u8 = u8::MAX;
+
+/// Severity index for a threshold token (e.g. `b"warn"`). Unknown
+/// tokens fall back to `error`'s index, which is the conservative
+/// choice (a typo'd threshold lets the most severe issues through
+/// rather than silently downgrading the gate). Returns
+/// [`SKIP_SENTINEL`] for `"skip"`.
+fn threshold_index(token: &[u8]) -> u8 {
+    match token {
+        b"error" => 0,
+        b"warn" => 1,
+        b"info" => 2,
+        b"hint" => 3,
+        b"off" => 4,
+        b"skip" => SKIP_SENTINEL,
+        _ => 0,
+    }
+}
+
+/// Decide whether a diagnostic at `sev` blocks given the threshold
+/// `token`. Smaller index = more severe; blocks iff
+/// `sev_idx <= threshold_idx`. The [`SKIP_SENTINEL`] case never
+/// blocks.
+fn blocks_at_threshold(
+    sev: viola_core::DiagnosticSeverity,
+    token: &[u8],
+) -> bool {
+    let t = threshold_index(token);
+    if t == SKIP_SENTINEL {
+        return false;
+    }
+    severity_index(sev) <= t
+}
+
