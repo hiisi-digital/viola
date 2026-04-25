@@ -1,9 +1,9 @@
 [package]
-name = "viola-bridge-deno"
+name = "viola-deno-runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Viola lint plugin that embeds a deno_core JsRuntime and bridges TS lint logic into the v1 plugin ABI. Self-contained cdylib; no external deno binary required."
+description = "Viola plugin that embeds a deno_core JsRuntime and exposes the v1 runner / grammar / lint capabilities. Self-contained cdylib; no external deno binary required."
 repository.workspace = true
 
 [lib]

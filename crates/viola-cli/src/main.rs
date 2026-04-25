@@ -90,11 +90,24 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         }
     };
 
-    let runner_path = match cfg.runner {
-        notko::Maybe::Is(p) => p,
-        notko::Maybe::Isnt => {
-            io::eprintln(b"viola-cli: viola.toml is missing required `runner` key");
-            return EXIT_CONFIG;
+    // Resolve plugin loading strategy. When `[ts]` is present, the
+    // user opts into the embedded deno runtime: it acts as runner +
+    // grammar + lint, sourced from the sibling `viola-deno-runtime`
+    // cdylib. The runtime stays opt-in so plain Rust-plugin setups do
+    // not pay the V8 init cost.
+    let ts_active = matches!(cfg.ts_config, notko::Maybe::Is(_));
+
+    let runner_path: &[u8] = if ts_active {
+        TS_RUNTIME_DYLIB
+    } else {
+        match cfg.runner {
+            notko::Maybe::Is(p) => p,
+            notko::Maybe::Isnt => {
+                io::eprintln(
+                    b"viola-cli: viola.toml is missing required `runner` key (or a `[ts]` section)",
+                );
+                return EXIT_CONFIG;
+            }
         }
     };
 
@@ -114,7 +127,18 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     // populated up to lint_count, then borrowed as `[&Extension]` for
     // pipeline::run. We rely on Drop running in reverse-declaration
     // order at scope exit to honour shutdown LIFO.
-    let lint_paths = cfg.lints_slice();
+    //
+    // When `[ts]` is active, the deno runtime is loaded once as the
+    // runner and (here) once again as a lint slot. Two Extension
+    // handles refer to the same dylib, but each gets its own
+    // descriptor + capability lookup; this keeps the v1 dispatch path
+    // uniform without giving the runner double duty.
+    let ts_lint: [&[u8]; 1] = [TS_RUNTIME_DYLIB];
+    let lint_paths: &[&[u8]] = if ts_active {
+        &ts_lint[..]
+    } else {
+        cfg.lints_slice()
+    };
     let lint_count = lint_paths.len();
     let mut lint_holder: [core::mem::MaybeUninit<viola_core::Extension>;
         MAX_PLUGINS] =
@@ -162,7 +186,18 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
             )
         };
 
-        let configs = [LintConfig::EMPTY; MAX_PLUGINS];
+        let mut configs = [LintConfig::EMPTY; MAX_PLUGINS];
+        if ts_active && loaded_lints > 0 {
+            // Pass the user's viola.config.ts path through the lint
+            // config bytes. Deno runtime parses it inside V8 as the
+            // module specifier to resolve and execute (PR-B/C).
+            if let notko::Maybe::Is(ts_path) = cfg.ts_config {
+                configs[0] = LintConfig {
+                    data: ts_path.as_ptr(),
+                    len: arvo::USize(ts_path.len()),
+                };
+            }
+        }
 
         let scope = RunScope {
             workspace_root: BytesRef::EMPTY,
@@ -235,6 +270,17 @@ fn resolve_config_path(argc: i32, argv: *const *const u8) -> &'static [u8] {
 }
 
 const DEFAULT_CONFIG_PATH: &[u8] = b"./viola.toml\0";
+
+/// Sibling dylib name viola-cli auto-loads when `[ts]` is present.
+/// Resolved by the OS loader against rpath / DYLD_LIBRARY_PATH /
+/// LD_LIBRARY_PATH; in a normal install this lives next to the
+/// `viola` executable.
+#[cfg(target_os = "macos")]
+const TS_RUNTIME_DYLIB: &[u8] = b"libviola_deno_runtime.dylib\0";
+#[cfg(all(unix, not(target_os = "macos")))]
+const TS_RUNTIME_DYLIB: &[u8] = b"libviola_deno_runtime.so\0";
+#[cfg(not(unix))]
+const TS_RUNTIME_DYLIB: &[u8] = b"viola_deno_runtime.dll\0";
 
 /// Convert a libc-supplied null-terminated C-string pointer into a
 /// `'static` borrowed byte slice INCLUDING the trailing null. Returns
