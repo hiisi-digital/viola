@@ -30,7 +30,7 @@
 
 use notko::{Maybe, Outcome};
 
-use crate::{GateOverride, GateThresholds, ViolaConfig};
+use crate::{GateOverride, GateThresholds, LintConfigBlock, ViolaConfig};
 
 /// Diagnostics for a parse failure.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -64,6 +64,13 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
     p.skip_ws_and_comments();
     while !p.at_end() {
         if p.peek() == b'[' {
+            // Finalise the previous lint-config block's raw_body span
+            // before transitioning to the new section. The body
+            // ends just before the new section header's `[`.
+            if let Section::Lint { idx, body_start } = current {
+                cfg.lint_configs[idx].raw_body =
+                    trim_trailing_ws(&input[body_start..p.offset]);
+            }
             current = match parse_section_header::<MAX_PLUGINS>(&mut p, &mut cfg, &mut seen) {
                 Outcome::Ok(s) => s,
                 Outcome::Err(e) => return Outcome::Err(e),
@@ -77,6 +84,11 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
             return Outcome::Err(e);
         }
         p.skip_ws_and_comments();
+    }
+    // EOF transition: finalise any open lint-config block.
+    if let Section::Lint { idx, body_start } = current {
+        cfg.lint_configs[idx].raw_body =
+            trim_trailing_ws(&input[body_start..input.len()]);
     }
 
     if cfg.version_is_v2() {
@@ -139,6 +151,15 @@ enum Section {
     /// into `cfg.gate_overrides[idx]`.
     GateOverride {
         idx: usize,
+    },
+    /// Inside a `[lint.<lint-id>]` plugin-config sub-table. `idx`
+    /// points into `cfg.lint_configs[idx]`; `body_start` is the byte
+    /// offset just after the closing `]` of the section header,
+    /// captured so the caller can record `raw_body` when the section
+    /// closes.
+    Lint {
+        idx: usize,
+        body_start: usize,
     },
 }
 
@@ -226,10 +247,52 @@ fn parse_section_header<'a, const MAX_PLUGINS: usize>(
             cfg.gate_overrides_len = arvo::USize(idx + 1);
             Outcome::Ok(Section::GateOverride { idx })
         }
+        (b"lint", Maybe::Is(lint_id)) => {
+            let mut i = 0;
+            while i < cfg.lint_configs_len.0 {
+                if cfg.lint_configs[i].lint_id == lint_id {
+                    return Outcome::Err(ConfigError::DuplicateKey {
+                        offset: arvo::USize(header_offset),
+                    });
+                }
+                i += 1;
+            }
+            if cfg.lint_configs_len.0 >= MAX_PLUGINS {
+                return Outcome::Err(ConfigError::Capacity {
+                    offset: arvo::USize(header_offset),
+                });
+            }
+            let idx = cfg.lint_configs_len.0;
+            cfg.lint_configs[idx] = LintConfigBlock {
+                lint_id,
+                raw_body: &[],
+            };
+            cfg.lint_configs_len = arvo::USize(idx + 1);
+            // body_start is the offset just past the `]` consumed
+            // above. The end-of-section finaliser writes raw_body
+            // when the next section header (or EOF) is reached.
+            Outcome::Ok(Section::Lint { idx, body_start: p.offset })
+        }
         _ => Outcome::Err(ConfigError::UnknownKey {
             offset: arvo::USize(parent_offset),
         }),
     }
+}
+
+/// Trim trailing ASCII whitespace from a byte slice. Used to strip
+/// blank lines between a `[lint.<id>]` body and the next section
+/// header so the captured `raw_body` does not carry trailing newlines.
+fn trim_trailing_ws(s: &[u8]) -> &[u8] {
+    let mut end = s.len();
+    while end > 0 {
+        let b = s[end - 1];
+        if b == b' ' || b == b'\t' || b == b'\r' || b == b'\n' {
+            end -= 1;
+        } else {
+            break;
+        }
+    }
+    &s[..end]
 }
 
 fn parse_entry<'a, const MAX_PLUGINS: usize>(
@@ -264,11 +327,18 @@ fn parse_entry<'a, const MAX_PLUGINS: usize>(
             let mut build_seen = matches!(cfg.gate_overrides[idx].thresholds.build, Maybe::Is(_));
             let mut push_seen = matches!(cfg.gate_overrides[idx].thresholds.push, Maybe::Is(_));
             let dst = &mut cfg.gate_overrides[idx].thresholds;
-            let res = parse_gate_entry(
+            parse_gate_entry(
                 p, dst, key, key_start,
                 &mut commit_seen, &mut build_seen, &mut push_seen,
-            );
-            res
+            )
+        }
+        Section::Lint { .. } => {
+            // The plugin owns this body. The parser only validates
+            // that the value is structurally well-formed, then
+            // discards the parsed result; raw_body is what the
+            // plugin sees at runtime.
+            let _ = key; // accept any key
+            p.skip_value()
         }
         Section::Root => parse_root_entry(p, cfg, seen, key, key_start),
     }
@@ -602,6 +672,50 @@ impl<'a> Parser<'a> {
         Outcome::Ok(value)
     }
 
+    /// Consume one value (string / array of strings / integer) and
+    /// discard it. Used for `[lint.<id>]` body entries where the
+    /// parser only validates structure; the plugin reads `raw_body`
+    /// to extract its own typed values.
+    fn skip_value(&mut self) -> Outcome<(), ConfigError> {
+        if self.at_end() {
+            return Outcome::Err(ConfigError::Unexpected {
+                offset: arvo::USize(self.offset),
+            });
+        }
+        match self.peek() {
+            b'"' => {
+                let _ = match self.parse_string() {
+                    Outcome::Ok(v) => v,
+                    Outcome::Err(e) => return Outcome::Err(e),
+                };
+                Outcome::Ok(())
+            }
+            b'[' => {
+                // Array of strings; reuse parse_string_array against
+                // a stack-local discard buffer. 32 entries is more
+                // than any plugin config has any business expressing
+                // per key in v1; raise if a plugin needs more.
+                let mut discard: [&[u8]; 32] = [&[]; 32];
+                match self.parse_string_array(&mut discard) {
+                    Outcome::Ok(_) => Outcome::Ok(()),
+                    Outcome::Err(e) => Outcome::Err(e),
+                }
+            }
+            b => {
+                if b.is_ascii_digit() {
+                    match self.parse_integer() {
+                        Outcome::Ok(_) => Outcome::Ok(()),
+                        Outcome::Err(e) => Outcome::Err(e),
+                    }
+                } else {
+                    Outcome::Err(ConfigError::Unexpected {
+                        offset: arvo::USize(self.offset),
+                    })
+                }
+            }
+        }
+    }
+
     fn parse_string_array(
         &mut self,
         out: &mut [&'a [u8]],
@@ -675,6 +789,16 @@ mod tests {
 
     fn parse16<'a>(s: &'a [u8]) -> Outcome<ViolaConfig<'a, 16>, ConfigError> {
         parse::<16>(s)
+    }
+
+    fn contains_seq(haystack: &[u8], needle: &[u8]) -> bool {
+        if needle.is_empty() {
+            return true;
+        }
+        if needle.len() > haystack.len() {
+            return false;
+        }
+        haystack.windows(needle.len()).any(|w| w == needle)
     }
 
     // ----- v1 regressions -----
@@ -958,6 +1082,112 @@ commit = \"error\"
     }
 
     // ----- ts section still works under v2 -----
+
+    // ----- [lint.<id>] plugin config blocks -----
+
+    #[test]
+    fn lint_block_captures_raw_body() {
+        let input = b"\
+[lint.duplicate-logic]
+ignoreFunctions = [\"impactCond\", \"categoryCond\"]
+threshold = 80
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.lint_configs_len.0, 1);
+        let block = &cfg.lint_configs_slice()[0];
+        assert_eq!(block.lint_id, b"duplicate-logic");
+        // raw_body is the slice from after the `]` of the section
+        // header through to EOF, trimmed of trailing whitespace.
+        assert!(block.raw_body.starts_with(b"\nignoreFunctions"));
+        assert!(block.raw_body.ends_with(b"threshold = 80"));
+    }
+
+    #[test]
+    fn lint_block_terminates_on_next_section_header() {
+        let input = b"\
+[lint.first]
+a = \"x\"
+
+[lint.second]
+b = \"y\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.lint_configs_len.0, 2);
+        let first = &cfg.lint_configs_slice()[0];
+        assert_eq!(first.lint_id, b"first");
+        assert!(contains_seq(first.raw_body, b"a = \"x\""));
+        assert!(!contains_seq(first.raw_body, b"b = \"y\""));
+        let second = &cfg.lint_configs_slice()[1];
+        assert_eq!(second.lint_id, b"second");
+        assert!(contains_seq(second.raw_body, b"b = \"y\""));
+    }
+
+    #[test]
+    fn lint_block_alongside_gates_and_ts() {
+        let input = b"\
+[viola]
+version = 2
+
+[gates]
+commit = \"warn\"
+
+[lint.foo]
+opt = \"bar\"
+
+[ts]
+config = \"viola.config.ts\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.lint_configs_len.0, 1);
+        assert_eq!(cfg.lint_configs_slice()[0].lint_id, b"foo");
+        assert!(matches!(cfg.gates.commit, Maybe::Is(b"warn")));
+        assert!(matches!(cfg.ts_config, Maybe::Is(b"viola.config.ts")));
+    }
+
+    #[test]
+    fn duplicate_lint_block_fails() {
+        let input = b"\
+[lint.foo]
+a = \"x\"
+
+[lint.foo]
+b = \"y\"
+";
+        let err = match parse16(input) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    #[test]
+    fn lint_block_validates_value_shape() {
+        // A bare token (not a string / array / integer) is rejected.
+        let input = b"[lint.foo]\nbogus = bareword\n";
+        let err = match parse16(input) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Unexpected { .. }));
+    }
+
+    #[test]
+    fn lint_block_accepts_integer_value() {
+        let cfg = match parse16(b"[lint.foo]\nthreshold = 42\n") {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.lint_configs_slice()[0].lint_id, b"foo");
+    }
 
     #[test]
     fn ts_section_compatible_with_v2() {

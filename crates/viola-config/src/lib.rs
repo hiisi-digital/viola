@@ -101,6 +101,14 @@ pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
     /// `gates`, then to the runtime built-in default.
     pub gate_overrides: [GateOverride<'a>; MAX_PLUGINS],
     pub gate_overrides_len: arvo::USize,
+    /// Per-lint plugin-defined config blocks. Each entry corresponds
+    /// to a `[lint.<lint-id>]` sub-table. The body is captured as a
+    /// raw byte slice from the input; the parser validates the keys
+    /// are well-formed `key = value` pairs (with string / array /
+    /// integer values) but does not interpret the keys themselves.
+    /// The plugin parses its own config from `raw_body` at runtime.
+    pub lint_configs: [LintConfigBlock<'a>; MAX_PLUGINS],
+    pub lint_configs_len: arvo::USize,
 }
 
 /// Per-gate severity threshold. Each field holds the raw severity
@@ -140,6 +148,35 @@ impl GateOverride<'_> {
     };
 }
 
+/// One `[lint.<lint-id>]` plugin-config sub-table. The runtime hands
+/// `raw_body` to the matching plugin's `lint_evaluate` capability via
+/// `LintConfig`. The parser validates the body is structurally
+/// `key = value` pairs whose values are strings / arrays of strings /
+/// integers, but does not interpret the keys.
+///
+/// Asymmetry note: unlike `[ts]` / `[viola]` / `[gates]` which
+/// reject duplicate keys at parse time, `[lint.<id>]` bodies do
+/// not. Two entries with the same key both end up in `raw_body`,
+/// and the plugin's own parser decides how to handle them. Most
+/// TOML parsers reject duplicate top-level keys, so a plugin
+/// using a standard parser will surface the error at runtime; if
+/// a plugin's parser is permissive (e.g. last-wins), the user
+/// gets that semantic without warning. Plugin authors should
+/// either reject duplicates (the conservative choice) or
+/// document their permissiveness.
+#[derive(Copy, Clone)]
+pub struct LintConfigBlock<'a> {
+    pub lint_id: &'a [u8],
+    pub raw_body: &'a [u8],
+}
+
+impl LintConfigBlock<'_> {
+    pub const EMPTY: Self = Self {
+        lint_id: &[],
+        raw_body: &[],
+    };
+}
+
 impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// Empty config. All slots are absent / zero-length.
     pub const fn empty() -> Self {
@@ -158,6 +195,8 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
             gates: GateThresholds::EMPTY,
             gate_overrides: [GateOverride::EMPTY; MAX_PLUGINS],
             gate_overrides_len: arvo::USize(0),
+            lint_configs: [LintConfigBlock::EMPTY; MAX_PLUGINS],
+            lint_configs_len: arvo::USize(0),
         }
     }
 }
@@ -186,6 +225,11 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// View the populated `[gates.<lint-id>]` overrides as a slice.
     pub fn gate_overrides_slice(&self) -> &[GateOverride<'_>] {
         &self.gate_overrides[..self.gate_overrides_len.0]
+    }
+
+    /// View the populated `[lint.<lint-id>]` config blocks as a slice.
+    pub fn lint_configs_slice(&self) -> &[LintConfigBlock<'_>] {
+        &self.lint_configs[..self.lint_configs_len.0]
     }
 }
 
