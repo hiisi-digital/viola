@@ -22,7 +22,7 @@ use crate::bytes_ref::BytesRef;
 /// non-`Ok` status into a [`StructuredError`] alongside the originating
 /// plugin id and capability id for actionable diagnostics.
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AbiStatus {
     Ok = 0,
     /// Initialization could not complete; plugin is unusable.
@@ -51,7 +51,7 @@ impl AbiStatus {
 ///
 /// `#[repr(u32)]` so it can travel through structured error envelopes.
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PluginError {
     /// Required exported symbol was missing from the library.
     DescriptorMissing = 1,

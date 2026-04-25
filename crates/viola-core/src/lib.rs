@@ -1,114 +1,94 @@
-//! Viola Core (Host)
+//! # Viola Core (Host Runtime)
 //!
-//! This crate contains the host loader and execution engine for Viola.
-//! It loads plugins (compiled as cdylibs) and orchestrates runners, grammars, and lints.
+//! `viola-core` is the in-process host runtime for the Viola plugin
+//! ABI v1. It opens native plugin cdylibs, validates their descriptors
+//! against the host contract, drives the seven-stage lifecycle from
+//! `docs/PLUGIN-ABI-V1-DESIGN.md` §7.1, dispatches capability calls
+//! through the typed v1 vtables, and aggregates lint diagnostics into a
+//! deterministic-keyed list per §10.
+//!
+//! ## Public surface
+//!
+//! - [`Host`] is the embedder entry point. It owns the
+//!   [`HostContext`] and the loaded plugin set.
+//! - [`HostError`] wraps [`viola_plugin_abi::PluginError`] with
+//!   operational context (plugin id, library path, retryable flag).
+//! - [`OwnedDiagnostic`] is the host-owned, post-aggregation diagnostic
+//!   shape returned by [`Host::run`].
+//! - [`resolution`] exposes the §16.3 plugin path precedence helpers.
+//!
+//! ## Loading flow
+//!
+//! ```text
+//! Host::new(ctx)
+//!   .load_plugin(path)?    // open cdylib + validate descriptor
+//!   .load_plugin(path)?
+//! host.validate_set()?     // cross-plugin coherence
+//! host.init_all()?         // call init_fn on each
+//! let diags = host.run(scope)?;  // runner once → lint fan-out → sort
+//! host.shutdown_all()?     // call shutdown_fn in reverse order
+//! ```
+//!
+//! ## Safety
+//!
+//! `viola-core` interacts with native dylibs through `libloading`.
+//! Loading a dylib executes plugin code; the host trusts the plugin
+//! source. All FFI boundaries threading raw pointers through the
+//! `*mut c_void` host context are documented `# Safety` sections on
+//! the relevant functions.
+//!
+//! ## v1 scope notes
+//!
+//! Several features named in the design doc are intentionally minimal
+//! at v1 and ship as TODO follow-ups:
+//!
+//! - Per-lint config resolution (§8): resolved-config-to-bytes is
+//!   stubbed empty; populated by #221 (viola.toml schema).
+//! - NAM payload concrete shape (§9.2): the v1 contract crate reserves
+//!   the version axis and an opaque payload carrier; concrete shapes
+//!   land in a minor revision.
+//! - File crawl + `RunScope` synthesis: `Host::run` consumes a
+//!   [`viola_plugin_abi::RunScope`] from the caller; the existing
+//!   `crawler` module produces TS-port-shape inputs and is retained
+//!   for migration but not wired into the new loader path.
+//! - `viola.toml` discovery and parsing: the existing `config` /
+//!   `models` modules retain TS-port shape pending #221.
 
-// FIXME: The dynamic loading abstractions and lifecycle management here are temporary shams.
-// They are placeholders representing the eventual ABI interaction and will be replaced
-// by robust cross-platform implementations from the `hilavitkutin-extensions`
-// and `hilavitkutin-plugins` crates once those are published.
+mod context;
+mod diagnostics;
+mod error;
+mod host;
+mod invocation;
+mod lifecycle;
+mod loader;
+pub mod resolution;
+mod validation;
 
-pub mod config;
-pub mod crawler;
-pub mod models;
+// TS-port scaffolding. Retained for migration; not part of the v1
+// host loader surface. Slated for replacement in #221 / #222.
+// `pub(crate)` so it does not leak into the host crate's public API.
+pub(crate) mod config;
+pub(crate) mod crawler;
+pub(crate) mod models;
 
-use std::path::Path;
+pub use context::HostContext;
+pub use diagnostics::{OwnedDiagnostic, aggregate_and_sort, sort_deterministic};
+pub use error::{EmittedError, HostError, Result};
+pub use host::Host;
+pub use invocation::{find_capability, invoke_grammar, invoke_lint, invoke_runner};
+pub use lifecycle::PluginInstance;
+pub use loader::LoadedLibrary;
+pub use validation::validate_descriptor;
 
-/// A loaded plugin instance.
-pub struct LoadedPlugin {
-    // FIXME: In reality, this would hold the libloading::Library or similar handle
-    // from `hilavitkutin-extensions` to keep the cdylib loaded in memory,
-    // plus the extracted operations table.
-    pub name: String,
-    pub version: String,
-}
-
-impl Drop for LoadedPlugin {
-    fn drop(&mut self) {
-        // FIXME: Here we would call the shutdown hook on the plugin descriptor
-        // before the library handle is dropped:
-        // (descriptor.shutdown)();
-    }
-}
-
-/// The core host environment that discovers, loads, and manages plugins.
-pub struct PluginLoader {
-    plugins: Vec<LoadedPlugin>,
-}
-
-impl Default for PluginLoader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl PluginLoader {
-    pub fn new() -> Self {
-        Self {
-            plugins: Vec::new(),
-        }
-    }
-
-    /// Loads a plugin from the specified shared library path.
-    ///
-    /// // FIXME: Replace this sham with actual `libloading`/dlopen usage
-    /// // bridging to the descriptor defined in `viola-plugin-abi`, orchestrated
-    /// // by `hilavitkutin-plugins`.
-    pub fn load_plugin<P: AsRef<Path>>(&mut self, path: P) -> Result<(), String> {
-        let path = path.as_ref();
-
-        // --- Intended workflow once hilavitkutin-extensions is ready ---
-        // let lib = hilavitkutin_extensions::Library::load(path)?;
-        //
-        // // Explicit pull-based discovery (no inventory magic)
-        // let descriptor: &viola_plugin_abi::PluginDescriptor =
-        //     lib.get_symbol(b"viola_plugin_v1_descriptor\0")?;
-        //
-        // // Lifecycle: Init
-        // let init_res = (descriptor.init)();
-        // if init_res != viola_plugin_abi::ABI_SUCCESS {
-        //     return Err(format!("Plugin {} initialization failed", descriptor.name));
-        // }
-        //
-        // // Store the loaded plugin and capabilities
-        // ...
-        // ----------------------------------------------------------------
-
-        // Mocking a successful load for the sham implementation
-        let mock_name = path
-            .file_stem()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-
-        self.plugins.push(LoadedPlugin {
-            name: mock_name,
-            version: "0.1.0".to_string(), // mocked
-        });
-
-        Ok(())
-    }
-
-    /// Returns a slice of the currently loaded plugins.
-    pub fn loaded_plugins(&self) -> &[LoadedPlugin] {
-        &self.plugins
-    }
-
-    /// Executes the loaded plugins over a given context.
-    ///
-    /// // FIXME: This will be fleshed out to execute the specific roles
-    /// // (runners -> NAM -> lints fan-out).
-    pub fn run_pipeline(&self) -> Result<(), String> {
-        // Iterate and invoke
-        for plugin in &self.plugins {
-            // let ops = plugin.operations();
-            // if let Some(invoke) = ops.invoke {
-            //     let res = invoke();
-            //     if res != viola_plugin_abi::ABI_SUCCESS { ... }
-            // }
-            let _ = plugin;
-        }
-
-        Ok(())
-    }
-}
+// Re-exports plugin-facing types embedders typically use alongside
+// the host: status codes, role bits, capability ids, vtable shapes.
+pub use viola_plugin_abi::{
+    AbiStatus, AbiVersion, BytesRef, CAP_GRAMMAR_EXTRACT,
+    CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE, CapabilityEntry,
+    CapabilityId, DESCRIPTOR_SYMBOL, Diagnostic, DiagnosticBatch,
+    DiagnosticSeverity, FileEntry, GrammarExtractVtable, HOST_ABI_MAJOR,
+    LintEvaluateVtable, NamPayload, NamVersion, PluginDescriptor,
+    PluginError, Role, RoleSet, RunScope, RunSurface,
+    RunnerExecuteScopeVtable, SourceLocation, SourceRange,
+    StructuredError, VIOLA_ABI_VERSION,
+};

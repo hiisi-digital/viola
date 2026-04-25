@@ -1,7 +1,11 @@
+// TS-port scaffolding retained for migration into #221 / #222. Not
+// part of the v1 host loader surface.
+#![allow(dead_code, unused_variables, unused_imports)]
+
 use crate::models::{CodebaseData, FileInfo, SchemaInfo, ViolaConfig};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use ignore::{WalkBuilder, WalkState};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
