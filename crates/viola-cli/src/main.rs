@@ -211,14 +211,24 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         };
 
         let mut configs = [LintConfig::EMPTY; MAX_PLUGINS];
+        let mut ts_resolve_buf = [0u8; MAX_PATH_BYTES];
         if ts_active && loaded_lints > 0 {
             // Pass the user's viola.config.ts path through the lint
-            // config bytes. Deno runtime parses it inside V8 as the
-            // module specifier to resolve and execute (PR-B/C).
+            // config bytes. Pre-resolve relative paths against the
+            // parent directory of viola.toml so that running
+            // `viola /path/to/proj/viola.toml` from any cwd still
+            // finds `[ts].config = "viola.config.ts"` next to the
+            // toml file, not next to wherever the user happened to
+            // be when they invoked viola.
             if let notko::Maybe::Is(ts_path) = cfg.ts_config {
+                let resolved = resolve_ts_config_path(
+                    config_path,
+                    ts_path,
+                    &mut ts_resolve_buf,
+                );
                 configs[0] = LintConfig {
-                    data: ts_path.as_ptr(),
-                    len: arvo::USize(ts_path.len()),
+                    data: resolved.as_ptr(),
+                    len: arvo::USize(resolved.len()),
                 };
             }
         }
@@ -294,6 +304,61 @@ fn resolve_config_path(argc: i32, argv: *const *const u8) -> &'static [u8] {
 }
 
 const DEFAULT_CONFIG_PATH: &[u8] = b"./viola.toml\0";
+
+/// Resolve a `[ts].config` path against the parent directory of the
+/// viola.toml file. Absolute paths (leading `/`) pass through
+/// unchanged. Relative paths are joined with the parent of
+/// `viola_toml_path`; the result is written into `buf` and a borrowed
+/// sub-slice returned.
+///
+/// `viola_toml_path` may include a trailing NUL (the libc-supplied
+/// shape from `c_str_with_nul`); this function strips it. If
+/// `viola_toml_path` has no `/` (e.g. the default `./viola.toml`
+/// already gets a `./` prefix; bare `viola.toml` would not), the
+/// original `ts_config` slice is returned unchanged so the deno
+/// runtime resolves it against process cwd, the historical
+/// behaviour for that case.
+///
+/// If `buf` is smaller than `parent.len() + ts_config.len()`, the
+/// original `ts_config` is returned (best-effort no-op fallback).
+fn resolve_ts_config_path<'a>(
+    viola_toml_path: &'a [u8],
+    ts_config: &'a [u8],
+    buf: &'a mut [u8],
+) -> &'a [u8] {
+    if ts_config.is_empty() {
+        return ts_config;
+    }
+    if ts_config[0] == b'/' {
+        return ts_config;
+    }
+    let toml_path = match viola_toml_path.last() {
+        Some(&0) => &viola_toml_path[..viola_toml_path.len() - 1],
+        _ => viola_toml_path,
+    };
+    let mut last_slash: notko::Maybe<usize> = notko::Maybe::Isnt;
+    let mut i = 0;
+    while i < toml_path.len() {
+        if toml_path[i] == b'/' {
+            last_slash = notko::Maybe::Is(i);
+        }
+        i += 1;
+    }
+    let parent: &[u8] = match last_slash {
+        notko::Maybe::Is(idx) => &toml_path[..=idx],
+        notko::Maybe::Isnt => return ts_config,
+    };
+    let needed = parent.len() + ts_config.len();
+    if needed > buf.len() {
+        io::eprintln(
+            b"viola-cli: ts config path too long to resolve against viola.toml parent; using as-is",
+        );
+        return ts_config;
+    }
+    buf[..parent.len()].copy_from_slice(parent);
+    buf[parent.len()..needed].copy_from_slice(ts_config);
+    &buf[..needed]
+}
 
 /// JSR coordinate for the existing TS viola CLI. Pass-through mode
 /// execs `deno run -A jsr:@hiisi/viola-cli ...` and lets deno do the
