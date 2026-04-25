@@ -63,6 +63,7 @@ pub use parse::{ConfigError, parse};
 /// `MAX_PLUGINS = 16` is a comfortable starting point.
 #[derive(Copy, Clone)]
 pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
+    // -- v1 fields (still parsed when [viola].version is absent or 1) --
     pub runner: Maybe<&'a [u8]>,
     pub grammars: [&'a [u8]; MAX_PLUGINS],
     pub grammar_len: arvo::USize,
@@ -74,6 +75,69 @@ pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
     /// passes this path through `lint_config` so the embedded TS
     /// runtime can resolve and execute the user's config.
     pub ts_config: Maybe<&'a [u8]>,
+
+    // -- v2 fields (require `[viola] version = 2`) --
+    /// Schema version. `Maybe::Isnt` means the file did not declare
+    /// `[viola] version = N` and the parser ran in v1-implicit mode.
+    /// Currently the only declared value is `2`; future schema bumps
+    /// will add more.
+    pub version: Maybe<arvo::USize>,
+    /// Unified plugin list. v2 users put every plugin (runner /
+    /// grammar / lint, Rust cdylib or jsr: / npm: TS specifier) into
+    /// `plugins = [...]`. Roles are derived from the descriptor's
+    /// capability table at load time.
+    pub plugins: [&'a [u8]; MAX_PLUGINS],
+    pub plugin_len: arvo::USize,
+    /// Preset names inherited from plugin-exported preset bundles.
+    /// Applied in declaration order; user-authored severity rules
+    /// override preset rules.
+    pub inherit: [&'a [u8]; MAX_PLUGINS],
+    pub inherit_len: arvo::USize,
+    /// Global gate thresholds. Bare keys directly under `[gates]`
+    /// land here; per-lint overrides go into `gate_overrides`.
+    pub gates: GateThresholds<'a>,
+    /// Per-lint gate threshold overrides. Each entry corresponds to a
+    /// `[gates.<lint-id>]` sub-table; missing keys fall through to
+    /// `gates`, then to the runtime built-in default.
+    pub gate_overrides: [GateOverride<'a>; MAX_PLUGINS],
+    pub gate_overrides_len: arvo::USize,
+}
+
+/// Per-gate severity threshold. Each field holds the raw severity
+/// token (`b"error"`, `b"warn"`, `b"info"`, `b"hint"`, `b"off"`,
+/// `b"skip"`) when present. The runtime parses tokens to its
+/// internal severity enum; the parser stays bytes-only to keep the
+/// schema parser independent of runtime types.
+#[derive(Copy, Clone)]
+pub struct GateThresholds<'a> {
+    pub commit: Maybe<&'a [u8]>,
+    pub build: Maybe<&'a [u8]>,
+    pub push: Maybe<&'a [u8]>,
+}
+
+impl GateThresholds<'_> {
+    pub const EMPTY: Self = Self {
+        commit: Maybe::Isnt,
+        build: Maybe::Isnt,
+        push: Maybe::Isnt,
+    };
+}
+
+/// One `[gates.<lint-id>]` sub-table. The runtime resolves a lint's
+/// effective threshold at gate time by looking up `lint_id` here and
+/// falling back to the parent [`ViolaConfig::gates`] for any missing
+/// per-gate value.
+#[derive(Copy, Clone)]
+pub struct GateOverride<'a> {
+    pub lint_id: &'a [u8],
+    pub thresholds: GateThresholds<'a>,
+}
+
+impl GateOverride<'_> {
+    pub const EMPTY: Self = Self {
+        lint_id: &[],
+        thresholds: GateThresholds::EMPTY,
+    };
 }
 
 impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
@@ -86,6 +150,14 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
             lints: [&[]; MAX_PLUGINS],
             lint_len: arvo::USize(0),
             ts_config: Maybe::Isnt,
+            version: Maybe::Isnt,
+            plugins: [&[]; MAX_PLUGINS],
+            plugin_len: arvo::USize(0),
+            inherit: [&[]; MAX_PLUGINS],
+            inherit_len: arvo::USize(0),
+            gates: GateThresholds::EMPTY,
+            gate_overrides: [GateOverride::EMPTY; MAX_PLUGINS],
+            gate_overrides_len: arvo::USize(0),
         }
     }
 }
@@ -99,6 +171,21 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// View the populated lint slots as a slice.
     pub fn lints_slice(&self) -> &[&[u8]] {
         &self.lints[..self.lint_len.0]
+    }
+
+    /// View the populated v2 plugin slots as a slice.
+    pub fn plugins_slice(&self) -> &[&[u8]] {
+        &self.plugins[..self.plugin_len.0]
+    }
+
+    /// View the populated v2 inherit-preset slots as a slice.
+    pub fn inherit_slice(&self) -> &[&[u8]] {
+        &self.inherit[..self.inherit_len.0]
+    }
+
+    /// View the populated `[gates.<lint-id>]` overrides as a slice.
+    pub fn gate_overrides_slice(&self) -> &[GateOverride<'_>] {
+        &self.gate_overrides[..self.gate_overrides_len.0]
     }
 }
 

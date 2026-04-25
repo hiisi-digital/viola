@@ -101,6 +101,19 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         }
     };
 
+    // v2 schema is parsed by viola-config but its runtime semantics
+    // (plugin loading via `plugins`, inherit-preset resolution, gate
+    // threshold checks) land in #221 PR-D. Until then, surface a
+    // hard error so a user authoring a v2 config does not silently
+    // fall through to the TS passthrough and wonder why their Rust
+    // plugins did nothing.
+    if matches!(cfg.version, notko::Maybe::Is(arvo::USize(2))) {
+        io::eprintln(
+            b"viola-cli: viola.toml v2 schema parsed but runtime wiring is not yet landed (#221 PR-D); use the v1 schema for now",
+        );
+        return EXIT_CONFIG;
+    }
+
     // Pure-TS path with explicit viola.toml [ts] but no Rust plugins:
     // also pass through to the JSR CLI. The Rust v1 ABI plugin path
     // engages only when viola.toml configures a Rust runner or any
@@ -508,6 +521,10 @@ fn emit_config_error(e: &viola_config::ConfigError) {
         E::DuplicateKey { offset } => (&b"duplicate key"[..], offset.0),
         E::Capacity { offset } => (&b"too many entries"[..], offset.0),
         E::TypeMismatch { offset } => (&b"value type mismatch"[..], offset.0),
+        E::IncompatibleSchema { offset } => {
+            (&b"v1 key not allowed under [viola] version = 2"[..], offset.0)
+        }
+        E::InvalidInteger { offset } => (&b"invalid integer literal"[..], offset.0),
     };
     io::eprint(b"viola-cli: viola.toml: ");
     io::eprint(label);
