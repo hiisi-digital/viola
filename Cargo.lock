@@ -366,6 +366,7 @@ dependencies = [
  "arvo",
  "hilavitkutin-extensions",
  "hilavitkutin-extensions-macros",
+ "libc",
  "notko",
  "viola-plugin-abi",
 ]
