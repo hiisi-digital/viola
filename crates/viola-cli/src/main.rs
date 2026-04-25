@@ -27,8 +27,8 @@ mod fmt;
 mod io;
 
 use viola_core::{
-    BytesRef, CapabilityId, Diagnostic, ExtensionHost, ExtensionRequirement,
-    RunScope, RunSurface,
+    BytesRef, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE, CapabilityId,
+    Diagnostic, ExtensionHost, ExtensionRequirement, RunScope, RunSurface,
     aggregate::sort_diagnostics,
     pipeline::{DiagnosticSink, LintConfig, run},
 };
@@ -101,17 +101,15 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         }
     };
 
-    // v2 schema is parsed by viola-config but its runtime semantics
-    // (plugin loading via `plugins`, inherit-preset resolution, gate
-    // threshold checks) land in #221 PR-D. Until then, surface a
-    // hard error so a user authoring a v2 config does not silently
-    // fall through to the TS passthrough and wonder why their Rust
-    // plugins did nothing.
+    // v2 plugin loading: when `[viola] version = 2` is declared,
+    // walk `plugins = [...]` and categorise each loaded plugin by
+    // descriptor capability (runner / lint). v2 ignores the v1-only
+    // `runner` / `grammars` / `lints` keys (the parser already
+    // rejects them under version=2). [[severity]] / [gates] / [lint]
+    // are parsed but not yet evaluated; full semantic wiring lands
+    // in subsequent #221 PR-D slices.
     if matches!(cfg.version, notko::Maybe::Is(arvo::USize(2))) {
-        io::eprintln(
-            b"viola-cli: viola.toml v2 schema parsed but runtime wiring is not yet landed (#221 PR-D); use the v1 schema for now",
-        );
-        return EXIT_CONFIG;
+        return run_v2(&cfg);
     }
 
     // Pure-TS path with explicit viola.toml [ts] but no Rust plugins:
@@ -296,6 +294,202 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     drop(runner);
 
     exit
+}
+
+/// Run the v2 schema pipeline. Walks `cfg.plugins[]` once, loads
+/// each plugin, classifies by descriptor capability:
+/// `CAP_RUNNER_EXECUTE_SCOPE` -> runner role,
+/// `CAP_LINT_EVALUATE` -> lint role. A multi-role plugin (descriptor
+/// exports both) appears in both categories; the same `Extension`
+/// reference is passed twice to `pipeline::run`, mirroring the v1
+/// `[ts]` shape where the deno cdylib was loaded twice.
+///
+/// Constraints:
+/// - At most one plugin may export `CAP_RUNNER_EXECUTE_SCOPE`. Two
+///   runners is a config error (multi-runner is not yet a defined
+///   composition in the v1 ABI).
+/// - At least one runner is required. v2 may eventually permit
+///   "lint-only" runs that auto-synthesise an empty NAM, but that is
+///   #221 PR-D follow-up scope; today, no runner means no work.
+///
+/// `[[severity]]` / `[gates]` / `[lint.<id>]` are parsed but not yet
+/// evaluated. Diagnostics are emitted at their plugin-declared
+/// severity; the gate threshold check is the next slice.
+#[cfg(unix)]
+fn run_v2<'a>(cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
+    let host_caps: &'static [CapabilityId] = &[];
+    let host = ExtensionHost::new(host_caps);
+
+    let mut holder: [core::mem::MaybeUninit<viola_core::Extension>; MAX_PLUGINS] =
+        [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
+    let mut loaded = 0usize;
+
+    let mut runner_idx: notko::Maybe<usize> = notko::Maybe::Isnt;
+    let mut lint_indices: [usize; MAX_PLUGINS] = [0; MAX_PLUGINS];
+    let mut lint_count = 0usize;
+
+    let plugins = cfg.plugins_slice();
+    if plugins.is_empty() {
+        io::eprintln(
+            b"viola-cli: viola.toml v2 has no plugins. Add `plugins = [...]` to load Rust plugins.",
+        );
+        return EXIT_CONFIG;
+    }
+
+    let mut load_failed = false;
+    let mut i = 0;
+    while i < plugins.len() {
+        match load_plugin(&host, plugins[i]) {
+            notko::Maybe::Is(ext) => {
+                // Classify by descriptor capability presence. The
+                // load is required-strict, so a missing capability
+                // surface here is just role inference, not a load
+                // failure.
+                let has_runner = matches!(
+                    ext.capability(CAP_RUNNER_EXECUTE_SCOPE),
+                    notko::Maybe::Is(_)
+                );
+                let has_lint = matches!(
+                    ext.capability(CAP_LINT_EVALUATE),
+                    notko::Maybe::Is(_)
+                );
+                holder[i].write(ext);
+                loaded += 1;
+                if has_runner {
+                    if let notko::Maybe::Is(_) = runner_idx {
+                        io::eprintln(
+                            b"viola-cli: multiple plugins export CAP_RUNNER_EXECUTE_SCOPE; only one runner per project",
+                        );
+                        load_failed = true;
+                        break;
+                    }
+                    runner_idx = notko::Maybe::Is(i);
+                }
+                if has_lint {
+                    lint_indices[lint_count] = i;
+                    lint_count += 1;
+                }
+                if !has_runner && !has_lint {
+                    io::eprint(b"viola-cli: plugin has no runner or lint capability: ");
+                    io::eprintln(plugins[i]);
+                    load_failed = true;
+                    break;
+                }
+            }
+            notko::Maybe::Isnt => {
+                io::eprint(b"viola-cli: failed to load plugin: ");
+                io::eprintln(plugins[i]);
+                load_failed = true;
+                break;
+            }
+        }
+        i += 1;
+    }
+
+    let exit = if load_failed {
+        EXIT_PLUGIN
+    } else {
+        let runner_slot = match runner_idx {
+            notko::Maybe::Is(idx) => idx,
+            notko::Maybe::Isnt => {
+                io::eprintln(
+                    b"viola-cli: viola.toml v2 has no runner-capable plugin (export CAP_RUNNER_EXECUTE_SCOPE)",
+                );
+                drop_v2_holder(&mut holder, loaded);
+                return EXIT_CONFIG;
+            }
+        };
+        // SAFETY: holder[runner_slot] was populated above.
+        let runner: &viola_core::Extension =
+            unsafe { holder[runner_slot].assume_init_ref() };
+
+        let mut lint_refs: [core::mem::MaybeUninit<&viola_core::Extension>;
+            MAX_PLUGINS] =
+            [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
+        let mut k = 0;
+        while k < lint_count {
+            // SAFETY: holder[lint_indices[k]] was populated above.
+            let ext_ref: &viola_core::Extension = unsafe {
+                holder[lint_indices[k]].assume_init_ref()
+            };
+            lint_refs[k].write(ext_ref);
+            k += 1;
+        }
+        // SAFETY: lint_refs[..lint_count] is fully initialised.
+        let lints: &[&viola_core::Extension] = unsafe {
+            core::slice::from_raw_parts(
+                lint_refs.as_ptr() as *const &viola_core::Extension,
+                lint_count,
+            )
+        };
+
+        let configs = [LintConfig::EMPTY; MAX_PLUGINS];
+
+        let scope = RunScope {
+            workspace_root: BytesRef::EMPTY,
+            files: core::ptr::null(),
+            files_len: arvo::USize(0),
+            surface: RunSurface::Cli,
+            ci: 0,
+            _reserved: [0; 3],
+        };
+
+        let mut sink = CaptureSink::new();
+        let report = match run(
+            runner,
+            lints,
+            &configs[..lint_count],
+            &scope,
+            core::ptr::null_mut(),
+            &mut sink,
+        ) {
+            notko::Outcome::Ok(r) => r,
+            notko::Outcome::Err(_) => {
+                io::eprintln(b"viola-cli: pipeline invocation failed");
+                // Cleanup is local to this early-return arm; the
+                // outer drop_v2_holder at function end is not
+                // reached from here. Same pattern as the no-runner
+                // early return above.
+                drop_v2_holder(&mut holder, loaded);
+                return EXIT_PLUGIN;
+            }
+        };
+
+        sink.sort();
+        sink.emit();
+
+        if let notko::Maybe::Is(failure) = report.first_failure {
+            let _ = failure;
+            io::eprintln(b"viola-cli: one or more lints failed during run");
+        }
+
+        if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+    };
+
+    drop_v2_holder(&mut holder, loaded);
+    exit
+}
+
+#[cfg(not(unix))]
+fn run_v2<'a>(_cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>) -> i32 {
+    io::eprintln(b"viola-cli: v2 plugin loading requires unix");
+    EXIT_PLUGIN
+}
+
+/// Drop loaded v2 plugins in reverse-insertion order to honour the
+/// LIFO shutdown convention.
+fn drop_v2_holder(
+    holder: &mut [core::mem::MaybeUninit<viola_core::Extension>],
+    loaded: usize,
+) {
+    let mut j = loaded;
+    while j > 0 {
+        j -= 1;
+        // SAFETY: slot j was populated; we drop exactly once.
+        unsafe {
+            holder[j].assume_init_drop();
+        }
+    }
 }
 
 #[cfg(unix)]
