@@ -81,6 +81,12 @@ plugins = [
 # Optional preset inheritance. Each entry is a preset name exported
 # by a plugin in `plugins`. Applied in order; user-authored rules
 # below override preset rules ("last wins").
+#
+# `plugins` and `inherit` accept either placement: directly under
+# the [viola] header (as shown here, matching the natural reading
+# order) or at the top of the file before any section header. They
+# write to the same fields either way; declaring the same key in
+# both places is a duplicate-key error.
 inherit = ["@hiisi/recommended"]
 
 # Gate thresholds. Two layers:

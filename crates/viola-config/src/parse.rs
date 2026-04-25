@@ -4,199 +4,458 @@
 //!
 //! ```text
 //! file        := { ws_or_comment | entry | section } eof
-//! section     := "[" ws section_name ws "]" ws_or_comment
-//! section_name:= "ts"   (only this one in v1)
+//! section     := "[" ws section_name { "." section_name } ws "]"
+//!                ws_or_comment
+//! section_name:= ascii_alpha { ascii_alphanum | "_" | "-" }
 //! entry       := key ws "=" ws value ws_or_comment
 //! key         := ascii_alpha { ascii_alphanum | "_" | "-" }
-//! value       := string | array
+//! value       := string | array | integer
 //! string      := '"' { byte except '"' or '\n' } '"'
 //! array       := "[" ws { string ws "," ws } [ string ws ] "]"
+//! integer     := digit { digit }
 //! ws          := { space | tab | newline }
 //! ws_or_comment := ws | "#" { byte except '\n' } '\n'
 //! ```
 //!
-//! Anything outside this grammar surfaces as
-//! [`ConfigError::Unexpected`] or [`ConfigError::UnknownKey`]. The
-//! parser does NOT support: dotted keys, arbitrary sub-tables (only
-//! the well-known `[ts]` section is recognised), inline tables
-//! (`{ ... }`), datetimes, integers, floats, booleans, literal strings
-//! (`'...'`), multiline strings, or escape sequences. These are
-//! off-scope for v1; they fail loudly rather than silently.
+//! Recognised sections: `[ts]`, `[viola]`, `[gates]`, `[gates.<lint-id>]`.
+//! Recognised top-level keys: `runner`, `grammars`, `lints`, `plugins`,
+//! `inherit`. Anything outside this surface fails as
+//! [`ConfigError::Unexpected`] / [`ConfigError::UnknownKey`] /
+//! [`ConfigError::IncompatibleSchema`].
+//!
+//! v1 keys (`runner` / `grammars` / `lints`) remain accepted when the
+//! file does not declare `[viola] version = 2`. With version 2 set,
+//! these keys parse as [`ConfigError::IncompatibleSchema`] so users
+//! who opt into the v2 schema cannot accidentally retain v1 holdovers.
 
 use notko::{Maybe, Outcome};
 
-use crate::ViolaConfig;
+use crate::{GateOverride, GateThresholds, ViolaConfig};
 
 /// Diagnostics for a parse failure.
-///
-/// Each variant carries the byte offset into the input where the error
-/// was detected, so a CLI can render a useful position pointer.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ConfigError {
-    /// A character outside the supported grammar appeared at this offset.
     Unexpected { offset: arvo::USize },
-    /// A key the schema does not define. Per v1 strictness, unknown
-    /// keys fail loudly so config drift surfaces immediately.
     UnknownKey { offset: arvo::USize },
-    /// String literal opened but not closed before EOF or newline.
     UnterminatedString { offset: arvo::USize },
-    /// Array literal opened but not closed before EOF.
     UnterminatedArray { offset: arvo::USize },
-    /// Key appeared more than once at top level.
     DuplicateKey { offset: arvo::USize },
-    /// Array contains more entries than the [`ViolaConfig`] capacity.
     Capacity { offset: arvo::USize },
-    /// Value type mismatch (e.g. array where string expected).
     TypeMismatch { offset: arvo::USize },
+    /// Key is grammar-valid but mixes v1 keys with explicit
+    /// `[viola] version = 2`. The user opted into v2, so v1 holdovers
+    /// surface as a hard error rather than silent drift.
+    IncompatibleSchema { offset: arvo::USize },
+    /// Integer literal did not parse (non-digit, overflow, or empty).
+    InvalidInteger { offset: arvo::USize },
 }
+
+const SCHEMA_V2: usize = 2;
 
 /// Parse `input` into a [`ViolaConfig`] with capacity `MAX_PLUGINS`.
 pub fn parse<'a, const MAX_PLUGINS: usize>(
     input: &'a [u8],
 ) -> Outcome<ViolaConfig<'a, MAX_PLUGINS>, ConfigError> {
     let mut cfg = ViolaConfig::<'a, MAX_PLUGINS>::empty();
-    let mut runner_seen = false;
-    let mut grammars_seen = false;
-    let mut lints_seen = false;
-    let mut ts_section_seen = false;
-    let mut ts_config_seen = false;
-    let mut current_section = Section::Root;
+    let mut seen = SeenFlags::default();
+    let mut current = Section::Root;
 
     let mut p = Parser::new(input);
     p.skip_ws_and_comments();
     while !p.at_end() {
-        // Section header.
         if p.peek() == b'[' {
-            let section_offset = p.offset;
-            p.advance();
-            p.skip_ws();
-            let name_start = p.offset;
-            let name = match p.parse_key() {
-                Outcome::Ok(k) => k,
+            current = match parse_section_header::<MAX_PLUGINS>(&mut p, &mut cfg, &mut seen) {
+                Outcome::Ok(s) => s,
                 Outcome::Err(e) => return Outcome::Err(e),
             };
-            p.skip_ws();
-            if !p.consume_byte(b']') {
-                return Outcome::Err(ConfigError::Unexpected {
-                    offset: arvo::USize(p.offset),
-                });
-            }
-            match name {
-                b"ts" => {
-                    if ts_section_seen {
-                        return Outcome::Err(ConfigError::DuplicateKey {
-                            offset: arvo::USize(section_offset),
-                        });
-                    }
-                    ts_section_seen = true;
-                    current_section = Section::Ts;
-                }
-                _ => {
-                    return Outcome::Err(ConfigError::UnknownKey {
-                        offset: arvo::USize(name_start),
-                    });
-                }
-            }
             p.skip_ws_and_comments();
             continue;
         }
-
-        let key_start = p.offset;
-        let key = match p.parse_key() {
-            Outcome::Ok(k) => k,
-            Outcome::Err(e) => return Outcome::Err(e),
-        };
-        p.skip_ws();
-        if !p.consume_byte(b'=') {
-            return Outcome::Err(ConfigError::Unexpected { offset: arvo::USize(p.offset) });
+        if let Outcome::Err(e) =
+            parse_entry::<MAX_PLUGINS>(&mut p, &mut cfg, &mut seen, current)
+        {
+            return Outcome::Err(e);
         }
-        p.skip_ws();
-
-        if let Section::Ts = current_section {
-            match key {
-                b"config" => {
-                    if ts_config_seen {
-                        return Outcome::Err(ConfigError::DuplicateKey {
-                            offset: arvo::USize(key_start),
-                        });
-                    }
-                    let value = match p.parse_string() {
-                        Outcome::Ok(v) => v,
-                        Outcome::Err(e) => return Outcome::Err(e),
-                    };
-                    cfg.ts_config = Maybe::Is(value);
-                    ts_config_seen = true;
-                }
-                _ => {
-                    return Outcome::Err(ConfigError::UnknownKey {
-                        offset: arvo::USize(key_start),
-                    });
-                }
-            }
-            p.skip_ws_and_comments();
-            continue;
-        }
-
-        match key {
-            b"runner" => {
-                if runner_seen {
-                    return Outcome::Err(ConfigError::DuplicateKey {
-                        offset: arvo::USize(key_start),
-                    });
-                }
-                let value = match p.parse_string() {
-                    Outcome::Ok(v) => v,
-                    Outcome::Err(e) => return Outcome::Err(e),
-                };
-                cfg.runner = Maybe::Is(value);
-                runner_seen = true;
-            }
-            b"grammars" => {
-                if grammars_seen {
-                    return Outcome::Err(ConfigError::DuplicateKey {
-                        offset: arvo::USize(key_start),
-                    });
-                }
-                let count = match p.parse_string_array(&mut cfg.grammars) {
-                    Outcome::Ok(n) => n,
-                    Outcome::Err(e) => return Outcome::Err(e),
-                };
-                cfg.grammar_len = count;
-                grammars_seen = true;
-            }
-            b"lints" => {
-                if lints_seen {
-                    return Outcome::Err(ConfigError::DuplicateKey {
-                        offset: arvo::USize(key_start),
-                    });
-                }
-                let count = match p.parse_string_array(&mut cfg.lints) {
-                    Outcome::Ok(n) => n,
-                    Outcome::Err(e) => return Outcome::Err(e),
-                };
-                cfg.lint_len = count;
-                lints_seen = true;
-            }
-            _ => {
-                return Outcome::Err(ConfigError::UnknownKey {
-                    offset: arvo::USize(key_start),
-                });
-            }
-        }
-
         p.skip_ws_and_comments();
+    }
+
+    if cfg.version_is_v2() {
+        if seen.runner {
+            return Outcome::Err(ConfigError::IncompatibleSchema {
+                offset: arvo::USize(seen.runner_offset),
+            });
+        }
+        if seen.grammars {
+            return Outcome::Err(ConfigError::IncompatibleSchema {
+                offset: arvo::USize(seen.grammars_offset),
+            });
+        }
+        if seen.lints {
+            return Outcome::Err(ConfigError::IncompatibleSchema {
+                offset: arvo::USize(seen.lints_offset),
+            });
+        }
     }
 
     Outcome::Ok(cfg)
 }
 
-/// Which TOML section the parser is currently reading entries into.
+impl<const N: usize> ViolaConfig<'_, N> {
+    fn version_is_v2(&self) -> bool {
+        match self.version {
+            Maybe::Is(arvo::USize(n)) => n == SCHEMA_V2,
+            Maybe::Isnt => false,
+        }
+    }
+}
+
+#[derive(Default)]
+struct SeenFlags {
+    runner: bool,
+    grammars: bool,
+    lints: bool,
+    runner_offset: usize,
+    grammars_offset: usize,
+    lints_offset: usize,
+    ts_section: bool,
+    ts_config: bool,
+    viola_section: bool,
+    viola_version: bool,
+    gates_section: bool,
+    gates_commit: bool,
+    gates_build: bool,
+    gates_push: bool,
+    plugins: bool,
+    inherit: bool,
+}
+
 #[derive(Copy, Clone)]
 enum Section {
-    /// Top-level keys (`runner`, `grammars`, `lints`).
     Root,
-    /// Inside `[ts]`. Accepts `config = "..."`.
     Ts,
+    Viola,
+    Gates,
+    /// Inside a `[gates.<lint-id>]` sub-table. The slot index points
+    /// into `cfg.gate_overrides[idx]`.
+    GateOverride {
+        idx: usize,
+    },
+}
+
+fn parse_section_header<'a, const MAX_PLUGINS: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, MAX_PLUGINS>,
+    seen: &mut SeenFlags,
+) -> Outcome<Section, ConfigError> {
+    let header_offset = p.offset;
+    p.advance(); // consume '['
+    p.skip_ws();
+    let parent_offset = p.offset;
+    let parent = match p.parse_key() {
+        Outcome::Ok(k) => k,
+        Outcome::Err(e) => return Outcome::Err(e),
+    };
+    let child = if p.peek() == b'.' {
+        p.advance();
+        let child_offset = p.offset;
+        let _ = child_offset;
+        let c = match p.parse_key() {
+            Outcome::Ok(k) => k,
+            Outcome::Err(e) => return Outcome::Err(e),
+        };
+        Maybe::Is(c)
+    } else {
+        Maybe::Isnt
+    };
+    p.skip_ws();
+    if !p.consume_byte(b']') {
+        return Outcome::Err(ConfigError::Unexpected {
+            offset: arvo::USize(p.offset),
+        });
+    }
+
+    match (parent, child) {
+        (b"ts", Maybe::Isnt) => {
+            if seen.ts_section {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(header_offset),
+                });
+            }
+            seen.ts_section = true;
+            Outcome::Ok(Section::Ts)
+        }
+        (b"viola", Maybe::Isnt) => {
+            if seen.viola_section {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(header_offset),
+                });
+            }
+            seen.viola_section = true;
+            Outcome::Ok(Section::Viola)
+        }
+        (b"gates", Maybe::Isnt) => {
+            if seen.gates_section {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(header_offset),
+                });
+            }
+            seen.gates_section = true;
+            Outcome::Ok(Section::Gates)
+        }
+        (b"gates", Maybe::Is(lint_id)) => {
+            // Reject duplicate sub-tables for the same lint id.
+            let mut i = 0;
+            while i < cfg.gate_overrides_len.0 {
+                if cfg.gate_overrides[i].lint_id == lint_id {
+                    return Outcome::Err(ConfigError::DuplicateKey {
+                        offset: arvo::USize(header_offset),
+                    });
+                }
+                i += 1;
+            }
+            if cfg.gate_overrides_len.0 >= MAX_PLUGINS {
+                return Outcome::Err(ConfigError::Capacity {
+                    offset: arvo::USize(header_offset),
+                });
+            }
+            let idx = cfg.gate_overrides_len.0;
+            cfg.gate_overrides[idx] = GateOverride {
+                lint_id,
+                thresholds: GateThresholds::EMPTY,
+            };
+            cfg.gate_overrides_len = arvo::USize(idx + 1);
+            Outcome::Ok(Section::GateOverride { idx })
+        }
+        _ => Outcome::Err(ConfigError::UnknownKey {
+            offset: arvo::USize(parent_offset),
+        }),
+    }
+}
+
+fn parse_entry<'a, const MAX_PLUGINS: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, MAX_PLUGINS>,
+    seen: &mut SeenFlags,
+    section: Section,
+) -> Outcome<(), ConfigError> {
+    let key_start = p.offset;
+    let key = match p.parse_key() {
+        Outcome::Ok(k) => k,
+        Outcome::Err(e) => return Outcome::Err(e),
+    };
+    p.skip_ws();
+    if !p.consume_byte(b'=') {
+        return Outcome::Err(ConfigError::Unexpected {
+            offset: arvo::USize(p.offset),
+        });
+    }
+    p.skip_ws();
+
+    match section {
+        Section::Ts => parse_ts_entry(p, cfg, seen, key, key_start),
+        Section::Viola => parse_viola_entry(p, cfg, seen, key, key_start),
+        Section::Gates => {
+            let dst = &mut cfg.gates;
+            parse_gate_entry(p, dst, key, key_start, &mut seen.gates_commit, &mut seen.gates_build, &mut seen.gates_push)
+        }
+        Section::GateOverride { idx } => {
+            // Per-override duplicate detection lives in-table.
+            let mut commit_seen = matches!(cfg.gate_overrides[idx].thresholds.commit, Maybe::Is(_));
+            let mut build_seen = matches!(cfg.gate_overrides[idx].thresholds.build, Maybe::Is(_));
+            let mut push_seen = matches!(cfg.gate_overrides[idx].thresholds.push, Maybe::Is(_));
+            let dst = &mut cfg.gate_overrides[idx].thresholds;
+            let res = parse_gate_entry(
+                p, dst, key, key_start,
+                &mut commit_seen, &mut build_seen, &mut push_seen,
+            );
+            res
+        }
+        Section::Root => parse_root_entry(p, cfg, seen, key, key_start),
+    }
+}
+
+fn parse_ts_entry<'a, const N: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, N>,
+    seen: &mut SeenFlags,
+    key: &'a [u8],
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    match key {
+        b"config" => {
+            if seen.ts_config {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value = match p.parse_string() {
+                Outcome::Ok(v) => v,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.ts_config = Maybe::Is(value);
+            seen.ts_config = true;
+            Outcome::Ok(())
+        }
+        _ => Outcome::Err(ConfigError::UnknownKey {
+            offset: arvo::USize(key_start),
+        }),
+    }
+}
+
+fn parse_viola_entry<'a, const N: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, N>,
+    seen: &mut SeenFlags,
+    key: &'a [u8],
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    match key {
+        b"version" => {
+            if seen.viola_version {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let n = match p.parse_integer() {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.version = Maybe::Is(arvo::USize(n));
+            seen.viola_version = true;
+            Outcome::Ok(())
+        }
+        // `plugins` and `inherit` are top-level concepts but accepting
+        // them inside [viola] too lets users author the config in the
+        // shape the design memo shows (where the keys sit visually
+        // under the [viola] header). Both placements write to the
+        // same struct fields, with cross-placement duplicate
+        // detection so a user cannot declare `plugins` once at root
+        // and again under [viola].
+        b"plugins" | b"inherit" => parse_root_entry(p, cfg, seen, key, key_start),
+        _ => Outcome::Err(ConfigError::UnknownKey {
+            offset: arvo::USize(key_start),
+        }),
+    }
+}
+
+fn parse_gate_entry<'a>(
+    p: &mut Parser<'a>,
+    dst: &mut GateThresholds<'a>,
+    key: &'a [u8],
+    key_start: usize,
+    commit_seen: &mut bool,
+    build_seen: &mut bool,
+    push_seen: &mut bool,
+) -> Outcome<(), ConfigError> {
+    let (slot, flag): (&mut Maybe<&'a [u8]>, &mut bool) = match key {
+        b"commit" => (&mut dst.commit, commit_seen),
+        b"build" => (&mut dst.build, build_seen),
+        b"push" => (&mut dst.push, push_seen),
+        _ => {
+            return Outcome::Err(ConfigError::UnknownKey {
+                offset: arvo::USize(key_start),
+            });
+        }
+    };
+    if *flag {
+        return Outcome::Err(ConfigError::DuplicateKey {
+            offset: arvo::USize(key_start),
+        });
+    }
+    let value = match p.parse_string() {
+        Outcome::Ok(v) => v,
+        Outcome::Err(e) => return Outcome::Err(e),
+    };
+    *slot = Maybe::Is(value);
+    *flag = true;
+    Outcome::Ok(())
+}
+
+fn parse_root_entry<'a, const N: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, N>,
+    seen: &mut SeenFlags,
+    key: &'a [u8],
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    match key {
+        b"runner" => {
+            if seen.runner {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value = match p.parse_string() {
+                Outcome::Ok(v) => v,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.runner = Maybe::Is(value);
+            seen.runner = true;
+            seen.runner_offset = key_start;
+            Outcome::Ok(())
+        }
+        b"grammars" => {
+            if seen.grammars {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let count = match p.parse_string_array(&mut cfg.grammars) {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.grammar_len = count;
+            seen.grammars = true;
+            seen.grammars_offset = key_start;
+            Outcome::Ok(())
+        }
+        b"lints" => {
+            if seen.lints {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let count = match p.parse_string_array(&mut cfg.lints) {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.lint_len = count;
+            seen.lints = true;
+            seen.lints_offset = key_start;
+            Outcome::Ok(())
+        }
+        b"plugins" => {
+            if seen.plugins {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let count = match p.parse_string_array(&mut cfg.plugins) {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.plugin_len = count;
+            seen.plugins = true;
+            Outcome::Ok(())
+        }
+        b"inherit" => {
+            if seen.inherit {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let count = match p.parse_string_array(&mut cfg.inherit) {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            cfg.inherit_len = count;
+            seen.inherit = true;
+            Outcome::Ok(())
+        }
+        _ => Outcome::Err(ConfigError::UnknownKey {
+            offset: arvo::USize(key_start),
+        }),
+    }
 }
 
 struct Parser<'a> {
@@ -310,6 +569,39 @@ impl<'a> Parser<'a> {
         })
     }
 
+    fn parse_integer(&mut self) -> Outcome<usize, ConfigError> {
+        let start = self.offset;
+        if self.at_end() || !self.input[self.offset].is_ascii_digit() {
+            return Outcome::Err(ConfigError::InvalidInteger {
+                offset: arvo::USize(start),
+            });
+        }
+        let mut value: usize = 0;
+        while !self.at_end() && self.input[self.offset].is_ascii_digit() {
+            let digit = (self.input[self.offset] - b'0') as usize;
+            value = match value.checked_mul(10).and_then(|v| v.checked_add(digit)) {
+                Some(v) => v,
+                None => {
+                    return Outcome::Err(ConfigError::InvalidInteger {
+                        offset: arvo::USize(start),
+                    });
+                }
+            };
+            self.offset += 1;
+        }
+        // Reject trailing non-terminator junk (e.g. `2abc`) so a typo
+        // does not silently coerce.
+        if !self.at_end() {
+            let b = self.input[self.offset];
+            if !(b == b' ' || b == b'\t' || b == b'\r' || b == b'\n' || b == b'#') {
+                return Outcome::Err(ConfigError::InvalidInteger {
+                    offset: arvo::USize(start),
+                });
+            }
+        }
+        Outcome::Ok(value)
+    }
+
     fn parse_string_array(
         &mut self,
         out: &mut [&'a [u8]],
@@ -332,11 +624,6 @@ impl<'a> Parser<'a> {
                 self.advance();
                 return Outcome::Ok(count);
             }
-            // Inside array context the only valid value is a string;
-            // anything else is a syntax error, not a type mismatch.
-            // Surface as Unexpected so the variant matches the
-            // user-facing meaning ("garbage where a string was
-            // expected").
             if self.peek() != b'"' {
                 return Outcome::Err(ConfigError::Unexpected {
                     offset: arvo::USize(self.offset),
@@ -390,6 +677,8 @@ mod tests {
         parse::<16>(s)
     }
 
+    // ----- v1 regressions -----
+
     #[test]
     fn empty_input_yields_empty_config() {
         let cfg = match parse16(b"") {
@@ -399,68 +688,26 @@ mod tests {
         assert!(matches!(cfg.runner, Maybe::Isnt));
         assert_eq!(cfg.grammar_len.0, 0);
         assert_eq!(cfg.lint_len.0, 0);
+        assert!(matches!(cfg.version, Maybe::Isnt));
+        assert_eq!(cfg.plugin_len.0, 0);
     }
 
     #[test]
-    fn single_runner_key() {
-        let input = b"runner = \"plugins/runner.dylib\"\n";
-        let cfg = match parse16(input) {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"plugins/runner.dylib"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
-    }
-
-    #[test]
-    fn full_v1_schema() {
+    fn full_v1_schema_unchanged() {
         let input = b"\
-# Comment line above the runner key.
 runner = \"runner.dylib\"
-
-# Two grammars, one with a trailing comma.
-grammars = [
-    \"g1.dylib\",
-    \"g2.dylib\",
-]
-
+grammars = [\"g1.dylib\", \"g2.dylib\"]
 lints = [\"l1.dylib\", \"l2.dylib\", \"l3.dylib\"]
+[ts]
+config = \"viola.config.ts\"
 ";
         let cfg = match parse16(input) {
             Outcome::Ok(c) => c,
             Outcome::Err(e) => panic!("err {e:?}"),
         };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"runner.dylib"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
         assert_eq!(cfg.grammar_len.0, 2);
-        assert_eq!(cfg.grammars_slice()[0], b"g1.dylib");
-        assert_eq!(cfg.grammars_slice()[1], b"g2.dylib");
         assert_eq!(cfg.lint_len.0, 3);
-        assert_eq!(cfg.lints_slice()[0], b"l1.dylib");
-        assert_eq!(cfg.lints_slice()[1], b"l2.dylib");
-        assert_eq!(cfg.lints_slice()[2], b"l3.dylib");
-    }
-
-    #[test]
-    fn unknown_key_fails() {
-        let err = match parse16(b"unknown = \"x\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::UnknownKey { .. }));
-    }
-
-    #[test]
-    fn duplicate_runner_fails() {
-        let err = match parse16(b"runner = \"a\"\nrunner = \"b\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+        assert!(matches!(cfg.ts_config, Maybe::Is(b"viola.config.ts")));
     }
 
     #[test]
@@ -473,128 +720,250 @@ lints = [\"l1.dylib\", \"l2.dylib\", \"l3.dylib\"]
     }
 
     #[test]
-    fn unterminated_array_fails() {
-        let err = match parse16(b"lints = [\"a\", \"b\"") {
+    fn duplicate_runner_fails() {
+        let err = match parse16(b"runner = \"a\"\nrunner = \"b\"\n") {
             Outcome::Ok(_) => panic!("expected err"),
             Outcome::Err(e) => e,
         };
-        assert!(matches!(err, ConfigError::UnterminatedArray { .. }));
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    // ----- v2 schema marker -----
+
+    #[test]
+    fn viola_section_with_version() {
+        let cfg = match parse16(b"[viola]\nversion = 2\n") {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert!(matches!(cfg.version, Maybe::Is(arvo::USize(2))));
     }
 
     #[test]
-    fn type_mismatch_array_for_runner() {
-        let err = match parse16(b"runner = [\"a\"]\n") {
+    fn version_one_does_not_reject_v1_keys() {
+        let cfg = match parse16(b"runner = \"r\"\n[viola]\nversion = 1\n") {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert!(matches!(cfg.runner, Maybe::Is(b"r")));
+    }
+
+    #[test]
+    fn version_two_rejects_runner_key() {
+        let err = match parse16(b"runner = \"r\"\n[viola]\nversion = 2\n") {
             Outcome::Ok(_) => panic!("expected err"),
             Outcome::Err(e) => e,
         };
-        assert!(matches!(err, ConfigError::TypeMismatch { .. }));
+        assert!(matches!(err, ConfigError::IncompatibleSchema { .. }));
     }
 
     #[test]
-    fn capacity_exhausted_returns_error() {
-        let cfg: Outcome<ViolaConfig<2>, _> =
-            parse::<2>(b"lints = [\"a\", \"b\", \"c\"]\n");
-        let err = match cfg {
+    fn version_two_rejects_grammars_key() {
+        let err = match parse16(b"grammars = [\"g\"]\n[viola]\nversion = 2\n") {
             Outcome::Ok(_) => panic!("expected err"),
             Outcome::Err(e) => e,
         };
-        assert!(matches!(err, ConfigError::Capacity { .. }));
+        assert!(matches!(err, ConfigError::IncompatibleSchema { .. }));
     }
 
     #[test]
-    fn comments_and_blank_lines_skipped() {
+    fn version_two_rejects_lints_key() {
+        let err = match parse16(b"lints = [\"l\"]\n[viola]\nversion = 2\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::IncompatibleSchema { .. }));
+    }
+
+    #[test]
+    fn version_two_rejects_v1_keys_declared_before_marker() {
+        // Order independence: v1 key first, then version=2 still
+        // surfaces IncompatibleSchema (end-of-parse check).
+        let err = match parse16(b"runner = \"r\"\n[viola]\nversion = 2\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::IncompatibleSchema { .. }));
+    }
+
+    #[test]
+    fn integer_with_garbage_suffix_rejected() {
+        let err = match parse16(b"[viola]\nversion = 2abc\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::InvalidInteger { .. }));
+    }
+
+    #[test]
+    fn duplicate_version_fails() {
+        let err = match parse16(b"[viola]\nversion = 2\nversion = 2\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    #[test]
+    fn unknown_key_in_viola_section_fails() {
+        let err = match parse16(b"[viola]\nbogus = 1\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    // ----- plugins / inherit -----
+
+    #[test]
+    fn plugins_and_inherit_under_viola_section() {
+        // Memo-following placement: keys sit visually under [viola].
+        // TOML semantics put them inside [viola]; the parser routes
+        // these two specific keys back to the same root-level
+        // storage so memo-verbatim configs work.
         let input = b"\
-# leading comment
-\t
-runner = \"r\" # trailing comment
+[viola]
+version = 2
 
-# trailing
+plugins = [\"a.dylib\", \"jsr:@hiisi/viola-default-lints\"]
+inherit = [\"@hiisi/recommended\"]
 ";
         let cfg = match parse16(input) {
             Outcome::Ok(c) => c,
             Outcome::Err(e) => panic!("err {e:?}"),
         };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"r"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
+        assert_eq!(cfg.plugin_len.0, 2);
+        assert_eq!(cfg.plugins_slice()[0], b"a.dylib");
+        assert_eq!(cfg.inherit_len.0, 1);
     }
 
     #[test]
-    fn empty_array_is_zero_count() {
-        let cfg = match parse16(b"lints = []\n") {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        assert_eq!(cfg.lint_len.0, 0);
-    }
-
-    #[test]
-    fn trailing_comment_no_newline_terminates_cleanly() {
-        // Regression: skip_ws_and_comments must not infinite-loop when
-        // a comment runs to EOF without a trailing newline.
-        let cfg = match parse16(b"runner = \"r\"\n# trailing no newline") {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"r"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
-    }
-
-    #[test]
-    fn cr_only_line_endings_in_comment_consume_to_eof() {
-        // Documented behaviour: comments terminate on \n only. \r in
-        // a comment body is consumed as part of the comment. Lock
-        // the behaviour so a future change is intentional.
-        let cfg = match parse16(b"runner = \"r\"\n# a\r b\n") {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"r"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
-    }
-
-    #[test]
-    fn double_comma_in_array_surfaces_as_unexpected() {
-        let err = match parse16(b"lints = [\"a\",,\"b\"]\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(
-            matches!(err, ConfigError::Unexpected { .. }),
-            "got {err:?}, expected Unexpected",
-        );
-    }
-
-    #[test]
-    fn leading_comma_in_array_surfaces_as_unexpected() {
-        let err = match parse16(b"lints = [,\"a\"]\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::Unexpected { .. }));
-    }
-
-    #[test]
-    fn equals_inside_string_value_is_preserved() {
-        let cfg = match parse16(b"runner = \"path/with=equals.dylib\"\n") {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        match cfg.runner {
-            Maybe::Is(s) => assert_eq!(s, b"path/with=equals.dylib"),
-            Maybe::Isnt => panic!("runner missing"),
-        }
-    }
-
-    #[test]
-    fn ts_section_with_config_key() {
+    fn plugins_and_inherit_at_root() {
         let input = b"\
-runner = \"r.dylib\"
+plugins = [\"a.dylib\", \"jsr:@hiisi/viola-default-lints\"]
+inherit = [\"@hiisi/recommended\"]
+
+[viola]
+version = 2
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.plugin_len.0, 2);
+        assert_eq!(cfg.plugins_slice()[0], b"a.dylib");
+        assert_eq!(cfg.plugins_slice()[1], b"jsr:@hiisi/viola-default-lints");
+        assert_eq!(cfg.inherit_len.0, 1);
+        assert_eq!(cfg.inherit_slice()[0], b"@hiisi/recommended");
+    }
+
+    #[test]
+    fn plugins_declared_twice_across_placements_fails() {
+        let input = b"\
+plugins = [\"a.dylib\"]
+[viola]
+version = 2
+plugins = [\"b.dylib\"]
+";
+        let err = match parse16(input) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    // ----- gates -----
+
+    #[test]
+    fn gates_global_defaults() {
+        let input = b"\
+[viola]
+version = 2
+
+[gates]
+commit = \"warn\"
+build = \"error\"
+push = \"error\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert!(matches!(cfg.gates.commit, Maybe::Is(b"warn")));
+        assert!(matches!(cfg.gates.build, Maybe::Is(b"error")));
+        assert!(matches!(cfg.gates.push, Maybe::Is(b"error")));
+        assert_eq!(cfg.gate_overrides_len.0, 0);
+    }
+
+    #[test]
+    fn gates_per_lint_override() {
+        let input = b"\
+[viola]
+version = 2
+
+[gates]
+commit = \"warn\"
+
+[gates.no-bare-numeric]
+commit = \"warn\"
+build = \"error\"
+push = \"error\"
+
+[gates.duplicate-logic]
+commit = \"off\"
+build = \"warn\"
+push = \"error\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.gate_overrides_len.0, 2);
+        let o0 = &cfg.gate_overrides_slice()[0];
+        assert_eq!(o0.lint_id, b"no-bare-numeric");
+        assert!(matches!(o0.thresholds.commit, Maybe::Is(b"warn")));
+        assert!(matches!(o0.thresholds.build, Maybe::Is(b"error")));
+        let o1 = &cfg.gate_overrides_slice()[1];
+        assert_eq!(o1.lint_id, b"duplicate-logic");
+        assert!(matches!(o1.thresholds.commit, Maybe::Is(b"off")));
+        assert!(matches!(o1.thresholds.build, Maybe::Is(b"warn")));
+    }
+
+    #[test]
+    fn duplicate_gates_subtable_fails() {
+        let input = b"\
+[viola]
+version = 2
+
+[gates.foo]
+commit = \"warn\"
+
+[gates.foo]
+commit = \"error\"
+";
+        let err = match parse16(input) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    #[test]
+    fn unknown_key_in_gates_section_fails() {
+        let err = match parse16(b"[viola]\nversion = 2\n[gates]\nbogus = \"x\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    // ----- ts section still works under v2 -----
+
+    #[test]
+    fn ts_section_compatible_with_v2() {
+        let input = b"\
+[viola]
+version = 2
 
 [ts]
 config = \"viola.config.ts\"
@@ -603,67 +972,6 @@ config = \"viola.config.ts\"
             Outcome::Ok(c) => c,
             Outcome::Err(e) => panic!("err {e:?}"),
         };
-        match cfg.ts_config {
-            Maybe::Is(s) => assert_eq!(s, b"viola.config.ts"),
-            Maybe::Isnt => panic!("ts_config missing"),
-        }
-    }
-
-    #[test]
-    fn ts_section_alone() {
-        let cfg = match parse16(b"[ts]\nconfig = \"x.ts\"\n") {
-            Outcome::Ok(c) => c,
-            Outcome::Err(e) => panic!("err {e:?}"),
-        };
-        assert!(matches!(cfg.runner, Maybe::Isnt));
-        match cfg.ts_config {
-            Maybe::Is(s) => assert_eq!(s, b"x.ts"),
-            Maybe::Isnt => panic!("ts_config missing"),
-        }
-    }
-
-    #[test]
-    fn unknown_section_fails() {
-        let err = match parse16(b"[grammar]\nfoo = \"x\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::UnknownKey { .. }));
-    }
-
-    #[test]
-    fn duplicate_ts_section_fails() {
-        let err = match parse16(b"[ts]\nconfig = \"a\"\n[ts]\nconfig = \"b\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
-    }
-
-    #[test]
-    fn unknown_key_in_ts_section_fails() {
-        let err = match parse16(b"[ts]\nbogus = \"x\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::UnknownKey { .. }));
-    }
-
-    #[test]
-    fn duplicate_ts_config_key_fails() {
-        let err = match parse16(b"[ts]\nconfig = \"a\"\nconfig = \"b\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
-    }
-
-    #[test]
-    fn empty_key_position_fails() {
-        let err = match parse16(b"= \"x\"\n") {
-            Outcome::Ok(_) => panic!("expected err"),
-            Outcome::Err(e) => e,
-        };
-        assert!(matches!(err, ConfigError::Unexpected { .. }));
+        assert!(matches!(cfg.ts_config, Maybe::Is(b"viola.config.ts")));
     }
 }
