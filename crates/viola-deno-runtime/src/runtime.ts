@@ -1,7 +1,7 @@
-// viola-bridge-deno bridge runtime.
+// viola-deno-runtime — embedded TS runtime.
 //
 // This script runs inside the embedded deno_core JsRuntime hosted by
-// the viola-bridge-deno plugin. It calls back into the host via a
+// the viola-deno-runtime plugin. It calls back into the host via a
 // registered op (`op_emit_diagnostic`) to deliver diagnostics. The
 // host drains the queued diagnostics and returns them to the viola
 // pipeline as a v1 DiagnosticBatch.
@@ -10,14 +10,13 @@
 // (cdylib -> JsRuntime -> op -> Rust collector -> DiagnosticBatch ->
 // host) can be validated end-to-end. Real @hiisi/viola integration
 // (loading the user's viola.config.ts and running the full TS
-// pipeline) lands in a follow-up.
+// pipeline) lands in a follow-up PR.
+//
+// The runtime crate transpiles this with deno_ast before handing the
+// resulting JS to execute_script, so TypeScript syntax (interfaces,
+// type annotations, enums) is supported here.
 
-// Bridge runtime executed by the embedded JsRuntime. The bridge crate
-// transpiles this with deno_ast before handing the resulting JS to
-// execute_script, so TypeScript syntax (interfaces, type annotations,
-// enums) is supported here.
-
-interface BridgeDiagnostic {
+interface RuntimeDiagnostic {
   plugin_id: string;
   rule_id: string;
   severity: "info" | "warn" | "error";
@@ -27,12 +26,12 @@ interface BridgeDiagnostic {
   column: number;
 }
 
-const diag: BridgeDiagnostic = {
-  plugin_id: "org.viola.bridge.deno",
-  rule_id: "bridge-mvp",
+const diag: RuntimeDiagnostic = {
+  plugin_id: "org.viola.deno.runtime",
+  rule_id: "runtime-mvp",
   severity: "warn",
-  message: "viola-bridge-deno embedded JsRuntime is alive",
-  path: "<bridge>",
+  message: "viola-deno-runtime embedded JsRuntime is alive",
+  path: "<runtime>",
   line: 1,
   column: 0,
 };

@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/viola-bridge-deno",
+    "crates/viola-deno-runtime",
     "crates/viola-cli",
     "crates/viola-config",
     "crates/viola-core",

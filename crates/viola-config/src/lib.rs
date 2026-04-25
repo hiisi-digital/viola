@@ -34,6 +34,13 @@
 //! lints = [
 //!     "plugins/viola-lint-no-yagni.dylib",
 //! ]
+//!
+//! # Optional TS plugin runtime. When present, viola-cli auto-loads
+//! # viola-deno-runtime.dylib (sibling to the executable) as the deno-
+//! # backed runner / grammar / lint and feeds the user's TS config in
+//! # via `lint_config`. Triggers the embedded TS pipeline.
+//! [ts]
+//! config = "viola.config.ts"
 //! ```
 //!
 //! Per-lint structured config and plugin-set scopes (include/exclude
@@ -61,6 +68,12 @@ pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
     pub grammar_len: arvo::USize,
     pub lints: [&'a [u8]; MAX_PLUGINS],
     pub lint_len: arvo::USize,
+    /// Path to the user's `viola.config.ts`, if a `[ts]` section is
+    /// present. When set, viola-cli auto-loads `viola-deno-runtime`
+    /// (sibling to the executable) as runner / grammar / lint and
+    /// passes this path through `lint_config` so the embedded TS
+    /// runtime can resolve and execute the user's config.
+    pub ts_config: Maybe<&'a [u8]>,
 }
 
 impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
@@ -72,6 +85,7 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
             grammar_len: arvo::USize(0),
             lints: [&[]; MAX_PLUGINS],
             lint_len: arvo::USize(0),
+            ts_config: Maybe::Isnt,
         }
     }
 }

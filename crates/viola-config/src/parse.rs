@@ -3,7 +3,9 @@
 //! Grammar (informal):
 //!
 //! ```text
-//! file        := { ws_or_comment | entry } eof
+//! file        := { ws_or_comment | entry | section } eof
+//! section     := "[" ws section_name ws "]" ws_or_comment
+//! section_name:= "ts"   (only this one in v1)
 //! entry       := key ws "=" ws value ws_or_comment
 //! key         := ascii_alpha { ascii_alphanum | "_" | "-" }
 //! value       := string | array
@@ -15,10 +17,11 @@
 //!
 //! Anything outside this grammar surfaces as
 //! [`ConfigError::Unexpected`] or [`ConfigError::UnknownKey`]. The
-//! parser does NOT support: dotted keys, sub-tables (`[section]`),
-//! inline tables (`{ ... }`), datetimes, integers, floats, booleans,
-//! literal strings (`'...'`), multiline strings, or escape sequences.
-//! These are off-scope for v1; they fail loudly rather than silently.
+//! parser does NOT support: dotted keys, arbitrary sub-tables (only
+//! the well-known `[ts]` section is recognised), inline tables
+//! (`{ ... }`), datetimes, integers, floats, booleans, literal strings
+//! (`'...'`), multiline strings, or escape sequences. These are
+//! off-scope for v1; they fail loudly rather than silently.
 
 use notko::{Maybe, Outcome};
 
@@ -55,10 +58,49 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
     let mut runner_seen = false;
     let mut grammars_seen = false;
     let mut lints_seen = false;
+    let mut ts_section_seen = false;
+    let mut ts_config_seen = false;
+    let mut current_section = Section::Root;
 
     let mut p = Parser::new(input);
     p.skip_ws_and_comments();
     while !p.at_end() {
+        // Section header.
+        if p.peek() == b'[' {
+            let section_offset = p.offset;
+            p.advance();
+            p.skip_ws();
+            let name_start = p.offset;
+            let name = match p.parse_key() {
+                Outcome::Ok(k) => k,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            p.skip_ws();
+            if !p.consume_byte(b']') {
+                return Outcome::Err(ConfigError::Unexpected {
+                    offset: arvo::USize(p.offset),
+                });
+            }
+            match name {
+                b"ts" => {
+                    if ts_section_seen {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(section_offset),
+                        });
+                    }
+                    ts_section_seen = true;
+                    current_section = Section::Ts;
+                }
+                _ => {
+                    return Outcome::Err(ConfigError::UnknownKey {
+                        offset: arvo::USize(name_start),
+                    });
+                }
+            }
+            p.skip_ws_and_comments();
+            continue;
+        }
+
         let key_start = p.offset;
         let key = match p.parse_key() {
             Outcome::Ok(k) => k,
@@ -69,6 +111,31 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
             return Outcome::Err(ConfigError::Unexpected { offset: arvo::USize(p.offset) });
         }
         p.skip_ws();
+
+        if let Section::Ts = current_section {
+            match key {
+                b"config" => {
+                    if ts_config_seen {
+                        return Outcome::Err(ConfigError::DuplicateKey {
+                            offset: arvo::USize(key_start),
+                        });
+                    }
+                    let value = match p.parse_string() {
+                        Outcome::Ok(v) => v,
+                        Outcome::Err(e) => return Outcome::Err(e),
+                    };
+                    cfg.ts_config = Maybe::Is(value);
+                    ts_config_seen = true;
+                }
+                _ => {
+                    return Outcome::Err(ConfigError::UnknownKey {
+                        offset: arvo::USize(key_start),
+                    });
+                }
+            }
+            p.skip_ws_and_comments();
+            continue;
+        }
 
         match key {
             b"runner" => {
@@ -121,6 +188,15 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
     }
 
     Outcome::Ok(cfg)
+}
+
+/// Which TOML section the parser is currently reading entries into.
+#[derive(Copy, Clone)]
+enum Section {
+    /// Top-level keys (`runner`, `grammars`, `lints`).
+    Root,
+    /// Inside `[ts]`. Accepts `config = "..."`.
+    Ts,
 }
 
 struct Parser<'a> {
@@ -513,6 +589,73 @@ runner = \"r\" # trailing comment
             Maybe::Is(s) => assert_eq!(s, b"path/with=equals.dylib"),
             Maybe::Isnt => panic!("runner missing"),
         }
+    }
+
+    #[test]
+    fn ts_section_with_config_key() {
+        let input = b"\
+runner = \"r.dylib\"
+
+[ts]
+config = \"viola.config.ts\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        match cfg.ts_config {
+            Maybe::Is(s) => assert_eq!(s, b"viola.config.ts"),
+            Maybe::Isnt => panic!("ts_config missing"),
+        }
+    }
+
+    #[test]
+    fn ts_section_alone() {
+        let cfg = match parse16(b"[ts]\nconfig = \"x.ts\"\n") {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert!(matches!(cfg.runner, Maybe::Isnt));
+        match cfg.ts_config {
+            Maybe::Is(s) => assert_eq!(s, b"x.ts"),
+            Maybe::Isnt => panic!("ts_config missing"),
+        }
+    }
+
+    #[test]
+    fn unknown_section_fails() {
+        let err = match parse16(b"[grammar]\nfoo = \"x\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    #[test]
+    fn duplicate_ts_section_fails() {
+        let err = match parse16(b"[ts]\nconfig = \"a\"\n[ts]\nconfig = \"b\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
+    }
+
+    #[test]
+    fn unknown_key_in_ts_section_fails() {
+        let err = match parse16(b"[ts]\nbogus = \"x\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    #[test]
+    fn duplicate_ts_config_key_fails() {
+        let err = match parse16(b"[ts]\nconfig = \"a\"\nconfig = \"b\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::DuplicateKey { .. }));
     }
 
     #[test]

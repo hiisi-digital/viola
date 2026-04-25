@@ -2553,23 +2553,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
-name = "viola-bridge-deno"
-version = "0.1.0"
-dependencies = [
- "arvo",
- "deno_ast",
- "deno_core",
- "hilavitkutin-extensions",
- "hilavitkutin-extensions-macros",
- "libc",
- "notko",
- "serde",
- "serde_json",
- "tokio",
- "viola-plugin-abi",
-]
-
-[[package]]
 name = "viola-cli"
 version = "0.1.0"
 dependencies = [
@@ -2595,6 +2578,23 @@ dependencies = [
  "arvo",
  "hilavitkutin-extensions",
  "notko",
+ "viola-plugin-abi",
+]
+
+[[package]]
+name = "viola-deno-runtime"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "deno_ast",
+ "deno_core",
+ "hilavitkutin-extensions",
+ "hilavitkutin-extensions-macros",
+ "libc",
+ "notko",
+ "serde",
+ "serde_json",
+ "tokio",
  "viola-plugin-abi",
 ]
 
