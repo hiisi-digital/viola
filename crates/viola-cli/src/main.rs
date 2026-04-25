@@ -43,6 +43,11 @@ const EXIT_OK: i32 = 0;
 const EXIT_DIAG: i32 = 1;
 const EXIT_CONFIG: i32 = 2;
 const EXIT_PLUGIN: i32 = 3;
+/// Posix-conventional "command not found" exit code. Used when the
+/// passthrough path cannot exec deno (typically because deno is not
+/// on PATH). Distinct from EXIT_PLUGIN so tooling that inspects exit
+/// codes can distinguish "missing runtime" from "plugin failed".
+const EXIT_EXEC: i32 = 127;
 
 #[cfg(not(test))]
 #[panic_handler]
@@ -74,11 +79,17 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     let config_path = resolve_config_path(argc, argv);
 
     let mut config_buf = [0u8; MAX_CONFIG_BYTES];
-    let bytes = match io::read_file(config_path, &mut config_buf) {
+    let bytes_read = io::read_file(config_path, &mut config_buf);
+
+    // Pure-TS path: no viola.toml means the user runs viola the way
+    // the existing TS CLI does — point at a viola.config.ts in cwd.
+    // Pass through to `deno run -A jsr:@hiisi/viola-cli` with the
+    // user's argv so behaviour and output match the existing CLI
+    // exactly. Returns only on exec failure.
+    let bytes = match bytes_read {
         notko::Maybe::Is(b) => b,
         notko::Maybe::Isnt => {
-            io::eprintln(b"viola-cli: failed to read config file");
-            return EXIT_CONFIG;
+            return passthrough_to_deno_cli(argc, argv);
         }
     };
 
@@ -89,6 +100,19 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
             return EXIT_CONFIG;
         }
     };
+
+    // Pure-TS path with explicit viola.toml [ts] but no Rust plugins:
+    // also pass through to the JSR CLI. The Rust v1 ABI plugin path
+    // engages only when viola.toml configures a Rust runner or any
+    // Rust grammars / lints. This matches the "drop-in replacement"
+    // promise: TS users who never wrote a viola.toml or wrote one
+    // with only [ts] see the existing TS CLI's behaviour byte-for-byte.
+    let has_rust_plugins = matches!(cfg.runner, notko::Maybe::Is(_))
+        || cfg.grammar_len.0 > 0
+        || cfg.lint_len.0 > 0;
+    if !has_rust_plugins {
+        return passthrough_to_deno_cli(argc, argv);
+    }
 
     // Resolve plugin loading strategy. When `[ts]` is present, the
     // user opts into the embedded deno runtime: it acts as runner +
@@ -270,6 +294,91 @@ fn resolve_config_path(argc: i32, argv: *const *const u8) -> &'static [u8] {
 }
 
 const DEFAULT_CONFIG_PATH: &[u8] = b"./viola.toml\0";
+
+/// JSR coordinate for the existing TS viola CLI. Pass-through mode
+/// execs `deno run -A jsr:@hiisi/viola-cli ...` and lets deno do the
+/// rest, preserving byte-for-byte compatibility with the existing
+/// distribution.
+const PASSTHROUGH_DENO: &[u8] = b"deno\0";
+const PASSTHROUGH_RUN: &[u8] = b"run\0";
+const PASSTHROUGH_ALLOW_ALL: &[u8] = b"-A\0";
+const PASSTHROUGH_JSR: &[u8] = b"jsr:@hiisi/viola-cli\0";
+
+/// Maximum forwarded argv slots. Hosts argv[0] = "deno", argv[1] =
+/// "run", argv[2] = "-A", argv[3] = "jsr:@hiisi/viola-cli", then up
+/// to (MAX_PASSTHROUGH_ARGS - 5) user-supplied args, then a NULL
+/// terminator. Real-world viola invocations stay well under this.
+const MAX_PASSTHROUGH_ARGS: usize = 64;
+
+/// Pass argv through to `deno run -A jsr:@hiisi/viola-cli ...` via
+/// `execvp`. Returns only on failure (in which case viola-cli falls
+/// back to its own error path). Successful exec replaces the
+/// process image and never returns.
+#[cfg(unix)]
+fn passthrough_to_deno_cli(argc: i32, argv: *const *const u8) -> i32 {
+    let mut new_argv: [*const u8; MAX_PASSTHROUGH_ARGS] =
+        [core::ptr::null(); MAX_PASSTHROUGH_ARGS];
+    // argv[0] is conventionally the program name as the OS resolved
+    // it. For execvp, where the kernel does the PATH lookup against
+    // the file argument, the right argv[0] is the bare program name
+    // ("deno"), which is also what deno reads if it inspects argv[0]
+    // for self-location.
+    new_argv[0] = PASSTHROUGH_DENO.as_ptr();
+    new_argv[1] = PASSTHROUGH_RUN.as_ptr();
+    new_argv[2] = PASSTHROUGH_ALLOW_ALL.as_ptr();
+    new_argv[3] = PASSTHROUGH_JSR.as_ptr();
+    let prefix = 4;
+
+    // Forward user args (skip argv[0], which is our binary's name).
+    // Reserve one slot for the trailing NULL terminator. If the user
+    // supplies more args than fit, fail loudly: silently truncating
+    // would corrupt the invocation in a way the caller cannot detect.
+    let user_count = if argc >= 1 { (argc - 1) as usize } else { 0 };
+    let cap = MAX_PASSTHROUGH_ARGS - prefix - 1;
+    if user_count > cap {
+        io::eprint(b"viola-cli: too many passthrough args (max ");
+        let mut buf = [0u8; 20];
+        io::eprint(fmt::usize_to_dec(cap, &mut buf));
+        io::eprintln(b" supported); refusing to truncate");
+        return EXIT_CONFIG;
+    }
+    let mut i = 0;
+    while i < user_count {
+        // SAFETY: argv[i+1] is a process-lifetime null-terminated
+        // C-string supplied by libc. We forward the pointer without
+        // copying; execvp consumes the array before it returns
+        // (failure case) or the process image is replaced (success).
+        unsafe {
+            new_argv[prefix + i] = *argv.add(i + 1);
+        }
+        i += 1;
+    }
+    // Trailing NULL is already in place from the zero-init.
+
+    // SAFETY: new_argv is a NULL-terminated array of NULL-terminated
+    // C strings, matching execvp's contract. The first entry is the
+    // file argument (deno), looked up against PATH.
+    unsafe {
+        libc::execvp(
+            PASSTHROUGH_DENO.as_ptr() as *const i8,
+            new_argv.as_ptr() as *const *const i8,
+        );
+    }
+    // Reached only on exec failure (e.g. deno not on PATH). 127 is
+    // the POSIX-conventional "command not found" exit code; tooling
+    // that inspects exit codes can distinguish this from a plugin or
+    // diagnostic failure.
+    io::eprintln(
+        b"viola-cli: failed to exec `deno run jsr:@hiisi/viola-cli`. Is deno on PATH?",
+    );
+    EXIT_EXEC
+}
+
+#[cfg(not(unix))]
+fn passthrough_to_deno_cli(_argc: i32, _argv: *const *const u8) -> i32 {
+    io::eprintln(b"viola-cli: pass-through mode requires unix");
+    EXIT_PLUGIN
+}
 
 /// Sibling dylib name viola-cli auto-loads when `[ts]` is present.
 /// Resolved by the OS loader against rpath / DYLD_LIBRARY_PATH /
