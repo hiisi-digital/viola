@@ -316,6 +316,57 @@ impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     }
 }
 
+impl<'a, const MAX_PLUGINS: usize> ViolaConfig<'a, MAX_PLUGINS> {
+    /// Resolve the effective gate-threshold token for a given lint at
+    /// a given gate per the v2 chain documented in
+    /// `docs/VIOLA-TOML-V2-SCHEMA.md` §"Gate resolution model":
+    ///
+    /// 1. `[gates.<lint_id>].<gate>` (per-lint override) if present;
+    /// 2. else `[gates].<gate>` (global default) if present;
+    /// 3. else the built-in `b"error"` default.
+    ///
+    /// Lookup is exact-match on `lint_id`; the issue-pattern grammar
+    /// (`linter/*`, `*::category`, `>=impact`) is not yet evaluated
+    /// at this layer. `gate` is one of `b"commit"` / `b"build"` /
+    /// `b"push"`; any other token short-circuits to the default.
+    ///
+    /// A per-lint override that matches `lint_id` but does not set a
+    /// value for the requested gate falls through to the global
+    /// default rather than to the built-in. This matches the chain
+    /// described in the schema memo: a lint can override `commit`
+    /// while inheriting `build` and `push` from `[gates]`.
+    pub fn resolve_gate_threshold(
+        &'a self,
+        lint_id: &[u8],
+        gate: &[u8],
+    ) -> &'a [u8] {
+        let pick = |t: &GateThresholds<'a>| -> Maybe<&'a [u8]> {
+            match gate {
+                b"commit" => t.commit,
+                b"build" => t.build,
+                b"push" => t.push,
+                _ => Maybe::Isnt,
+            }
+        };
+        for o in self.gate_overrides_slice() {
+            if o.lint_id == lint_id {
+                if let Maybe::Is(s) = pick(&o.thresholds) {
+                    return s;
+                }
+                // Definitive lint match without a value for this
+                // gate: per the schema memo, the chain falls through
+                // to the global default, not to the built-in. Stop
+                // scanning rather than checking later overrides.
+                break;
+            }
+        }
+        if let Maybe::Is(s) = pick(&self.gates) {
+            return s;
+        }
+        b"error"
+    }
+}
+
 impl<const MAX_PLUGINS: usize> ViolaConfig<'_, MAX_PLUGINS> {
     /// View the populated grammar slots as a slice.
     pub fn grammars_slice(&self) -> &[&[u8]] {
@@ -364,4 +415,95 @@ pub fn parse_default<'a>(
     input: &'a [u8],
 ) -> Outcome<ViolaConfig<'a, 16>, ConfigError> {
     parse::<16>(input)
+}
+
+#[cfg(test)]
+mod gate_resolution_tests {
+    use super::*;
+
+    fn parse_v2(s: &[u8]) -> ViolaConfig<'_, 16> {
+        match parse::<16>(s) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("expected parse ok, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn defaults_to_error_when_no_gates_declared() {
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n",
+        );
+        assert_eq!(cfg.resolve_gate_threshold(b"any-lint", b"commit"), b"error");
+        assert_eq!(cfg.resolve_gate_threshold(b"any-lint", b"build"), b"error");
+        assert_eq!(cfg.resolve_gate_threshold(b"any-lint", b"push"), b"error");
+    }
+
+    #[test]
+    fn falls_through_to_global_when_no_per_lint_match() {
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n[gates]\ncommit = \"warn\"\nbuild = \"error\"\npush = \"error\"\n",
+        );
+        assert_eq!(cfg.resolve_gate_threshold(b"some-lint", b"commit"), b"warn");
+        assert_eq!(cfg.resolve_gate_threshold(b"some-lint", b"build"), b"error");
+    }
+
+    #[test]
+    fn per_lint_override_wins_for_matched_gate() {
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n[gates]\ncommit = \"warn\"\n[gates.no-bare-numeric]\ncommit = \"error\"\n",
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"no-bare-numeric", b"commit"),
+            b"error"
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"other-lint", b"commit"),
+            b"warn"
+        );
+    }
+
+    #[test]
+    fn per_lint_override_falls_through_to_global_for_unset_gate() {
+        // duplicate-logic only sets `push`; `commit` should fall
+        // through to the global default, not to the built-in "error".
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n[gates]\ncommit = \"warn\"\n[gates.duplicate-logic]\npush = \"error\"\n",
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"duplicate-logic", b"commit"),
+            b"warn"
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"duplicate-logic", b"push"),
+            b"error"
+        );
+    }
+
+    #[test]
+    fn per_lint_override_falls_through_to_builtin_when_global_silent() {
+        // No global [gates] block; per-lint sets push but not commit.
+        // commit should resolve to the built-in "error".
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n[gates.duplicate-logic]\npush = \"warn\"\n",
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"duplicate-logic", b"commit"),
+            b"error"
+        );
+        assert_eq!(
+            cfg.resolve_gate_threshold(b"duplicate-logic", b"push"),
+            b"warn"
+        );
+    }
+
+    #[test]
+    fn unknown_gate_name_resolves_to_builtin() {
+        // Gate name not in {commit, build, push}. Both global and
+        // per-lint pickers return Maybe::Isnt, so the chain ends at
+        // the built-in default.
+        let cfg = parse_v2(
+            b"[viola]\nversion = 2\nplugins = [\"./p.dylib\"]\n[gates]\ncommit = \"warn\"\n",
+        );
+        assert_eq!(cfg.resolve_gate_threshold(b"any", b"release"), b"error");
+    }
 }
