@@ -1,66 +1,57 @@
 # `viola-plugin-abi`
 
-Status: placeholder (design-first, implementation pending)
+Stable C-ABI contract crate shared between the Viola host runtime
+(`viola-core`) and any plugin compiled as a native `cdylib`.
 
-## Purpose
+Status: v1 contract surface landed. Companion proc-macro SDK
+(`viola-plugin-abi-macros`) and host loader live in separate crates
+and tasks.
 
-`viola-plugin-abi` is the canonical Rust crate for the **stable Plugin ABI** shared between:
+## Scope
 
-- the Viola host runtime (currently documented as `viola-core` / host layer), and
-- all native plugins (`runner`, `grammar`, `lint`) loaded by that host.
+This crate owns the wire shapes and version primitives that cross the
+C-ABI boundary at plugin load and invocation:
 
-This crate exists to prevent ABI drift and to keep host/plugin contracts explicit, versioned, and testable. It enforces a strict `cdylib` C-ABI boundary while preserving safe Rust ergonomics for plugin authors via macro-driven static monomorphization.
+- `PluginDescriptor`, `PluginIdentity`, `CapabilityEntry`,
+  `CapabilityId` (FNV-1a 64 over an ASCII name, const-evaluated)
+- Role and role-set bitflag (`Role`, `RoleSet`): runner, grammar, lint
+- Well-known capability constants for each role's primary operation
+- Version primitives (`AbiVersion`, `ManifestVersion`, `PluginVersion`,
+  `NamVersion`, `VersionTriple`) and compatibility helpers
+- Lifecycle and invocation status codes (`AbiStatus`)
+- Structured error categories (`PluginError`)
+- Diagnostic schema (`Diagnostic`, `DiagnosticBatch`, `SourceRange`,
+  `SourceLocation`, `DiagnosticSeverity`)
+- NAM payload carrier and version marker (`NamPayload`, `NamVersion`)
+- Configuration surface (`ConfigSchemaRef`, `RunSurface`)
+- The exported-symbol constant `DESCRIPTOR_SYMBOL`
 
-## Scope (planned)
-
-This crate will contain only ABI contract surface, not runtime/plugin-loader behavior.
-
-Planned contents include:
-
-- ABI version constants and compatibility helpers
-- stable exported symbol identifiers
-- role identifiers (`runner`, `grammar`, `lint`)
-- plugin descriptor structures
-- lifecycle contract structures (`init`, `invoke`, `shutdown`)
-- operation tables for role-specific functions
-- shared error/result codes and envelope structures
-- memory ownership and boundary rules for host/plugin interaction
-- schema/version markers for normalized model compatibility
-- procedural macros (e.g., `#[export_plugin]`) for static monomorphization of generic Rust traits into `extern "C"` function pointers
+The crate is `#![no_std]`, allocates nothing, and has no dependencies
+beyond `core`.
 
 ## Non-goals
 
-This crate should **not** contain:
+Out of scope for this crate:
 
-- dynamic loading/linking machinery
-- plugin discovery logic
-- host orchestration logic
-- grammar parsing logic
-- lint execution logic
-- CLI concerns
-
-Those belong in host/runtime crates and supporting infrastructure crates.
+- dynamic loading and symbol resolution (lives in `viola-core` and
+  the planned `hilavitkutin-linking` substrate)
+- host orchestration: lifecycle scheduling, fan-out, aggregation
+- plugin authoring ergonomics: the proc-macro `#[export_plugin]` lives
+  in a separate `viola-plugin-abi-macros` crate so that the contract
+  surface stays free of `syn`/`quote`/proc-macro tooling
+- runtime discovery, plugin marketplaces, or signing infrastructure
+- concrete NAM serialization: v1 reserves the version axis and an
+  opaque payload; the binary shape lands in a follow-up round
 
 ## Source of truth
 
-Current design authority is:
+`docs/PLUGIN-ABI-V1-DESIGN.md` at the repository root is the normative
+spec. This crate is the executable form of sections 3 through 8 plus
+the diagnostic and error model in sections 10 and 11. Section 9 (NAM)
+is reserved by version axis only.
 
-- `docs/PLUGIN-ABI-V1-DESIGN.md`
+## Compatibility policy
 
-This README is intentionally minimal and should evolve only in lockstep with that design.
-
-## Intended relationships
-
-Planned dependency direction:
-
-- host/runtime crate depends on `viola-plugin-abi`
-- native plugin crates depend on `viola-plugin-abi`
-- both sides compile against the same ABI definitions to ensure strict shape compatibility
-
-## Initial crate policy
-
-Until implementation starts:
-
-1. Keep this crate as a documented placeholder.
-2. Avoid speculative API additions outside the design doc.
-3. Treat ABI compatibility discipline as the primary constraint.
+`HOST_ABI_MAJOR` is `1`. The host rejects any plugin whose
+`abi_version` major differs. Additive minor changes are allowed and
+do not bump the major; breaking layout or semantic changes do.

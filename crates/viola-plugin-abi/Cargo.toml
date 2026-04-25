@@ -2,5 +2,8 @@
 name = "viola-plugin-abi"
 version = "0.1.0"
 edition = "2024"
+description = "Viola plugin ABI v1: stable C-ABI contracts for runner, grammar, and lint plugins"
+license = "MPL-2.0"
+repository = "https://github.com/orgrinrt/viola"
 
 [dependencies]
