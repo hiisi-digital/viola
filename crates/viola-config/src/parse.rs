@@ -30,7 +30,10 @@
 
 use notko::{Maybe, Outcome};
 
-use crate::{GateOverride, GateThresholds, LintConfigBlock, ViolaConfig};
+use crate::{
+    GateOverride, GateThresholds, LintConfigBlock, SeverityRule, ViolaConfig,
+    issue_pattern::{IssuePatternError, parse_issue_pattern},
+};
 
 /// Diagnostics for a parse failure.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -48,6 +51,16 @@ pub enum ConfigError {
     IncompatibleSchema { offset: arvo::USize },
     /// Integer literal did not parse (non-digit, overflow, or empty).
     InvalidInteger { offset: arvo::USize },
+    /// `[[severity]]` rule's `issue` field carried a string that did
+    /// not parse against the issue-pattern grammar (see
+    /// `crate::issue_pattern`).
+    InvalidIssuePattern {
+        offset: arvo::USize,
+        kind: IssuePatternError,
+    },
+    /// A required field was missing from a section that demands it
+    /// (e.g. `[[severity]]` without `level`).
+    MissingRequiredField { offset: arvo::USize },
 }
 
 const SCHEMA_V2: usize = 2;
@@ -57,7 +70,7 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
     input: &'a [u8],
 ) -> Outcome<ViolaConfig<'a, MAX_PLUGINS>, ConfigError> {
     let mut cfg = ViolaConfig::<'a, MAX_PLUGINS>::empty();
-    let mut seen = SeenFlags::default();
+    let mut seen = SeenFlags::<MAX_PLUGINS>::default();
     let mut current = Section::Root;
 
     let mut p = Parser::new(input);
@@ -109,6 +122,18 @@ pub fn parse<'a, const MAX_PLUGINS: usize>(
         }
     }
 
+    // Severity rules: `level` is required. Run after the v1/v2
+    // schema check so users see schema errors first.
+    let mut i = 0;
+    while i < cfg.severity_rules_len.0 {
+        if matches!(cfg.severity_rules[i].level, Maybe::Isnt) {
+            return Outcome::Err(ConfigError::MissingRequiredField {
+                offset: arvo::USize(seen.severity_rule_offsets[i]),
+            });
+        }
+        i += 1;
+    }
+
     Outcome::Ok(cfg)
 }
 
@@ -121,8 +146,7 @@ impl<const N: usize> ViolaConfig<'_, N> {
     }
 }
 
-#[derive(Default)]
-struct SeenFlags {
+struct SeenFlags<const N: usize> {
     runner: bool,
     grammars: bool,
     lints: bool,
@@ -139,6 +163,33 @@ struct SeenFlags {
     gates_push: bool,
     plugins: bool,
     inherit: bool,
+    /// Per-rule header offsets so the post-parse "level required"
+    /// check can point at the rule whose `level` is missing.
+    severity_rule_offsets: [usize; N],
+}
+
+impl<const N: usize> Default for SeenFlags<N> {
+    fn default() -> Self {
+        Self {
+            runner: false,
+            grammars: false,
+            lints: false,
+            runner_offset: 0,
+            grammars_offset: 0,
+            lints_offset: 0,
+            ts_section: false,
+            ts_config: false,
+            viola_section: false,
+            viola_version: false,
+            gates_section: false,
+            gates_commit: false,
+            gates_build: false,
+            gates_push: false,
+            plugins: false,
+            inherit: false,
+            severity_rule_offsets: [0; N],
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -161,15 +212,55 @@ enum Section {
         idx: usize,
         body_start: usize,
     },
+    /// Inside a `[[severity]]` array-of-tables entry. `idx` points
+    /// into `cfg.severity_rules[idx]`.
+    Severity {
+        idx: usize,
+    },
 }
 
 fn parse_section_header<'a, const MAX_PLUGINS: usize>(
     p: &mut Parser<'a>,
     cfg: &mut ViolaConfig<'a, MAX_PLUGINS>,
-    seen: &mut SeenFlags,
+    seen: &mut SeenFlags<MAX_PLUGINS>,
 ) -> Outcome<Section, ConfigError> {
     let header_offset = p.offset;
     p.advance(); // consume '['
+    // `[[name]]` array-of-tables. Recognised array names: `severity`.
+    if !p.at_end() && p.peek() == b'[' {
+        p.advance();
+        p.skip_ws();
+        let name_offset = p.offset;
+        let name = match p.parse_key() {
+            Outcome::Ok(k) => k,
+            Outcome::Err(e) => return Outcome::Err(e),
+        };
+        p.skip_ws();
+        if !p.consume_byte(b']') || !p.consume_byte(b']') {
+            return Outcome::Err(ConfigError::Unexpected {
+                offset: arvo::USize(p.offset),
+            });
+        }
+        match name {
+            b"severity" => {
+                if cfg.severity_rules_len.0 >= MAX_PLUGINS {
+                    return Outcome::Err(ConfigError::Capacity {
+                        offset: arvo::USize(header_offset),
+                    });
+                }
+                let idx = cfg.severity_rules_len.0;
+                cfg.severity_rules[idx] = SeverityRule::EMPTY;
+                cfg.severity_rules_len = arvo::USize(idx + 1);
+                seen.severity_rule_offsets[idx] = header_offset;
+                return Outcome::Ok(Section::Severity { idx });
+            }
+            _ => {
+                return Outcome::Err(ConfigError::UnknownKey {
+                    offset: arvo::USize(name_offset),
+                });
+            }
+        }
+    }
     p.skip_ws();
     let parent_offset = p.offset;
     let parent = match p.parse_key() {
@@ -298,7 +389,7 @@ fn trim_trailing_ws(s: &[u8]) -> &[u8] {
 fn parse_entry<'a, const MAX_PLUGINS: usize>(
     p: &mut Parser<'a>,
     cfg: &mut ViolaConfig<'a, MAX_PLUGINS>,
-    seen: &mut SeenFlags,
+    seen: &mut SeenFlags<MAX_PLUGINS>,
     section: Section,
 ) -> Outcome<(), ConfigError> {
     let key_start = p.offset;
@@ -340,14 +431,146 @@ fn parse_entry<'a, const MAX_PLUGINS: usize>(
             let _ = key; // accept any key
             p.skip_value()
         }
+        Section::Severity { idx } => parse_severity_entry(p, cfg, idx, key, key_start),
         Section::Root => parse_root_entry(p, cfg, seen, key, key_start),
     }
+}
+
+fn parse_severity_entry<'a, const N: usize>(
+    p: &mut Parser<'a>,
+    cfg: &mut ViolaConfig<'a, N>,
+    idx: usize,
+    key: &'a [u8],
+    key_start: usize,
+) -> Outcome<(), ConfigError> {
+    match key {
+        b"issue" => {
+            if matches!(cfg.severity_rules[idx].issue, Maybe::Is(_)) {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value_offset = p.offset;
+            let value = match p.parse_string() {
+                Outcome::Ok(v) => v,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            // Validate at parse time so typos surface here, not at
+            // runtime against an unmatched diagnostic. The parsed
+            // form is recomputed at match time; we store raw bytes.
+            if let Outcome::Err(kind) = parse_issue_pattern(value) {
+                return Outcome::Err(ConfigError::InvalidIssuePattern {
+                    offset: arvo::USize(value_offset),
+                    kind,
+                });
+            }
+            cfg.severity_rules[idx].issue = Maybe::Is(value);
+            Outcome::Ok(())
+        }
+        b"files" => {
+            if cfg.severity_rules[idx].files_len.0 > 0 {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            // Single string or array of strings.
+            if !p.at_end() && p.peek() == b'"' {
+                let v = match p.parse_string() {
+                    Outcome::Ok(v) => v,
+                    Outcome::Err(e) => return Outcome::Err(e),
+                };
+                cfg.severity_rules[idx].files[0] = v;
+                cfg.severity_rules[idx].files_len = arvo::USize(1);
+                Outcome::Ok(())
+            } else {
+                // SAFETY of indexing: files has SEVERITY_FILES_CAP
+                // slots; parse_string_array bounds-checks via
+                // count.0 >= out.len().
+                let count = match p.parse_string_array(
+                    &mut cfg.severity_rules[idx].files,
+                ) {
+                    Outcome::Ok(n) => n,
+                    Outcome::Err(e) => return Outcome::Err(e),
+                };
+                cfg.severity_rules[idx].files_len = count;
+                Outcome::Ok(())
+            }
+        }
+        b"gate" => {
+            if matches!(cfg.severity_rules[idx].gate, Maybe::Is(_)) {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value_offset = p.offset;
+            let value = match p.parse_string() {
+                Outcome::Ok(v) => v,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            if !is_gate_token(value) {
+                return Outcome::Err(ConfigError::Unexpected {
+                    offset: arvo::USize(value_offset),
+                });
+            }
+            cfg.severity_rules[idx].gate = Maybe::Is(value);
+            Outcome::Ok(())
+        }
+        b"level" => {
+            if matches!(cfg.severity_rules[idx].level, Maybe::Is(_)) {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value_offset = p.offset;
+            let value = match p.parse_string() {
+                Outcome::Ok(v) => v,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            if !is_severity_token(value) {
+                return Outcome::Err(ConfigError::Unexpected {
+                    offset: arvo::USize(value_offset),
+                });
+            }
+            cfg.severity_rules[idx].level = Maybe::Is(value);
+            Outcome::Ok(())
+        }
+        b"min_confidence" => {
+            if matches!(cfg.severity_rules[idx].min_confidence, Maybe::Is(_)) {
+                return Outcome::Err(ConfigError::DuplicateKey {
+                    offset: arvo::USize(key_start),
+                });
+            }
+            let value_offset = p.offset;
+            let n = match p.parse_integer() {
+                Outcome::Ok(n) => n,
+                Outcome::Err(e) => return Outcome::Err(e),
+            };
+            if n > 100 {
+                return Outcome::Err(ConfigError::InvalidInteger {
+                    offset: arvo::USize(value_offset),
+                });
+            }
+            cfg.severity_rules[idx].min_confidence = Maybe::Is(arvo::USize(n));
+            Outcome::Ok(())
+        }
+        _ => Outcome::Err(ConfigError::UnknownKey {
+            offset: arvo::USize(key_start),
+        }),
+    }
+}
+
+fn is_gate_token(s: &[u8]) -> bool {
+    matches!(s, b"commit" | b"build" | b"push")
+}
+
+fn is_severity_token(s: &[u8]) -> bool {
+    matches!(s, b"error" | b"warn" | b"info" | b"hint" | b"off" | b"skip")
 }
 
 fn parse_ts_entry<'a, const N: usize>(
     p: &mut Parser<'a>,
     cfg: &mut ViolaConfig<'a, N>,
-    seen: &mut SeenFlags,
+    seen: &mut SeenFlags<N>,
     key: &'a [u8],
     key_start: usize,
 ) -> Outcome<(), ConfigError> {
@@ -375,7 +598,7 @@ fn parse_ts_entry<'a, const N: usize>(
 fn parse_viola_entry<'a, const N: usize>(
     p: &mut Parser<'a>,
     cfg: &mut ViolaConfig<'a, N>,
-    seen: &mut SeenFlags,
+    seen: &mut SeenFlags<N>,
     key: &'a [u8],
     key_start: usize,
 ) -> Outcome<(), ConfigError> {
@@ -444,7 +667,7 @@ fn parse_gate_entry<'a>(
 fn parse_root_entry<'a, const N: usize>(
     p: &mut Parser<'a>,
     cfg: &mut ViolaConfig<'a, N>,
-    seen: &mut SeenFlags,
+    seen: &mut SeenFlags<N>,
     key: &'a [u8],
     key_start: usize,
 ) -> Outcome<(), ConfigError> {
@@ -1075,6 +1298,138 @@ commit = \"error\"
     #[test]
     fn unknown_key_in_gates_section_fails() {
         let err = match parse16(b"[viola]\nversion = 2\n[gates]\nbogus = \"x\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    // ----- [[severity]] rules -----
+
+    #[test]
+    fn severity_rule_flat() {
+        let input = b"\
+[[severity]]
+issue = \"duplicate-logic/*\"
+files = \"src/**\"
+gate = \"commit\"
+level = \"warn\"
+min_confidence = 80
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.severity_rules_len.0, 1);
+        let r = &cfg.severity_rules_slice()[0];
+        assert!(matches!(r.issue, Maybe::Is(b"duplicate-logic/*")));
+        assert_eq!(r.files_len.0, 1);
+        assert_eq!(r.files_slice()[0], b"src/**");
+        assert!(matches!(r.gate, Maybe::Is(b"commit")));
+        assert!(matches!(r.level, Maybe::Is(b"warn")));
+        assert!(matches!(r.min_confidence, Maybe::Is(arvo::USize(80))));
+    }
+
+    #[test]
+    fn severity_rule_files_array() {
+        let input = b"\
+[[severity]]
+issue = \"*\"
+files = [\"src/**\", \"lib/**\"]
+level = \"error\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        let r = &cfg.severity_rules_slice()[0];
+        assert_eq!(r.files_len.0, 2);
+        assert_eq!(r.files_slice()[0], b"src/**");
+        assert_eq!(r.files_slice()[1], b"lib/**");
+    }
+
+    #[test]
+    fn severity_rule_multiple() {
+        let input = b"\
+[[severity]]
+issue = \"*\"
+files = \"**/*_test.ts\"
+level = \"off\"
+
+[[severity]]
+issue = \"duplicate-logic/*\"
+level = \"warn\"
+";
+        let cfg = match parse16(input) {
+            Outcome::Ok(c) => c,
+            Outcome::Err(e) => panic!("err {e:?}"),
+        };
+        assert_eq!(cfg.severity_rules_len.0, 2);
+    }
+
+    #[test]
+    fn severity_missing_level_fails() {
+        let err = match parse16(b"[[severity]]\nissue = \"*\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::MissingRequiredField { .. }));
+    }
+
+    #[test]
+    fn severity_invalid_issue_pattern_fails() {
+        let err = match parse16(b"[[severity]]\nissue = \"bogus\"\nlevel = \"warn\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::InvalidIssuePattern { .. }));
+    }
+
+    #[test]
+    fn severity_unknown_level_fails() {
+        let err = match parse16(b"[[severity]]\nissue = \"*\"\nlevel = \"bogus\"\n") {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Unexpected { .. }));
+    }
+
+    #[test]
+    fn severity_unknown_gate_fails() {
+        let err = match parse16(
+            b"[[severity]]\nissue = \"*\"\ngate = \"runtime\"\nlevel = \"warn\"\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::Unexpected { .. }));
+    }
+
+    #[test]
+    fn severity_min_confidence_above_100_fails() {
+        let err = match parse16(
+            b"[[severity]]\nissue = \"*\"\nlevel = \"warn\"\nmin_confidence = 250\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::InvalidInteger { .. }));
+    }
+
+    #[test]
+    fn severity_unknown_field_fails() {
+        let err = match parse16(
+            b"[[severity]]\nissue = \"*\"\nbogus = \"x\"\nlevel = \"warn\"\n",
+        ) {
+            Outcome::Ok(_) => panic!("expected err"),
+            Outcome::Err(e) => e,
+        };
+        assert!(matches!(err, ConfigError::UnknownKey { .. }));
+    }
+
+    #[test]
+    fn unknown_array_table_name_fails() {
+        let err = match parse16(b"[[bogus]]\nfoo = \"x\"\n") {
             Outcome::Ok(_) => panic!("expected err"),
             Outcome::Err(e) => e,
         };

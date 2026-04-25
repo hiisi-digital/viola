@@ -525,6 +525,12 @@ fn emit_config_error(e: &viola_config::ConfigError) {
             (&b"v1 key not allowed under [viola] version = 2"[..], offset.0)
         }
         E::InvalidInteger { offset } => (&b"invalid integer literal"[..], offset.0),
+        E::InvalidIssuePattern { offset, .. } => {
+            (&b"invalid issue pattern"[..], offset.0)
+        }
+        E::MissingRequiredField { offset } => {
+            (&b"missing required field"[..], offset.0)
+        }
     };
     io::eprint(b"viola-cli: viola.toml: ");
     io::eprint(label);
