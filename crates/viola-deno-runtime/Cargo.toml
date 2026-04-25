@@ -3,7 +3,7 @@ name = "viola-deno-runtime"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Viola plugin that embeds a deno_core JsRuntime and exposes the v1 runner / grammar / lint capabilities. Self-contained cdylib; no external deno binary required."
+description = "Viola plugin that runs TS lint projects through a long-lived sibling deno worker process and bridges results into the v1 plugin ABI."
 repository.workspace = true
 
 [lib]
@@ -15,10 +15,6 @@ hilavitkutin-extensions.workspace = true
 hilavitkutin-extensions-macros.workspace = true
 arvo.workspace = true
 notko.workspace = true
-deno_core = "0.399"
-deno_ast = { version = "0.53", features = ["transpiling"] }
-deno_error = "=0.7.1"
-tokio = { version = "1", features = ["rt", "macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

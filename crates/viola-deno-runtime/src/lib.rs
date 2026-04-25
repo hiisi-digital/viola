@@ -1,61 +1,54 @@
-//! `viola-deno-runtime`. Viola plugin that embeds a `deno_core`
-//! JsRuntime and exposes the v1 runner / grammar / lint capabilities.
+//! `viola-deno-runtime`. Viola plugin that bridges TS lint projects
+//! into the v1 plugin ABI by driving a long-lived sibling `deno`
+//! worker process.
 //!
-//! The deno runtime IS viola's TypeScript plugin loader. The cdylib
-//! ships one self-contained dynamic library: V8 isolate, transpiler,
-//! ES module loader, and the v1 capability vtables that route into it.
-//! When a host invokes a capability, the call funnels into a single
-//! embedded `JsRuntime` which loads and evaluates the user's
-//! `viola.config.ts` as an ES module.
+//! ## Why subprocess and not embedded
 //!
-//! ## Why embedded, not subprocess
+//! Embedding `deno_core` directly gets you V8 + ops, but to *actually
+//! run a real Deno project* (with `import "npm:..."`, `import "jsr:..."`,
+//! node compat, deno cache reuse, byonm) you need the same wiring
+//! Deno's CLI does, which is on the order of tens of thousands of
+//! lines of deno-internal Rust. Reimplementing or vendoring it is a
+//! multi-week project that turns into ongoing breakage every deno_lib
+//! release. The simpler path that preserves full Deno semantics is to
+//! invoke deno itself.
 //!
-//! The plugin compiles once. The V8 isolate is created on plugin init
-//! and reused across every capability invocation within a host run.
-//! Per-invocation cost is the TS execution itself, not process startup.
-//! The plugin distributes as one .dylib/.so/.dll; no external `deno`
-//! binary is required at runtime.
+//! Subprocess-per-call is too slow for a lint runner (deno startup +
+//! module load is 50-200ms, paid on every diagnostic pass). Instead
+//! the cdylib spawns one long-lived deno worker at init, communicates
+//! with it via line-delimited JSON over stdin/stdout, and reaps it on
+//! shutdown. Module cache stays hot across all lint invocations
+//! within one viola-cli run; per-call overhead is the IPC roundtrip
+//! plus the user's own work.
 //!
-//! ## Scope after PR-B of #196
+//! ## What the user authors
 //!
-//! - All three v1 capabilities (Runner, Grammar, Lint) are exported.
-//!   Runner + Grammar are MVP empty-NAM stubs; the Lint role drives
-//!   the embedded JsRuntime end-to-end.
-//! - Lint reads the user's config path from `lint_config_bytes` (set
-//!   by viola-cli from `viola.toml`'s `[ts].config` field), publishes
-//!   it through the `op_get_config_path` op, and loads an embedded
-//!   wrapper module (`runtime.ts`) as the ES main. The wrapper
-//!   dynamically imports the user's config; the custom
-//!   [`module::TsFsModuleLoader`] reads the file from disk and
-//!   transpiles `.ts` / `.tsx` / `.mts` / `.cts` via `deno_ast`.
-//! - Diagnostics are still emitted via `op_emit_diagnostic`. The user
-//!   config is responsible for emitting its own diagnostics in this
-//!   PR-B MVP; PR-C wires `@hiisi/viola`'s builder API so the user
-//!   config exports a builder result instead.
+//! A normal Deno project. `viola.config.ts` exports a default async
+//! function `(req) => void` that uses the bridge-installed global
+//! `viola.diag({plugin_id, rule_id, severity, message, path, line,
+//! column})` to emit diagnostics. byonm and deno's standard resolvers
+//! handle every `import`. The bridge worker imports the config once
+//! at startup, then dispatches each viola-cli lint pass to it.
 //!
-//! ## Still pending
+//! ## v1 ABI surface
 //!
-//! Bare-specifier imports (`import "@hiisi/viola"`) do not resolve in
-//! PR-B; the loader recognises only `file://` URLs and the embedded
-//! `viola-internal:runtime.ts` specifier. PR-C adds bare-specifier
-//! resolution and `@hiisi/viola` integration. PR-D ships the
-//! conformance harness.
+//! All three caps (Runner, Grammar, Lint) are exported. Runner +
+//! Grammar emit empty NAM v1.0.0 payloads in this MVP cut; the lint
+//! cap drives the worker. PR-D adds the `@hiisi/viola` builder API
+//! integration and conformance harness.
 
 use core::ffi::c_void;
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
+use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Mutex;
 
-use deno_core::{
-    JsRuntime, ModuleSpecifier, OpState, PollEventLoopOptions,
-    RuntimeOptions, extension, op2,
-};
 use hilavitkutin_extensions::{
     CapabilityExport, CapabilityId, ExtensionAbiStatus, InitHandler,
     ShutdownHandler,
 };
 use hilavitkutin_extensions_macros::export_extension;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use viola_plugin_abi::{
     AbiStatus, BytesRef, CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE,
     CAP_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch, DiagnosticSeverity,
@@ -64,16 +57,18 @@ use viola_plugin_abi::{
     SourceRange,
 };
 
-mod module;
-mod transpile;
+const BRIDGE_TS: &str = include_str!("bridge.ts");
 
-use module::{RUNTIME_INTERNAL_SPECIFIER, TsFsModuleLoader};
-
-const RUNTIME_TS: &str = include_str!("runtime.ts");
-
-/// Wire shape for diagnostics emitted by the runtime's TS layer.
+/// Wire shape emitted by bridge.ts on stdout.
 #[derive(Deserialize)]
-struct RuntimeDiagnostic {
+struct BridgeMessage {
+    diag: Option<BridgeDiag>,
+    done: Option<bool>,
+    err: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct BridgeDiag {
     plugin_id: String,
     rule_id: String,
     severity: String,
@@ -83,24 +78,35 @@ struct RuntimeDiagnostic {
     column: u32,
 }
 
-#[derive(Default)]
-struct Collector {
-    pending: Vec<RuntimeDiagnostic>,
+/// Wire shape sent to bridge.ts on stdin. Kept Serialize-able and
+/// flat so future ops slot in without breaking the schema.
+#[derive(Serialize)]
+struct LintRequest<'a> {
+    op: &'static str,
+    scope: ScopePayload<'a>,
 }
 
-/// Per-call slot the host writes before evaluating the wrapper module.
-/// The TS side reads it via `op_get_config_path` to learn which user
-/// config to dynamically import.
-#[derive(Default)]
-struct ConfigPath {
-    path: String,
+#[derive(Serialize)]
+struct ScopePayload<'a> {
+    workspace_root: &'a str,
+    files: Vec<FilePayload<'a>>,
+}
+
+#[derive(Serialize)]
+struct FilePayload<'a> {
+    path: &'a str,
+    language: &'a str,
+}
+
+#[derive(Serialize)]
+struct ShutdownRequest {
+    op: &'static str,
 }
 
 /// Plugin-side arena holding the owned bytes a [`Diagnostic`]
-/// references via [`BytesRef`]. Rebuilt on each lint invocation; the
-/// previous batch's pointers are valid only until the next call,
-/// matching the v1 contract: "Buffer ownership is plugin-side; the
-/// host copies before the next invocation."
+/// references via [`BytesRef`]. Rebuilt on each lint invocation so
+/// each call's pointers stay valid only until the next one (matching
+/// the v1 contract: "host copies before next invocation").
 #[derive(Default)]
 struct Arena {
     blobs: Vec<Vec<u8>>,
@@ -129,86 +135,127 @@ impl Arena {
     }
 }
 
-#[op2(fast)]
-fn op_emit_diagnostic(state: &mut OpState, #[string] json: &str) {
-    let collector = state.borrow_mut::<Rc<RefCell<Collector>>>();
-    if let Ok(d) = serde_json::from_str::<RuntimeDiagnostic>(json) {
-        collector.borrow_mut().pending.push(d);
+/// Live worker handle. Holds the pipes plus the cleanup paths.
+struct WorkerState {
+    child: Child,
+    /// `Option` so `Drop` can `take()` and close it independently of
+    /// the rest of the state. Always `Some` during normal operation.
+    stdin: Option<ChildStdin>,
+    stdout: BufReader<ChildStdout>,
+    bridge_path: PathBuf,
+    arena: Arena,
+}
+
+impl Drop for WorkerState {
+    fn drop(&mut self) {
+        // Graceful shutdown with deadline. The worker can be hung
+        // (slow npm import, infinite loop in user config, slow
+        // shutdown handler), and a bare `wait()` would block the
+        // host process forever.
+        //
+        // Sequence: send the shutdown op, then close stdin (the EOF
+        // is also a shutdown signal), then poll try_wait() with a
+        // short deadline, finally kill() if still alive.
+        if let Some(mut stdin) = self.stdin.take() {
+            let _ = serde_json::to_writer(
+                &mut stdin,
+                &ShutdownRequest { op: "shutdown" },
+            );
+            let _ = stdin.write_all(b"\n");
+            let _ = stdin.flush();
+            // stdin drops here, closing the pipe and signalling EOF
+            // to the worker even if the JSON op never reached the
+            // read loop.
+        }
+
+        let deadline = std::time::Instant::now()
+            + std::time::Duration::from_millis(SHUTDOWN_DEADLINE_MS);
+        loop {
+            match self.child.try_wait() {
+                Ok(Some(_)) => break,
+                Ok(None) => {
+                    if std::time::Instant::now() >= deadline {
+                        let _ = self.child.kill();
+                        let _ = self.child.wait();
+                        break;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                }
+                Err(_) => {
+                    let _ = self.child.kill();
+                    let _ = self.child.wait();
+                    break;
+                }
+            }
+        }
+        let _ = std::fs::remove_file(&self.bridge_path);
     }
 }
 
-#[op2]
-#[string]
-fn op_get_config_path(state: &mut OpState) -> String {
-    let cp = state.borrow::<Rc<RefCell<ConfigPath>>>();
-    cp.borrow().path.clone()
+/// Time the host waits for the deno worker to exit on its own after
+/// receiving the shutdown op + stdin EOF before we send SIGKILL. Two
+/// seconds is generous for a normal shutdown (worker only needs to
+/// flush stdout and return from its loop) and short enough that a
+/// hung worker does not stall viola-cli's exit perceptibly.
+const SHUTDOWN_DEADLINE_MS: u64 = 2000;
+
+static WORKER_STATE: Mutex<Option<WorkerState>> = Mutex::new(None);
+
+/// Write the embedded `bridge.ts` to a temp file so deno can run it
+/// from disk. We could pipe it via `deno run -` but stdin is reserved
+/// for the IPC channel; a temp file is the simplest non-conflicting
+/// path. Cleaned up on shutdown.
+fn write_bridge_to_temp() -> Result<PathBuf, String> {
+    let mut path = std::env::temp_dir();
+    let pid = std::process::id();
+    path.push(format!("viola-deno-bridge-{pid}.ts"));
+    std::fs::write(&path, BRIDGE_TS)
+        .map_err(|e| format!("write bridge: {e}"))?;
+    Ok(path)
 }
 
-extension!(
-    runtime_ext,
-    ops = [op_emit_diagnostic, op_get_config_path],
-    options = {
-        collector: Rc<RefCell<Collector>>,
-        config_path: Rc<RefCell<ConfigPath>>,
-    },
-    state = |state, options| {
-        state.put(options.collector);
-        state.put(options.config_path);
-    },
-);
-
-/// Plugin-global state. Lazily initialised in `init`, reused across
-/// every capability invocation. V8 isolates are thread-bound; the host
-/// that drives any capability MUST always do so from the same thread
-/// that invoked `init`.
-struct RuntimeState {
-    runtime: JsRuntime,
-    collector: Rc<RefCell<Collector>>,
-    config_path: Rc<RefCell<ConfigPath>>,
-    arena: Arena,
-    tokio: tokio::runtime::Runtime,
-    /// Pre-parsed specifier for the embedded wrapper module. Reused on
-    /// every lint invocation; load_main_es_module fetches it through
-    /// the custom module loader, which serves the embedded TS source.
-    runtime_specifier: ModuleSpecifier,
-}
-
-// SAFETY: thread-pinning contract documented at the capability
-// entrypoints. We never share RUNTIME_STATE across threads in
-// viola-cli's single-threaded host.
-unsafe impl Send for RuntimeState {}
-
-static RUNTIME_STATE: Mutex<Option<RuntimeState>> = Mutex::new(None);
-
-fn build_state() -> Result<RuntimeState, ()> {
-    let tokio = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|_| ())?;
-    let collector: Rc<RefCell<Collector>> =
-        Rc::new(RefCell::new(Collector::default()));
-    let config_path: Rc<RefCell<ConfigPath>> =
-        Rc::new(RefCell::new(ConfigPath::default()));
-    let module_loader = Rc::new(TsFsModuleLoader {
-        embedded_runtime_ts: RUNTIME_TS.to_string(),
-    });
-    let runtime = JsRuntime::new(RuntimeOptions {
-        module_loader: Some(module_loader),
-        extensions: vec![runtime_ext::init(collector.clone(), config_path.clone())],
-        ..Default::default()
-    });
-    let runtime_specifier = ModuleSpecifier::parse(RUNTIME_INTERNAL_SPECIFIER)
-        .map_err(|e| {
-            eprintln!("viola-deno-runtime: bad embedded specifier: {e}");
-        })?;
-    Ok(RuntimeState {
-        runtime,
-        collector,
-        config_path,
+fn spawn_worker(user_config: &str) -> Result<WorkerState, String> {
+    let bridge_path = write_bridge_to_temp()?;
+    let mut child = Command::new("deno")
+        .arg("run")
+        .arg("--allow-all")
+        .arg(&bridge_path)
+        .arg(user_config)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .map_err(|e| format!("spawn deno: {e}"))?;
+    let stdin = child
+        .stdin
+        .take()
+        .ok_or_else(|| "no stdin pipe".to_string())?;
+    let stdout = BufReader::new(
+        child
+            .stdout
+            .take()
+            .ok_or_else(|| "no stdout pipe".to_string())?,
+    );
+    Ok(WorkerState {
+        child,
+        stdin: Some(stdin),
+        stdout,
+        bridge_path,
         arena: Arena::default(),
-        tokio,
-        runtime_specifier,
     })
+}
+
+fn config_path_from_bytes(bytes: &[u8]) -> Result<String, String> {
+    if bytes.is_empty() {
+        return Err("lint_config bytes empty (no [ts].config provided)".into());
+    }
+    let s = std::str::from_utf8(bytes)
+        .map_err(|e| format!("config path not UTF-8: {e}"))?;
+    let abs = std::fs::canonicalize(std::path::Path::new(s))
+        .map_err(|e| format!("canonicalize {s:?}: {e}"))?;
+    abs.into_os_string()
+        .into_string()
+        .map_err(|_| "config path not UTF-8 after canonicalize".to_string())
 }
 
 // ---------------------------------------------------------------------
@@ -287,67 +334,110 @@ impl CapabilityExport for GrammarCap {
 // Lint capability
 // ---------------------------------------------------------------------
 
-/// Resolve `lint_config_bytes` (a UTF-8 path supplied by viola-cli
-/// from `viola.toml`'s `[ts].config`) into a `file://` URL string.
-/// Returns an empty string when no config was supplied so the
-/// embedded wrapper short-circuits gracefully.
-///
-/// Note: `canonicalize` resolves relative paths against the process
-/// cwd at call time, not against the directory containing the
-/// `viola.toml` that produced the bytes. In viola-cli's typical use
-/// (run from the project root, where `viola.toml` also lives) this
-/// matches user expectations. Tracked as a viola-cli-side follow-up:
-/// the host should pre-resolve relative paths against the
-/// `viola.toml` parent before passing them in.
-fn config_path_to_file_url(bytes: &[u8]) -> String {
-    if bytes.is_empty() {
-        return String::new();
+/// Translate a v1 RunScope into the JSON payload the bridge expects.
+fn scope_to_payload(scope: &RunScope) -> ScopePayload<'_> {
+    // SAFETY of the BytesRef reads below: pointers reference host-
+    // owned memory the v1 contract guarantees valid for the duration
+    // of this call. The slices we build are immediately serialised
+    // and no references escape this function.
+    let workspace_root = bytes_ref_to_str(&scope.workspace_root);
+    let mut files = Vec::with_capacity(scope.files_len.0);
+    if !scope.files.is_null() && scope.files_len.0 > 0 {
+        let slice = unsafe {
+            core::slice::from_raw_parts(scope.files, scope.files_len.0)
+        };
+        for f in slice {
+            files.push(FilePayload {
+                path: bytes_ref_to_str(&f.path),
+                language: bytes_ref_to_str(&f.language),
+            });
+        }
     }
-    let s = match std::str::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(_) => {
-            eprintln!(
-                "viola-deno-runtime: lint_config bytes are not UTF-8; ignoring",
-            );
-            return String::new();
+    ScopePayload { workspace_root, files }
+}
+
+fn bytes_ref_to_str(b: &BytesRef) -> &str {
+    if b.data.is_null() || b.len.0 == 0 {
+        return "";
+    }
+    // SAFETY: caller guarantees the BytesRef is valid for the
+    // duration of the host call. We use &str only ephemerally inside
+    // serde_json::to_writer.
+    let bytes = unsafe { core::slice::from_raw_parts(b.data, b.len.0) };
+    core::str::from_utf8(bytes).unwrap_or("")
+}
+
+fn lint_evaluate_inner(
+    state: &mut WorkerState,
+    scope: &RunScope,
+) -> Result<(), String> {
+    state.arena.clear();
+    let req = LintRequest { op: "lint", scope: scope_to_payload(scope) };
+    let line = serde_json::to_string(&req)
+        .map_err(|e| format!("encode req: {e}"))?;
+    let stdin = state
+        .stdin
+        .as_mut()
+        .ok_or_else(|| "worker stdin closed".to_string())?;
+    stdin
+        .write_all(line.as_bytes())
+        .map_err(|e| format!("write req: {e}"))?;
+    stdin
+        .write_all(b"\n")
+        .map_err(|e| format!("write req nl: {e}"))?;
+    stdin.flush().map_err(|e| format!("flush req: {e}"))?;
+
+    loop {
+        let mut line = String::new();
+        let n = state
+            .stdout
+            .read_line(&mut line)
+            .map_err(|e| format!("read worker: {e}"))?;
+        if n == 0 {
+            return Err("worker closed stdout unexpectedly".into());
         }
-    };
-    let path = std::path::Path::new(s);
-    let abs = match std::fs::canonicalize(path) {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!(
-                "viola-deno-runtime: cannot canonicalize {s:?}: {e}",
-            );
-            return String::new();
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
         }
-    };
-    match ModuleSpecifier::from_file_path(&abs) {
-        Ok(url) => url.to_string(),
-        Err(_) => {
-            eprintln!(
-                "viola-deno-runtime: cannot build file URL from {}",
-                abs.display(),
-            );
-            String::new()
+        let msg: BridgeMessage = serde_json::from_str(trimmed)
+            .map_err(|e| format!("decode worker: {e}: {trimmed}"))?;
+        if let Some(err) = msg.err {
+            return Err(format!("worker error: {err}"));
+        }
+        if let Some(d) = msg.diag {
+            let plugin_id = state.arena.intern(&d.plugin_id);
+            let rule_id = state.arena.intern(&d.rule_id);
+            let message = state.arena.intern(&d.message);
+            let path = state.arena.intern(&d.path);
+            let severity = match d.severity.as_str() {
+                "info" => DiagnosticSeverity::Info,
+                "error" => DiagnosticSeverity::Error,
+                _ => DiagnosticSeverity::Warn,
+            };
+            state.arena.diagnostics.push(Diagnostic {
+                plugin_id,
+                rule_id,
+                severity,
+                message,
+                path,
+                range: SourceRange {
+                    start: SourceLocation { line: d.line, column: d.column },
+                    end: SourceLocation { line: d.line, column: d.column },
+                },
+                suggestion: BytesRef::EMPTY,
+                metadata_schema: CapabilityId(0),
+                metadata_ptr: core::ptr::null(),
+                metadata_len: arvo::USize(0),
+            });
+            continue;
+        }
+        if msg.done.unwrap_or(false) {
+            return Ok(());
         }
     }
 }
 
-/// Lint role entrypoint.
-///
-/// # Safety / contract
-///
-/// - The host MUST invoke this from the same OS thread that called
-///   `init_fn`. V8 isolates are thread-bound and the embedded
-///   `JsRuntime` is `!Send`; the `unsafe impl Send` on `RuntimeState`
-///   is justified solely by this thread-pinning contract. A
-///   multi-threaded host that violates the contract will silently
-///   corrupt V8 state.
-/// - Per the v1 plugin ABI: bytes referenced by [`BytesRef`] in the
-///   returned [`DiagnosticBatch`] are plugin-owned and remain valid
-///   until the next call to this function. The host MUST copy any
-///   bytes it intends to retain past that point.
 unsafe extern "C" fn lint_evaluate(
     _host_ctx: *mut c_void,
     _nam: *const NamPayload,
@@ -358,89 +448,62 @@ unsafe extern "C" fn lint_evaluate(
     if out_batch.is_null() {
         return ExtensionAbiStatus::InvalidArg;
     }
-    let mut guard = match RUNTIME_STATE.lock() {
-        Ok(g) => g,
-        Err(_) => return ExtensionAbiStatus::InitFailed,
-    };
-    let state = match guard.as_mut() {
-        Some(s) => s,
-        None => return ExtensionAbiStatus::InitFailed,
-    };
 
-    state.collector.borrow_mut().pending.clear();
-    state.arena.clear();
-
-    // Resolve the user's config path from the lint_config payload and
-    // publish it for op_get_config_path before driving the wrapper.
-    let cfg_url = if !lint_config_bytes.is_null() && lint_config_len.0 > 0 {
+    // First-call lazy spawn: viola-cli passes the user's
+    // viola.config.ts path through lint_config bytes. We canonicalize
+    // it and start the worker now so init does not need the path.
+    let config_path = if !lint_config_bytes.is_null() && lint_config_len.0 > 0 {
         // SAFETY: caller-provided slice valid for this invocation.
         let slice = unsafe {
             core::slice::from_raw_parts(lint_config_bytes, lint_config_len.0)
         };
-        config_path_to_file_url(slice)
+        match config_path_from_bytes(slice) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("viola-deno-runtime: {e}");
+                return ExtensionAbiStatus::InitFailed;
+            }
+        }
     } else {
-        String::new()
+        eprintln!(
+            "viola-deno-runtime: no lint_config bytes; ts user config path required"
+        );
+        return ExtensionAbiStatus::InitFailed;
     };
-    state.config_path.borrow_mut().path = cfg_url;
 
-    let specifier = state.runtime_specifier.clone();
-    // ES module semantics: each `(specifier, isolate)` pair evaluates
-    // exactly once. The first lint_evaluate registers + runs the
-    // wrapper plus the user config, drives op_emit_diagnostic, and the
-    // module-graph state caches the user module by its file:// URL.
-    // Subsequent lint_evaluate calls in the same process would short-
-    // circuit at the cached module without re-running the user's
-    // side-effecting top level. viola-cli's current pipeline calls
-    // lint_evaluate once per process, so this does not bite today.
-    // PR-C replaces this side-effect-driven shape with the
-    // @hiisi/viola builder API, which exports a callable that runs on
-    // demand without needing module re-evaluation.
-    let result: Result<(), String> = state.tokio.block_on(async {
-        let mod_id = state
-            .runtime
-            .load_main_es_module(&specifier)
-            .await
-            .map_err(|e| format!("load: {e}"))?;
-        let eval_fut = state.runtime.mod_evaluate(mod_id);
-        state
-            .runtime
-            .run_event_loop(PollEventLoopOptions::default())
-            .await
-            .map_err(|e| format!("event loop: {e}"))?;
-        eval_fut.await.map_err(|e| format!("evaluate: {e}"))?;
-        Ok(())
-    });
-    if let Err(e) = result {
-        eprintln!("viola-deno-runtime: {e}");
+    let mut guard = match WORKER_STATE.lock() {
+        Ok(g) => g,
+        Err(_) => return ExtensionAbiStatus::InitFailed,
+    };
+    if guard.is_none() {
+        match spawn_worker(&config_path) {
+            Ok(w) => *guard = Some(w),
+            Err(e) => {
+                eprintln!("viola-deno-runtime: spawn worker: {e}");
+                return ExtensionAbiStatus::InitFailed;
+            }
+        }
     }
+    let state = guard.as_mut().expect("just set above");
 
-    let pending: Vec<RuntimeDiagnostic> =
-        std::mem::take(&mut state.collector.borrow_mut().pending);
-    for d in pending {
-        let plugin_id = state.arena.intern(&d.plugin_id);
-        let rule_id = state.arena.intern(&d.rule_id);
-        let message = state.arena.intern(&d.message);
-        let path = state.arena.intern(&d.path);
-        let severity = match d.severity.as_str() {
-            "info" => DiagnosticSeverity::Info,
-            "error" => DiagnosticSeverity::Error,
-            _ => DiagnosticSeverity::Warn,
-        };
-        state.arena.diagnostics.push(Diagnostic {
-            plugin_id,
-            rule_id,
-            severity,
-            message,
-            path,
-            range: SourceRange {
-                start: SourceLocation { line: d.line, column: d.column },
-                end: SourceLocation { line: d.line, column: d.column },
-            },
-            suggestion: BytesRef::EMPTY,
-            metadata_schema: CapabilityId(0),
-            metadata_ptr: core::ptr::null(),
-            metadata_len: arvo::USize(0),
-        });
+    // The v1 lint vtable does not pass RunScope directly. The host
+    // has already populated NAM with run-derived data; the lint sees
+    // only `nam` plus `lint_config`. PR-MVP sends an empty scope
+    // payload to the bridge so user lint handlers receive an empty
+    // file list. NAM translation is tracked under #197 (TS ecosystem
+    // conformance) -- the conformance harness needs real file lists
+    // to exercise the path, so the wiring lands there.
+    let empty_scope = RunScope {
+        workspace_root: BytesRef::EMPTY,
+        files: core::ptr::null(),
+        files_len: arvo::USize(0),
+        surface: viola_plugin_abi::RunSurface::Cli,
+        ci: 0,
+        _reserved: [0; 3],
+    };
+    if let Err(e) = lint_evaluate_inner(state, &empty_scope) {
+        eprintln!("viola-deno-runtime: lint: {e}");
+        return ExtensionAbiStatus::Internal;
     }
 
     let entries_ptr = state.arena.diagnostics.as_ptr();
@@ -475,34 +538,10 @@ pub struct InitImpl;
 
 impl InitHandler for InitImpl {
     unsafe fn init(_host_ctx: *mut c_void) -> ExtensionAbiStatus {
-        // Idempotent. The host may load the same cdylib more than once
-        // per process (e.g. viola-cli auto-load registers the runtime
-        // as both runner and lint). Re-initialising would rebuild a
-        // fresh V8 isolate and drop the previous one; instead, treat
-        // the second call as a no-op so all Extension handles share
-        // one isolate via the global RUNTIME_STATE.
-        {
-            let guard = match RUNTIME_STATE.lock() {
-                Ok(g) => g,
-                Err(_) => return ExtensionAbiStatus::InitFailed,
-            };
-            if guard.is_some() {
-                return ExtensionAbiStatus::Ok;
-            }
-        }
-        match build_state() {
-            Ok(s) => {
-                let mut guard = match RUNTIME_STATE.lock() {
-                    Ok(g) => g,
-                    Err(_) => return ExtensionAbiStatus::InitFailed,
-                };
-                if guard.is_none() {
-                    *guard = Some(s);
-                }
-                ExtensionAbiStatus::Ok
-            }
-            Err(()) => ExtensionAbiStatus::InitFailed,
-        }
+        // The worker is spawned lazily on first lint_evaluate so init
+        // does not need the user config path (which only arrives via
+        // lint_config bytes). Init still succeeds idempotently.
+        ExtensionAbiStatus::Ok
     }
 }
 
@@ -510,7 +549,10 @@ pub struct ShutdownImpl;
 
 impl ShutdownHandler for ShutdownImpl {
     unsafe fn shutdown(_host_ctx: *mut c_void) -> ExtensionAbiStatus {
-        if let Ok(mut guard) = RUNTIME_STATE.lock() {
+        if let Ok(mut guard) = WORKER_STATE.lock() {
+            // Drop runs the WorkerState destructor which sends a
+            // shutdown op, waits for the child, and removes the temp
+            // bridge.ts file.
             *guard = None;
         }
         ExtensionAbiStatus::Ok
