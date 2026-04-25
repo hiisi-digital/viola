@@ -37,6 +37,7 @@ const MAX_PLUGINS: usize = 16;
 const MAX_CONFIG_BYTES: usize = 64 * 1024;
 const MAX_PATH_BYTES: usize = 4096;
 const MAX_DIAGNOSTICS: usize = 256;
+const CAPTURE_ARENA_BYTES: usize = 64 * 1024;
 
 const EXIT_OK: i32 = 0;
 const EXIT_DIAG: i32 = 1;
@@ -296,12 +297,25 @@ fn emit_config_error(e: &viola_config::ConfigError) {
     io::eprint(b"\n");
 }
 
-/// Diagnostic capture sink: stores up to [`MAX_DIAGNOSTICS`] entries
-/// by-value and tracks an overflow count.
+/// Diagnostic capture sink that honours the v1 plugin ABI contract:
+/// "Buffer ownership is plugin-side; the host copies before the next
+/// invocation."
+///
+/// On `push`, every [`BytesRef`] in the incoming [`Diagnostic`] is
+/// deep-copied into an owned arena ([`Self::arena`]) and the stored
+/// `Diagnostic` references the arena, not plugin memory. Sort and
+/// emit therefore work even after plugins drop, and a host that
+/// re-invokes `evaluate` on the same plugin in one run cannot trip a
+/// use-after-free against the previous batch.
+///
+/// Bounded geometry: up to [`MAX_DIAGNOSTICS`] entries and
+/// [`CAPTURE_ARENA_BYTES`] bytes of string data. Overflow on either
+/// dimension drops the entry; the dropped count surfaces in the
+/// summary line.
 struct CaptureSink {
     items: [core::mem::MaybeUninit<Diagnostic>; MAX_DIAGNOSTICS],
-    // Plain usize: the sink is single-threaded by `&mut self`
-    // contract, so atomics would only obscure the actual invariant.
+    arena: [u8; CAPTURE_ARENA_BYTES],
+    arena_used: usize,
     count: usize,
     dropped: usize,
 }
@@ -310,6 +324,8 @@ impl CaptureSink {
     const fn new() -> Self {
         Self {
             items: [const { core::mem::MaybeUninit::uninit() }; MAX_DIAGNOSTICS],
+            arena: [0u8; CAPTURE_ARENA_BYTES],
+            arena_used: 0,
             count: 0,
             dropped: 0,
         }
@@ -321,7 +337,11 @@ impl CaptureSink {
 
     fn sort(&mut self) {
         let n = self.count;
-        // SAFETY: slots [0..n) were populated via push.
+        // SAFETY: slots [0..n) were populated via push. The Diagnostic
+        // copies stored there carry BytesRef pointers into self.arena,
+        // which is part of self and does not move while &mut self is
+        // borrowed. Swapping entries during sort does not move the
+        // arena bytes; pointers stay valid.
         let slice: &mut [Diagnostic] = unsafe {
             core::slice::from_raw_parts_mut(
                 self.items.as_mut_ptr() as *mut Diagnostic,
@@ -335,7 +355,8 @@ impl CaptureSink {
         let n = self.count;
         let mut k = 0;
         while k < n {
-            // SAFETY: slot k was populated.
+            // SAFETY: slot k was populated; BytesRefs reference
+            // self.arena which lives as long as &self.
             let d: &Diagnostic = unsafe { self.items[k].assume_init_ref() };
             emit_diagnostic(d);
             k += 1;
@@ -351,6 +372,31 @@ impl CaptureSink {
         io::eprint(fmt::usize_to_dec(n, &mut buf));
         io::eprintln(b" diagnostic(s) emitted");
     }
+
+    /// Copy a plugin-owned [`BytesRef`] into the arena and return a
+    /// new `BytesRef` pointing at the host-owned copy. Returns
+    /// [`Maybe::Isnt`] if the arena cannot fit the bytes.
+    fn copy_bytes_ref(&mut self, src: &BytesRef) -> notko::Maybe<BytesRef> {
+        if src.data.is_null() || src.len.0 == 0 {
+            return notko::Maybe::Is(BytesRef::EMPTY);
+        }
+        let len = src.len.0;
+        if self.arena_used + len > self.arena.len() {
+            return notko::Maybe::Isnt;
+        }
+        // SAFETY: src is a v1-contract BytesRef that the host promised
+        // to copy bytes from before the next plugin invocation. The
+        // pointer + len describe a valid plugin-owned slice for this
+        // call. The destination is host-owned arena storage.
+        let src_slice = unsafe { core::slice::from_raw_parts(src.data, len) };
+        let start = self.arena_used;
+        self.arena[start..start + len].copy_from_slice(src_slice);
+        self.arena_used += len;
+        // SAFETY: arena is part of self; the resulting pointer stays
+        // valid until self is dropped.
+        let data = unsafe { self.arena.as_ptr().add(start) };
+        notko::Maybe::Is(BytesRef { data, len: arvo::USize(len) })
+    }
 }
 
 impl DiagnosticSink for CaptureSink {
@@ -359,7 +405,66 @@ impl DiagnosticSink for CaptureSink {
             self.dropped += 1;
             return;
         }
-        self.items[self.count].write(*diag);
+        // Capture the pre-copy arena cursor so we can roll back on
+        // partial-copy failure. Arena overflow on any field drops the
+        // whole diagnostic rather than emitting half-populated bytes.
+        let arena_checkpoint = self.arena_used;
+        let plugin_id = match self.copy_bytes_ref(&diag.plugin_id) {
+            notko::Maybe::Is(b) => b,
+            notko::Maybe::Isnt => {
+                self.arena_used = arena_checkpoint;
+                self.dropped += 1;
+                return;
+            }
+        };
+        let rule_id = match self.copy_bytes_ref(&diag.rule_id) {
+            notko::Maybe::Is(b) => b,
+            notko::Maybe::Isnt => {
+                self.arena_used = arena_checkpoint;
+                self.dropped += 1;
+                return;
+            }
+        };
+        let message = match self.copy_bytes_ref(&diag.message) {
+            notko::Maybe::Is(b) => b,
+            notko::Maybe::Isnt => {
+                self.arena_used = arena_checkpoint;
+                self.dropped += 1;
+                return;
+            }
+        };
+        let path = match self.copy_bytes_ref(&diag.path) {
+            notko::Maybe::Is(b) => b,
+            notko::Maybe::Isnt => {
+                self.arena_used = arena_checkpoint;
+                self.dropped += 1;
+                return;
+            }
+        };
+        let suggestion = match self.copy_bytes_ref(&diag.suggestion) {
+            notko::Maybe::Is(b) => b,
+            notko::Maybe::Isnt => {
+                self.arena_used = arena_checkpoint;
+                self.dropped += 1;
+                return;
+            }
+        };
+        let owned = Diagnostic {
+            plugin_id,
+            rule_id,
+            severity: diag.severity,
+            message,
+            path,
+            range: diag.range,
+            suggestion,
+            metadata_schema: diag.metadata_schema,
+            // metadata pointer is opaque; v1 host does not deep-copy
+            // structured metadata yet (no concrete schema is defined).
+            // Drop the pointer to avoid retaining plugin memory.
+            metadata_ptr: core::ptr::null(),
+            metadata_len: arvo::USize(0),
+        };
+        self.items[self.count].write(owned);
         self.count += 1;
     }
 }
@@ -387,8 +492,10 @@ fn emit_bytes_ref(b: &BytesRef) {
     if b.data.is_null() || b.len.0 == 0 {
         return;
     }
-    // SAFETY: BytesRef is valid for the duration of the loaded
-    // plugins; emit happens before plugin teardown.
+    // SAFETY: by the time emit_bytes_ref runs, push() has deep-copied
+    // the bytes into CaptureSink::arena. The BytesRef points at that
+    // host-owned arena, which is part of CaptureSink and outlives
+    // this &self borrow. No plugin-owned pointers reach this path.
     let slice = unsafe { core::slice::from_raw_parts(b.data, b.len.0) };
     io::eprint(slice);
 }
