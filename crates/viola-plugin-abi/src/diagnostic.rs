@@ -20,7 +20,7 @@ use crate::bytes_ref::BytesRef;
 /// `Info < Warn < Error`; the host MAY filter or escalate based on
 /// configuration.
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum DiagnosticSeverity {
     Info = 0,
     Warn = 1,
@@ -32,7 +32,7 @@ pub enum DiagnosticSeverity {
 /// Line is 1-based, column is 0-based, matching the NAM convention
 /// from `docs/PLUGIN-ABI-V1-DESIGN.md` §9.3.
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SourceLocation {
     pub line: u32,
     pub column: u32,
@@ -43,7 +43,7 @@ pub struct SourceLocation {
 /// `start` and `end` use the same conventions as [`SourceLocation`].
 /// A zero-width range (start == end) marks a point.
 #[repr(C)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SourceRange {
     pub start: SourceLocation,
     pub end: SourceLocation,
