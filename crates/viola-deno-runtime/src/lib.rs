@@ -1,13 +1,12 @@
-//! `viola-deno-runtime` — viola plugin that embeds a `deno_core`
+//! `viola-deno-runtime`. Viola plugin that embeds a `deno_core`
 //! JsRuntime and exposes the v1 runner / grammar / lint capabilities.
 //!
 //! The deno runtime IS viola's TypeScript plugin loader. The cdylib
 //! ships one self-contained dynamic library: V8 isolate, transpiler,
-//! and the v1 capability vtables that route into it. When a host
-//! invokes a capability, the call funnels into a single embedded
-//! `JsRuntime` which executes user TS that, in production, drives the
-//! `@hiisi/viola` builder API and emits results back through registered
-//! ops.
+//! ES module loader, and the v1 capability vtables that route into it.
+//! When a host invokes a capability, the call funnels into a single
+//! embedded `JsRuntime` which loads and evaluates the user's
+//! `viola.config.ts` as an ES module.
 //!
 //! ## Why embedded, not subprocess
 //!
@@ -17,32 +16,40 @@
 //! The plugin distributes as one .dylib/.so/.dll; no external `deno`
 //! binary is required at runtime.
 //!
-//! ## MVP scope (PR-A of #196)
-//!
-//! This cut establishes the structural shape of the runtime cdylib:
+//! ## Scope after PR-B of #196
 //!
 //! - All three v1 capabilities (Runner, Grammar, Lint) are exported.
-//! - The cdylib name and descriptor identify it as the deno runtime,
-//!   not a "bridge". The host loads it once and dispatches every TS-
-//!   backed role through it.
-//! - Lint preserves the prior smoke-test behaviour: it runs the
-//!   embedded `runtime.ts` (transpiled on init) which calls
-//!   `op_emit_diagnostic` with one hardcoded diagnostic. This proves
-//!   the V8 -> op -> Rust collector -> v1 wire path end-to-end.
-//! - Runner emits an empty NAM v1.0.0 payload.
-//! - Grammar emits an empty NAM v1.0.0 contribution.
+//!   Runner + Grammar are MVP empty-NAM stubs; the Lint role drives
+//!   the embedded JsRuntime end-to-end.
+//! - Lint reads the user's config path from `lint_config_bytes` (set
+//!   by viola-cli from `viola.toml`'s `[ts].config` field), publishes
+//!   it through the `op_get_config_path` op, and loads an embedded
+//!   wrapper module (`runtime.ts`) as the ES main. The wrapper
+//!   dynamically imports the user's config; the custom
+//!   [`module::TsFsModuleLoader`] reads the file from disk and
+//!   transpiles `.ts` / `.tsx` / `.mts` / `.cts` via `deno_ast`.
+//! - Diagnostics are still emitted via `op_emit_diagnostic`. The user
+//!   config is responsible for emitting its own diagnostics in this
+//!   PR-B MVP; PR-C wires `@hiisi/viola`'s builder API so the user
+//!   config exports a builder result instead.
 //!
-//! Real ES module loading (so the user's `viola.config.ts` becomes the
-//! input rather than an embedded literal) lands in PR-B. Full
-//! `@hiisi/viola` builder integration lands in PR-C. Parity testing
-//! against the existing TS stack lands in PR-D.
+//! ## Still pending
+//!
+//! Bare-specifier imports (`import "@hiisi/viola"`) do not resolve in
+//! PR-B; the loader recognises only `file://` URLs and the embedded
+//! `viola-internal:runtime.ts` specifier. PR-C adds bare-specifier
+//! resolution and `@hiisi/viola` integration. PR-D ships the
+//! conformance harness.
 
 use core::ffi::c_void;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Mutex;
 
-use deno_core::{JsRuntime, OpState, RuntimeOptions, extension, op2};
+use deno_core::{
+    JsRuntime, ModuleSpecifier, OpState, PollEventLoopOptions,
+    RuntimeOptions, extension, op2,
+};
 use hilavitkutin_extensions::{
     CapabilityExport, CapabilityId, ExtensionAbiStatus, InitHandler,
     ShutdownHandler,
@@ -57,36 +64,12 @@ use viola_plugin_abi::{
     SourceRange,
 };
 
+mod module;
+mod transpile;
+
+use module::{RUNTIME_INTERNAL_SPECIFIER, TsFsModuleLoader};
+
 const RUNTIME_TS: &str = include_str!("runtime.ts");
-
-/// Transpile a TypeScript source string into JavaScript suitable for
-/// `JsRuntime::execute_script`.
-fn transpile_ts(specifier: &str, source: &str) -> Result<String, ()> {
-    use deno_ast::{MediaType, ModuleSpecifier, ParseParams, SourceMapOption};
-
-    let url = ModuleSpecifier::parse(&format!("file:///{}", specifier))
-        .map_err(|e| eprintln!("viola-deno-runtime: bad specifier: {e}"))?;
-    let parsed = deno_ast::parse_module(ParseParams {
-        specifier: url,
-        text: source.to_string().into(),
-        media_type: MediaType::TypeScript,
-        capture_tokens: false,
-        scope_analysis: false,
-        maybe_syntax: None,
-    })
-    .map_err(|e| eprintln!("viola-deno-runtime: TS parse error: {e}"))?;
-    let transpile_opts = deno_ast::TranspileOptions::default();
-    let emit_opts = deno_ast::EmitOptions {
-        source_map: SourceMapOption::None,
-        ..Default::default()
-    };
-    let transpile_mod_opts = deno_ast::TranspileModuleOptions::default();
-    let res = parsed
-        .transpile(&transpile_opts, &transpile_mod_opts, &emit_opts)
-        .map_err(|e| eprintln!("viola-deno-runtime: TS transpile error: {e}"))?;
-    let src = res.into_source();
-    Ok(src.text)
-}
 
 /// Wire shape for diagnostics emitted by the runtime's TS layer.
 #[derive(Deserialize)]
@@ -103,6 +86,14 @@ struct RuntimeDiagnostic {
 #[derive(Default)]
 struct Collector {
     pending: Vec<RuntimeDiagnostic>,
+}
+
+/// Per-call slot the host writes before evaluating the wrapper module.
+/// The TS side reads it via `op_get_config_path` to learn which user
+/// config to dynamically import.
+#[derive(Default)]
+struct ConfigPath {
+    path: String,
 }
 
 /// Plugin-side arena holding the owned bytes a [`Diagnostic`]
@@ -146,12 +137,23 @@ fn op_emit_diagnostic(state: &mut OpState, #[string] json: &str) {
     }
 }
 
+#[op2]
+#[string]
+fn op_get_config_path(state: &mut OpState) -> String {
+    let cp = state.borrow::<Rc<RefCell<ConfigPath>>>();
+    cp.borrow().path.clone()
+}
+
 extension!(
     runtime_ext,
-    ops = [op_emit_diagnostic],
-    options = { collector: Rc<RefCell<Collector>> },
+    ops = [op_emit_diagnostic, op_get_config_path],
+    options = {
+        collector: Rc<RefCell<Collector>>,
+        config_path: Rc<RefCell<ConfigPath>>,
+    },
     state = |state, options| {
         state.put(options.collector);
+        state.put(options.config_path);
     },
 );
 
@@ -162,9 +164,13 @@ extension!(
 struct RuntimeState {
     runtime: JsRuntime,
     collector: Rc<RefCell<Collector>>,
+    config_path: Rc<RefCell<ConfigPath>>,
     arena: Arena,
     tokio: tokio::runtime::Runtime,
-    runtime_js: String,
+    /// Pre-parsed specifier for the embedded wrapper module. Reused on
+    /// every lint invocation; load_main_es_module fetches it through
+    /// the custom module loader, which serves the embedded TS source.
+    runtime_specifier: ModuleSpecifier,
 }
 
 // SAFETY: thread-pinning contract documented at the capability
@@ -179,18 +185,29 @@ fn build_state() -> Result<RuntimeState, ()> {
         .enable_all()
         .build()
         .map_err(|_| ())?;
-    let collector: Rc<RefCell<Collector>> = Rc::new(RefCell::new(Collector::default()));
+    let collector: Rc<RefCell<Collector>> =
+        Rc::new(RefCell::new(Collector::default()));
+    let config_path: Rc<RefCell<ConfigPath>> =
+        Rc::new(RefCell::new(ConfigPath::default()));
+    let module_loader = Rc::new(TsFsModuleLoader {
+        embedded_runtime_ts: RUNTIME_TS.to_string(),
+    });
     let runtime = JsRuntime::new(RuntimeOptions {
-        extensions: vec![runtime_ext::init(collector.clone())],
+        module_loader: Some(module_loader),
+        extensions: vec![runtime_ext::init(collector.clone(), config_path.clone())],
         ..Default::default()
     });
-    let runtime_js = transpile_ts("runtime.ts", RUNTIME_TS)?;
+    let runtime_specifier = ModuleSpecifier::parse(RUNTIME_INTERNAL_SPECIFIER)
+        .map_err(|e| {
+            eprintln!("viola-deno-runtime: bad embedded specifier: {e}");
+        })?;
     Ok(RuntimeState {
         runtime,
         collector,
+        config_path,
         arena: Arena::default(),
         tokio,
-        runtime_js,
+        runtime_specifier,
     })
 }
 
@@ -198,9 +215,6 @@ fn build_state() -> Result<RuntimeState, ()> {
 // Runner capability
 // ---------------------------------------------------------------------
 
-/// Runner role entrypoint. MVP: emits an empty NAM v1.0.0 payload.
-/// PR-B + PR-C of #196 will load the user's viola.config.ts and run
-/// the configured runner via the @hiisi/viola builder API.
 unsafe extern "C" fn run_execute_scope(
     _host_ctx: *mut c_void,
     _scope: *const RunScope,
@@ -236,9 +250,6 @@ impl CapabilityExport for RunnerCap {
 // Grammar capability
 // ---------------------------------------------------------------------
 
-/// Grammar role entrypoint. MVP: emits an empty NAM v1.0.0
-/// contribution. PR-B + PR-C will dispatch into the configured
-/// per-language grammar via @hiisi/viola.
 unsafe extern "C" fn grammar_extract(
     _host_ctx: *mut c_void,
     _file: *const FileEntry,
@@ -276,6 +287,53 @@ impl CapabilityExport for GrammarCap {
 // Lint capability
 // ---------------------------------------------------------------------
 
+/// Resolve `lint_config_bytes` (a UTF-8 path supplied by viola-cli
+/// from `viola.toml`'s `[ts].config`) into a `file://` URL string.
+/// Returns an empty string when no config was supplied so the
+/// embedded wrapper short-circuits gracefully.
+///
+/// Note: `canonicalize` resolves relative paths against the process
+/// cwd at call time, not against the directory containing the
+/// `viola.toml` that produced the bytes. In viola-cli's typical use
+/// (run from the project root, where `viola.toml` also lives) this
+/// matches user expectations. Tracked as a viola-cli-side follow-up:
+/// the host should pre-resolve relative paths against the
+/// `viola.toml` parent before passing them in.
+fn config_path_to_file_url(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+    let s = match std::str::from_utf8(bytes) {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!(
+                "viola-deno-runtime: lint_config bytes are not UTF-8; ignoring",
+            );
+            return String::new();
+        }
+    };
+    let path = std::path::Path::new(s);
+    let abs = match std::fs::canonicalize(path) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!(
+                "viola-deno-runtime: cannot canonicalize {s:?}: {e}",
+            );
+            return String::new();
+        }
+    };
+    match ModuleSpecifier::from_file_path(&abs) {
+        Ok(url) => url.to_string(),
+        Err(_) => {
+            eprintln!(
+                "viola-deno-runtime: cannot build file URL from {}",
+                abs.display(),
+            );
+            String::new()
+        }
+    }
+}
+
 /// Lint role entrypoint.
 ///
 /// # Safety / contract
@@ -289,13 +347,12 @@ impl CapabilityExport for GrammarCap {
 /// - Per the v1 plugin ABI: bytes referenced by [`BytesRef`] in the
 ///   returned [`DiagnosticBatch`] are plugin-owned and remain valid
 ///   until the next call to this function. The host MUST copy any
-///   bytes it intends to retain past that point. (viola-cli's
-///   `CaptureSink` deep-copies on push, satisfying the contract.)
+///   bytes it intends to retain past that point.
 unsafe extern "C" fn lint_evaluate(
     _host_ctx: *mut c_void,
     _nam: *const NamPayload,
-    _lint_config_bytes: *const u8,
-    _lint_config_len: arvo::USize,
+    lint_config_bytes: *const u8,
+    lint_config_len: arvo::USize,
     out_batch: *mut DiagnosticBatch,
 ) -> AbiStatus {
     if out_batch.is_null() {
@@ -313,15 +370,49 @@ unsafe extern "C" fn lint_evaluate(
     state.collector.borrow_mut().pending.clear();
     state.arena.clear();
 
-    let runtime_js = state.runtime_js.clone();
-    state.tokio.block_on(async {
-        match state.runtime.execute_script("runtime.ts", runtime_js) {
-            Ok(_) => {}
-            Err(e) => {
-                eprintln!("viola-deno-runtime: script error: {e}");
-            }
-        }
+    // Resolve the user's config path from the lint_config payload and
+    // publish it for op_get_config_path before driving the wrapper.
+    let cfg_url = if !lint_config_bytes.is_null() && lint_config_len.0 > 0 {
+        // SAFETY: caller-provided slice valid for this invocation.
+        let slice = unsafe {
+            core::slice::from_raw_parts(lint_config_bytes, lint_config_len.0)
+        };
+        config_path_to_file_url(slice)
+    } else {
+        String::new()
+    };
+    state.config_path.borrow_mut().path = cfg_url;
+
+    let specifier = state.runtime_specifier.clone();
+    // ES module semantics: each `(specifier, isolate)` pair evaluates
+    // exactly once. The first lint_evaluate registers + runs the
+    // wrapper plus the user config, drives op_emit_diagnostic, and the
+    // module-graph state caches the user module by its file:// URL.
+    // Subsequent lint_evaluate calls in the same process would short-
+    // circuit at the cached module without re-running the user's
+    // side-effecting top level. viola-cli's current pipeline calls
+    // lint_evaluate once per process, so this does not bite today.
+    // PR-C replaces this side-effect-driven shape with the
+    // @hiisi/viola builder API, which exports a callable that runs on
+    // demand without needing module re-evaluation.
+    let result: Result<(), String> = state.tokio.block_on(async {
+        let mod_id = state
+            .runtime
+            .load_main_es_module(&specifier)
+            .await
+            .map_err(|e| format!("load: {e}"))?;
+        let eval_fut = state.runtime.mod_evaluate(mod_id);
+        state
+            .runtime
+            .run_event_loop(PollEventLoopOptions::default())
+            .await
+            .map_err(|e| format!("event loop: {e}"))?;
+        eval_fut.await.map_err(|e| format!("evaluate: {e}"))?;
+        Ok(())
     });
+    if let Err(e) = result {
+        eprintln!("viola-deno-runtime: {e}");
+    }
 
     let pending: Vec<RuntimeDiagnostic> =
         std::mem::take(&mut state.collector.borrow_mut().pending);
