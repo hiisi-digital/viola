@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/viola-bridge-deno",
     "crates/viola-cli",
+    "crates/viola-config",
     "crates/viola-core",
     "crates/viola-plugin-abi",
     "crates/viola-test-plugin-fixture",

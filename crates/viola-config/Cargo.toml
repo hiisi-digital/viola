@@ -1,0 +1,11 @@
+[package]
+name = "viola-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Viola.toml config schema + zero-copy no_std no_alloc TOML subset parser. Produces &[u8] slices into caller-provided input bytes."
+repository.workspace = true
+
+[dependencies]
+notko.workspace = true
+arvo.workspace = true
