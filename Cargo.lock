@@ -341,6 +341,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "viola-config"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "notko",
+]
+
+[[package]]
 name = "viola-core"
 version = "0.1.0"
 dependencies = [
