@@ -4,13 +4,15 @@
 //! deliberately minimal at v1: enough to render an actionable message
 //! with location and severity, plus opaque metadata slots that
 //! follow-up rounds extend (workflow context, confidence, structured
-//! suggestion, fix patches).
+//! suggestion, fix patches per #233).
 //!
 //! Determinism: the host sorts the aggregated batch by
 //! `(path, start_line, start_col, plugin_id, rule_id)` before final
 //! emission. Lints MAY emit in any order.
 
 use core::ffi::c_void;
+
+use crate::bytes_ref::BytesRef;
 
 /// Severity classification for a diagnostic.
 ///
@@ -27,7 +29,8 @@ pub enum DiagnosticSeverity {
 
 /// Source position in a document.
 ///
-/// Line is 1-based, column is 0-based; the same convention NAM uses.
+/// Line is 1-based, column is 0-based, matching the NAM convention
+/// from `docs/PLUGIN-ABI-V1-DESIGN.md` §9.3.
 #[repr(C)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SourceLocation {
@@ -37,9 +40,8 @@ pub struct SourceLocation {
 
 /// Half-open source range within a document.
 ///
-/// `start` and `end` use the same line/column conventions as
-/// [`SourceLocation`]. A zero-width range (start == end) marks a
-/// point.
+/// `start` and `end` use the same conventions as [`SourceLocation`].
+/// A zero-width range (start == end) marks a point.
 #[repr(C)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct SourceRange {
@@ -49,37 +51,27 @@ pub struct SourceRange {
 
 /// Single diagnostic emitted by a lint.
 ///
-/// All `(ptr, len)` UTF-8 string slots point at plugin-owned buffers
-/// stable until `shutdown_fn` is called. The host copies the bytes
-/// before any persistence step; it does not retain pointers across
-/// shutdown.
+/// All [`BytesRef`] slots point at plugin-owned buffers stable until
+/// `shutdown_fn` is called. The host copies the bytes before any
+/// persistence step; it does not retain pointers across shutdown.
 ///
-/// `metadata_ptr` carries opaque structured metadata (confidence,
-/// suggestion, workflow-context fields). Layout of the pointee is
-/// governed by `metadata_schema` (a [`crate::CapabilityId`] hash); v1
-/// reserves the slot, follow-up rounds populate concrete schemas.
+/// `metadata` carries opaque structured metadata. Layout of the
+/// pointee is governed by `metadata_schema` (a [`crate::CapabilityId`]
+/// hash); v1 reserves the slot, follow-up rounds (#233) populate
+/// concrete schemas for confidence, suggestion, fix patches, and
+/// workflow context.
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct Diagnostic {
-    pub plugin_id_ptr: *const u8,
-    pub plugin_id_len: usize,
-
-    pub rule_id_ptr: *const u8,
-    pub rule_id_len: usize,
-
+    pub plugin_id: BytesRef,
+    pub rule_id: BytesRef,
     pub severity: DiagnosticSeverity,
-
-    pub message_ptr: *const u8,
-    pub message_len: usize,
-
-    pub path_ptr: *const u8,
-    pub path_len: usize,
-
+    pub message: BytesRef,
+    pub path: BytesRef,
     pub range: SourceRange,
+    pub suggestion: BytesRef,
 
-    pub suggestion_ptr: *const u8,
-    pub suggestion_len: usize,
-
+    /// FNV-1a hash of the metadata schema name. `0` signals absent.
     pub metadata_schema: u64,
     pub metadata_ptr: *const c_void,
     pub metadata_len: usize,

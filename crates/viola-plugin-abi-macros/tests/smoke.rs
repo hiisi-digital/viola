@@ -78,16 +78,16 @@ fn descriptor_round_trip() {
     // Identity strings.
     let id_bytes = unsafe {
         core::slice::from_raw_parts(
-            d.identity.plugin_id_ptr,
-            d.identity.plugin_id_len,
+            d.identity.plugin_id.data,
+            d.identity.plugin_id.len,
         )
     };
     assert_eq!(id_bytes, b"org.viola.lint.smoke");
 
     let name_bytes = unsafe {
         core::slice::from_raw_parts(
-            d.identity.display_name_ptr,
-            d.identity.display_name_len,
+            d.identity.display_name.data,
+            d.identity.display_name.len,
         )
     };
     assert_eq!(name_bytes, b"Smoke Lint");

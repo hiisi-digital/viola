@@ -247,10 +247,14 @@ pub fn export_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
             manifest_version:
                 ::viola_plugin_abi::ManifestVersion(__VIOLA_MANIFEST_VERSION),
             identity: ::viola_plugin_abi::PluginIdentity {
-                plugin_id_ptr: __VIOLA_PLUGIN_ID.as_ptr(),
-                plugin_id_len: __VIOLA_PLUGIN_ID.len(),
-                display_name_ptr: __VIOLA_PLUGIN_DISPLAY_NAME.as_ptr(),
-                display_name_len: __VIOLA_PLUGIN_DISPLAY_NAME.len(),
+                plugin_id: ::viola_plugin_abi::BytesRef {
+                    data: __VIOLA_PLUGIN_ID.as_ptr(),
+                    len: __VIOLA_PLUGIN_ID.len(),
+                },
+                display_name: ::viola_plugin_abi::BytesRef {
+                    data: __VIOLA_PLUGIN_DISPLAY_NAME.as_ptr(),
+                    len: __VIOLA_PLUGIN_DISPLAY_NAME.len(),
+                },
                 plugin_version:
                     ::viola_plugin_abi::PluginVersion(__VIOLA_PLUGIN_VERSION),
             },
@@ -263,7 +267,7 @@ pub fn export_plugin(attr: TokenStream, item: TokenStream) -> TokenStream {
                 ::viola_plugin_abi::NamVersion(__VIOLA_NAM_CONSUMES),
             required_host_caps_ptr: __VIOLA_REQUIRED_HOST_CAPS.as_ptr(),
             required_host_caps_len: __VIOLA_REQUIRED_HOST_CAPS.len(),
-            config_schema: ::viola_plugin_abi::ConfigSchemaRef {
+            config_schema: ::viola_plugin_abi::BytesRef {
                 data: __VIOLA_CONFIG_SCHEMA.as_ptr(),
                 len: __VIOLA_CONFIG_SCHEMA.len(),
             },

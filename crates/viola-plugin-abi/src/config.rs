@@ -6,31 +6,8 @@
 //! [`RunSurface`] tag at init time.
 //!
 //! The config schema reference is opaque at the ABI boundary: it is a
-//! `(ptr, len)` UTF-8 slice naming either a path inside the plugin's
-//! distribution or an inline JSON Schema document. Schema resolution
-//! happens host-side before init.
-
-/// Reference to a plugin's config schema.
-///
-/// A UTF-8 string the host interprets as a schema locator. Common
-/// shapes:
-///
-/// - `"schemas/grammar-ts.schema.json"`: relative path inside the
-///   plugin distribution.
-/// - `"inline:{...}"`: inline JSON Schema document.
-///
-/// Resolution policy is host-side; the contract crate stores only the
-/// pointer and length.
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct ConfigSchemaRef {
-    pub data: *const u8,
-    pub len: usize,
-}
-
-// SAFETY: pointer into plugin-owned static memory.
-unsafe impl Send for ConfigSchemaRef {}
-unsafe impl Sync for ConfigSchemaRef {}
+//! UTF-8 string the host interprets as a schema locator, carried via
+//! [`crate::BytesRef`].
 
 /// Where the host invocation originated. Forwarded to plugins at init
 /// so they can adapt diagnostics or telemetry. Maps onto NAM's
@@ -49,3 +26,13 @@ pub enum RunSurface {
     Test = 4,
     Other = 0xFFFF,
 }
+
+/// Reference to a plugin's config schema.
+///
+/// A UTF-8 string the host interprets as a schema locator. Common
+/// shapes: `"schemas/grammar-ts.schema.json"` (relative path inside
+/// the plugin distribution), `"inline:{...}"` (inline JSON Schema
+/// document). Resolution policy is host-side.
+///
+/// Type alias over [`crate::BytesRef`]; the wire layout is identical.
+pub type ConfigSchemaRef = crate::bytes_ref::BytesRef;

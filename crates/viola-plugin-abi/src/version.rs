@@ -30,8 +30,14 @@ impl VersionTriple {
         Self { major, minor, patch, _reserved: 0 }
     }
 
-    /// Whether `self` is compatible with `other` under semver-major
-    /// rules: equal major, `self.minor >= other.minor`.
+    /// Whether `self` is compatible with `other` under
+    /// equal-major-and-self-greater-or-equal-minor rules.
+    ///
+    /// This is the rule for **manifest** and **plugin** version
+    /// comparisons, where additive minor revisions are accepted. ABI
+    /// version compatibility is major-only and uses
+    /// [`AbiVersion::is_compatible_with`]; do not use this helper for
+    /// ABI checks.
     pub const fn is_compatible_with(self, other: Self) -> bool {
         self.major == other.major && self.minor >= other.minor
     }
@@ -45,6 +51,19 @@ impl VersionTriple {
 #[repr(transparent)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub struct AbiVersion(pub u32);
+
+impl AbiVersion {
+    /// Whether the host ABI version is compatible with a plugin
+    /// declaring `plugin_major`.
+    ///
+    /// Per `docs/PLUGIN-ABI-V1-DESIGN.md` §3.2: ABI compatibility is
+    /// **major-equality only**. Minor and patch components are not
+    /// part of the ABI version axis at the wire shape; they are
+    /// carried for diagnostic display only.
+    pub const fn is_compatible_with(self, plugin_major: u32) -> bool {
+        self.0 == plugin_major
+    }
+}
 
 /// Major component of the ABI version this crate speaks.
 ///

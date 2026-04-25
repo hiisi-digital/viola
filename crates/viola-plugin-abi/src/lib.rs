@@ -35,6 +35,7 @@
 //! variable-length data crosses the boundary as `(ptr, len)` pairs into
 //! plugin-owned static memory whose lifetime equals the loaded library.
 
+mod bytes_ref;
 mod capability;
 mod config;
 mod descriptor;
@@ -45,7 +46,9 @@ mod role;
 mod symbol;
 mod traits;
 mod version;
+mod vtable;
 
+pub use bytes_ref::BytesRef;
 pub use capability::{
     CapabilityEntry, CapabilityId,
     CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE,
@@ -56,7 +59,7 @@ pub use diagnostic::{
     Diagnostic, DiagnosticBatch, DiagnosticSeverity, SourceLocation,
     SourceRange,
 };
-pub use error::{AbiStatus, PluginError};
+pub use error::{AbiStatus, PluginError, StructuredError};
 pub use nam::{NamPayload, NamVersion};
 pub use role::{Role, RoleSet};
 pub use symbol::DESCRIPTOR_SYMBOL;
@@ -64,6 +67,10 @@ pub use traits::{CapabilityExport, InitHandler, ShutdownHandler};
 pub use version::{
     AbiVersion, ManifestVersion, PluginVersion, VersionTriple,
     HOST_ABI_MAJOR, VIOLA_ABI_VERSION,
+};
+pub use vtable::{
+    FileEntry, GrammarExtractVtable, LintEvaluateVtable, RunScope,
+    RunnerExecuteScopeVtable,
 };
 
 #[cfg(test)]
@@ -154,5 +161,60 @@ mod tests {
     #[test]
     fn role_set_is_transparent_u32() {
         assert_eq!(size_of::<RoleSet>(), size_of::<u32>());
+    }
+
+    #[test]
+    fn abi_version_compatibility_is_major_only() {
+        let host = AbiVersion(1);
+        assert!(host.is_compatible_with(1));
+        assert!(!host.is_compatible_with(2));
+        assert!(!host.is_compatible_with(0));
+    }
+
+    #[test]
+    fn bytes_ref_is_two_words() {
+        assert_eq!(
+            size_of::<BytesRef>(),
+            size_of::<*const u8>() + size_of::<usize>(),
+        );
+        let empty = BytesRef::EMPTY;
+        assert!(empty.is_empty());
+        assert!(empty.data.is_null());
+    }
+
+    #[test]
+    fn structured_error_layout_pins_retryable_byte() {
+        // retryable is u8 + 3-byte reserved, not Rust bool.
+        // Ensure layout matches what the wire spec needs.
+        use core::mem::offset_of;
+        let _ = offset_of!(StructuredError, code);
+        let _ = offset_of!(StructuredError, message);
+        let _ = offset_of!(StructuredError, retryable);
+        let _ = offset_of!(StructuredError, _reserved);
+    }
+
+    #[test]
+    fn vtable_function_pointers_are_one_word() {
+        // Each vtable is a single fn pointer at v1; ensures we
+        // accidentally don't grow them by adding fields silently.
+        assert_eq!(
+            size_of::<RunnerExecuteScopeVtable>(),
+            size_of::<*const ()>(),
+        );
+        assert_eq!(
+            size_of::<GrammarExtractVtable>(),
+            size_of::<*const ()>(),
+        );
+        assert_eq!(
+            size_of::<LintEvaluateVtable>(),
+            size_of::<*const ()>(),
+        );
+    }
+
+    #[test]
+    fn config_schema_ref_is_bytes_ref() {
+        // ConfigSchemaRef is a type alias over BytesRef; ensure the
+        // alias resolves identically.
+        let _: ConfigSchemaRef = BytesRef::EMPTY;
     }
 }

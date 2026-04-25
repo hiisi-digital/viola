@@ -14,12 +14,22 @@ C-ABI boundary at plugin load and invocation:
 
 - `PluginDescriptor`, `PluginIdentity`, `CapabilityEntry`,
   `CapabilityId` (FNV-1a 64 over an ASCII name, const-evaluated)
+- `BytesRef` shared `(ptr, len)` carrier used for every byte slice
+  crossing the boundary
 - Role and role-set bitflag (`Role`, `RoleSet`): runner, grammar, lint
 - Well-known capability constants for each role's primary operation
+- `RunnerExecuteScopeVtable`, `GrammarExtractVtable`,
+  `LintEvaluateVtable`: the `#[repr(C)]` vtable shapes behind each
+  well-known capability id, plus `RunScope` and `FileEntry` argument
+  types
 - Version primitives (`AbiVersion`, `ManifestVersion`, `PluginVersion`,
-  `NamVersion`, `VersionTriple`) and compatibility helpers
+  `NamVersion`, `VersionTriple`). `AbiVersion::is_compatible_with` is
+  major-only per spec; `VersionTriple::is_compatible_with` is
+  major-equal + minor-greater-or-equal for manifest and plugin
+  versions
 - Lifecycle and invocation status codes (`AbiStatus`)
-- Structured error categories (`PluginError`)
+- Structured error envelope (`StructuredError` with `code`, `message`,
+  `details`, `retryable`) and category enum (`PluginError`)
 - Diagnostic schema (`Diagnostic`, `DiagnosticBatch`, `SourceRange`,
   `SourceLocation`, `DiagnosticSeverity`)
 - NAM payload carrier and version marker (`NamPayload`, `NamVersion`)
