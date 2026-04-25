@@ -6,6 +6,7 @@ members = [
     "crates/viola-core",
     "crates/viola-plugin-abi",
     "crates/viola-test-plugin-fixture",
+    "crates/viola-test-runner-fixture",
 ]
 
 [workspace.package]

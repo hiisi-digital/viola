@@ -372,6 +372,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "viola-test-runner-fixture"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "hilavitkutin-extensions",
+ "hilavitkutin-extensions-macros",
+ "libc",
+ "notko",
+ "viola-plugin-abi",
+]
+
+[[package]]
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
