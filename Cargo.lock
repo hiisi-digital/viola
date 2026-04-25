@@ -451,6 +451,16 @@ name = "viola-plugin-abi"
 version = "0.1.0"
 
 [[package]]
+name = "viola-plugin-abi-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+ "viola-plugin-abi",
+]
+
+[[package]]
 name = "walkdir"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

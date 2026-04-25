@@ -1,104 +1,75 @@
 # TODO — `viola-plugin-abi`
 
-Status: planning  
-Scope: contract-first work only (no host/runtime implementation here)
+Status: v1 contract surface landed (#193).
 
-## Phase 1 — Design
+## Landed in v1 (#193)
 
-- [ ] Lock ABI v1 boundary and scope
-  - [ ] Confirm strict `cdylib` / C-ABI optimization boundary
-  - [ ] Confirm explicit ban on linker-magic discovery (no `inventory`)
-  - [ ] Confirm macro-driven static monomorphization for Rust ergonomics
-  - [ ] Confirm crate contains only shared ABI contract surface
-  - [ ] Confirm non-goals (no loader/orchestration/runtime behavior)
-  - [ ] Confirm naming and ownership conventions for ABI items
-- [ ] Freeze v1 compatibility policy
-  - [ ] Define major/minor compatibility rules
-  - [ ] Define contract for future additive fields
-  - [ ] Define rejection rules for incompatible plugin versions
-- [ ] Finalize role model
-  - [ ] Confirm role identifiers (`runner`, `grammar`, `lint`)
-  - [ ] Confirm role capability declaration shape
-  - [ ] Confirm multi-role plugin expectations
+- [x] Crate scaffolding under `#![no_std]`, no deps beyond `core`
+- [x] ABI version constants and compatibility helpers (`HOST_ABI_MAJOR`,
+      `VIOLA_ABI_VERSION`, `VersionTriple::is_compatible_with`)
+- [x] Manifest, plugin, NAM version newtypes
+- [x] Exported-symbol constant `DESCRIPTOR_SYMBOL`
+- [x] Role enum + `RoleSet` bitflag
+- [x] `CapabilityId` (FNV-1a 64) + `CapabilityEntry`
+- [x] Well-known capability constants for runner / grammar / lint
+- [x] `PluginDescriptor` + `PluginIdentity` `#[repr(C)]` shapes with
+      lifecycle, capabilities, NAM compat, host-cap requirements,
+      config-schema reference
+- [x] `AbiStatus` (`#[repr(u32)]`) + `PluginError` category enum
+- [x] `Diagnostic`, `DiagnosticBatch`, `SourceLocation`, `SourceRange`,
+      `DiagnosticSeverity`
+- [x] `NamPayload` opaque carrier + `NamVersion`
+- [x] `ConfigSchemaRef`, `RunSurface`
+- [x] Layout-stability and FNV-1a determinism tests
 
-## Phase 2 — API / Contracts
+## Follow-up rounds
 
-- [ ] Define canonical ABI constants
-  - [ ] ABI version constants
-  - [ ] manifest/model version constants
-  - [ ] stable role/capability identifiers
-- [ ] Define required exported symbol constants
-  - [ ] Explicit, pull-based descriptor/provider symbol names (e.g., `__viola_plugin_descriptor`)
-  - [ ] Lifecycle symbol names (`init`, `invoke`, `shutdown`)
-  - [ ] Role operation table symbol names
-- [ ] Define macro-driven SDK ergonomics
-  - [ ] `#[export_plugin]` or similar proc-macro API
-  - [ ] Monomorphization wrappers mapping generic traits to `extern "C"`
-- [ ] Define shared contract types
-  - [ ] Plugin descriptor structs
-  - [ ] Lifecycle input/output structs
-  - [ ] Role op-table structs
-  - [ ] Diagnostics/result envelope structs
-  - [ ] Error code + structured error types
-- [ ] Define memory and ownership boundary rules
-  - [ ] Allocation/deallocation ownership
-  - [ ] String/buffer ownership and lifetime rules
-  - [ ] Nullability/invalid pointer behavior
-- [ ] Define threading/reentrancy contract
-  - [ ] Thread-safety expectations for plugin calls
-  - [ ] Reentrancy guarantees/restrictions
-  - [ ] Determinism expectations at ABI boundary
+### Companion macro crate (#232) — landed in PR #2
 
-## Phase 3 — Implementation
+- [x] `viola-plugin-abi-macros` crate carrying `#[export_plugin]`
+      attribute that statically monomorphizes a plugin's static metadata
+      into the `repr(C)` `PluginDescriptor` + `extern "C"`
+      `__viola_plugin_descriptor` symbol this crate defines.
+- [x] `CapabilityExport` / `InitHandler` / `ShutdownHandler` traits in
+      `viola-plugin-abi::traits` for the macro to reference.
+- [ ] Future: dedicated `#[capability]` attribute that emits
+      `CapabilityExport` impls plus the per-capability vtable struct
+      (currently authors hand-write the vtable).
 
-- [ ] Add crate scaffolding
-  - [ ] `Cargo.toml` with minimal dependencies
-  - [ ] module layout for constants/types/errors/versioning
-  - [ ] `viola-plugin-macros` sub-crate for proc-macros
-  - [ ] feature flags policy (if needed)
-- [ ] Implement ABI constants and identifiers
-  - [ ] version constants
-  - [ ] symbol constants
-  - [ ] role/capability constants
-- [ ] Implement contract type definitions
-  - [ ] FFI-safe repr and layout constraints
-  - [ ] constructor/validation helpers where appropriate
-  - [ ] conversion helpers for host/plugin usage
-- [ ] Implement compatibility helpers
-  - [ ] version compatibility checks
-  - [ ] capability matching helpers
-  - [ ] mismatch classification helpers
-- [ ] Implement SDK procedural macros
-  - [ ] Macro parsing of user generic trait impls
-  - [ ] Code generation of `repr(C)` descriptors and `extern "C"` wrappers
+### NAM concrete shape (post-#193)
 
-## Phase 4 — Tests
+- [ ] Pin a `#[repr(C)]` or stable serialized layout for the NAM
+      payload (CBOR / FlatBuffers / packed custom). v1 reserves the
+      version axis; concrete shape lands as a minor revision.
 
-- [ ] Add layout and stability tests
-  - [ ] size/alignment checks for ABI structs
-  - [ ] compile-time assertions where possible
-  - [ ] symbol/name invariance checks
-- [ ] Add compatibility tests
-  - [ ] ABI major mismatch cases
-  - [ ] manifest/model compatibility cases
-  - [ ] role/capability mismatch cases
-- [ ] Add boundary validation tests
-  - [ ] invalid/null input handling
-  - [ ] malformed descriptor handling
-  - [ ] deterministic error code mapping
+### Substrate alignment
 
-## Phase 5 — Docs / Release
+- [ ] Once `hilavitkutin-extensions` graduates from its mock workspace
+      into a published crate, evaluate re-basing the `PluginDescriptor`
+      shape onto `ExtensionDescriptor` + viola-specific capability
+      vtables, or keep the two as parallel infrastructure with mutual
+      capability-id compatibility.
 
-- [ ] Add crate-level contract docs
-  - [ ] “what this crate owns” vs “what it does not own”
-  - [ ] Architectural rationale: `cdylib` optimization barriers and `inventory` bans
-  - [ ] Authoring guide: how macro-driven static monomorphization works
-  - [ ] normative type/symbol reference
-  - [ ] memory/threading rules summary
-- [ ] Align docs with design source
-  - [ ] cross-check with `docs/PLUGIN-ABI-V1-DESIGN.md`
-  - [ ] update TODO and README after each design revision
-- [ ] Prepare v1 release checklist
-  - [ ] versioning policy confirmed
-  - [ ] public API review completed
-  - [ ] changelog + migration notes template prepared
+### Host loader (#194)
+
+- [ ] `viola-core` host loader implements:
+  - [ ] symbol resolution against `DESCRIPTOR_SYMBOL`
+  - [ ] structured validation per `PluginError` categories
+  - [ ] role-bit / capability-id presence checks
+  - [ ] fail-closed default for required plugins; config-controlled
+        for optional plugins
+
+### Diagnostic enrichment (#233)
+
+- [ ] Issue model + workflow-aware diagnostic context: extend
+      `Diagnostic.metadata_*` with concrete schema(s) for confidence,
+      structured suggestion, fix patches, and workflow context
+      (current task / phase / manifest references).
+
+### Capability invocation contracts
+
+- [ ] Document and pin the `repr(C)` vtable shape behind each
+      well-known capability id (`viola.runner.execute_scope.v1`,
+      `viola.grammar.extract.v1`, `viola.lint.evaluate.v1`). v1 of the
+      contract crate names them; the vtable shapes live in adjacent
+      contract files or sub-modules in a follow-up round.
