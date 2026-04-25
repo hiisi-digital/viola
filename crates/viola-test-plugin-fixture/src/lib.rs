@@ -15,6 +15,12 @@ fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
+// no_std cdylib without panic-unwind still references the EH personality
+// fn through the link table; provide an empty stub so the linker resolves.
+#[cfg(not(test))]
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_eh_personality() {}
+
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 

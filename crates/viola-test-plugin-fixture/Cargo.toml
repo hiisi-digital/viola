@@ -16,3 +16,9 @@ hilavitkutin-extensions-macros.workspace = true
 notko.workspace = true
 arvo.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }
+
+# libc link gives us libSystem on darwin (resolves dyld_stub_binder) and
+# the unwind/system glue on linux. cdylib is no_std so we just want the
+# system lib visible to the linker; we do not call any libc symbols.
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", default-features = false }

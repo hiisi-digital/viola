@@ -11,3 +11,7 @@ hilavitkutin-extensions.workspace = true
 notko.workspace = true
 arvo.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }
+
+[[test]]
+name = "host_loader"
+path = "tests/host_loader.rs"

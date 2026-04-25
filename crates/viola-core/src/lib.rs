@@ -7,24 +7,29 @@
 //! is `#![no_std]` and adds only viola-domain layering over the
 //! `hilavitkutin-extensions` host primitives that handle descriptor
 //! discovery, library loading, abi gating, required-host-cap checks,
-//! and lifecycle.
+//! and per-extension lifecycle.
 //!
-//! ## Public surface (in progress)
+//! ## What this crate adds over hilavitkutin-extensions
 //!
-//! This crate's public surface is being assembled on the correct
-//! substrate after the prior `libloading` + `std` host loader was
-//! removed. Tracked items:
-//!
-//! - role-vs-capability validation (Runner / Grammar / Lint <->
-//!   `CAP_RUNNER_EXECUTE_SCOPE` / `CAP_GRAMMAR_EXTRACT` /
-//!   `CAP_LINT_EVALUATE`)
-//! - runner-once + lint-fan-out orchestration over a single NAM
-//! - deterministic diagnostic aggregation per
-//!   `docs/PLUGIN-ABI-V1-DESIGN.md` §10 sort key
-//! - viola.toml config-driven plugin path resolution per §16.3
-//!
-//! Until each lands, the crate exposes only the substrate re-exports
-//! plugin authors and embedders need to compose against.
+//! - [`role`]: cap-derived role classification per
+//!   `docs/PLUGIN-ABI-V1-DESIGN.md` §5. A plugin's role set is the set
+//!   of v1 capability ids it exports.
+//! - [`invoke`]: typed vtable resolvers for the three v1 capabilities,
+//!   bridging raw `*const c_void` to the `#[repr(C)]` shapes pinned in
+//!   [`viola_plugin_abi::vtable`].
+//! - [`pipeline`]: runner-once + lint-fan-out orchestration over a
+//!   single NAM snapshot, per §7.1 / §8.3. Diagnostics egress through
+//!   a consumer-provided [`pipeline::DiagnosticSink`].
+//! - [`aggregate`]: §10 deterministic diagnostic comparator + slice
+//!   sort.
+//! - [`session`]: fixed-cap LIFO container that pins reverse-
+//!   insertion-order shutdown across multiple extensions, per §7.4.
+
+pub mod aggregate;
+pub mod invoke;
+pub mod pipeline;
+pub mod role;
+pub mod session;
 
 pub use hilavitkutin_extensions::{
     CapabilityEntry, CapabilityExport, CapabilityId, DESCRIPTOR_SYMBOL,
