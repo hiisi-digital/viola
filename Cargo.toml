@@ -1,3 +1,46 @@
 [workspace]
 resolver = "2"
-members = ["crates/viola-bridge-deno", "crates/viola-cli", "crates/viola-core", "crates/viola-plugin-abi", "crates/viola-plugin-abi-macros", "crates/viola-test-plugin-fixture"]
+members = [
+    "crates/viola-bridge-deno",
+    "crates/viola-cli",
+    "crates/viola-core",
+    "crates/viola-plugin-abi",
+    "crates/viola-test-plugin-fixture",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://github.com/hiisi-digital/viola"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[workspace.dependencies]
+# Hilavitkutin substrate. Canonical refs are git; local iteration uses
+# the path-overrides in the [patch."..."] section below.
+hilavitkutin-linking = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
+hilavitkutin-extensions = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
+hilavitkutin-extensions-macros = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
+
+notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
+arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+
+# Local iteration overrides. Hilavitkutin's mock workspace is the only
+# place these crates live until they graduate to crates.io. Sibling-
+# checkout layout (`~/Dev/clause-dev/{viola,hilavitkutin,arvo,notko}`)
+# is the assumed working environment.
+[patch."ssh://git@github.com/orgrinrt/hilavitkutin.git"]
+hilavitkutin-linking = { path = "../hilavitkutin/mock/crates/hilavitkutin-linking" }
+hilavitkutin-extensions = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions" }
+hilavitkutin-extensions-macros = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }
+
+[patch."ssh://git@github.com/orgrinrt/notko.git"]
+notko = { path = "../notko" }
+
+[patch."ssh://git@github.com/orgrinrt/arvo.git"]
+arvo = { path = "../arvo/mock/crates/arvo" }

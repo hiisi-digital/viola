@@ -12,7 +12,7 @@
 
 use core::ffi::c_void;
 
-use crate::bytes_ref::BytesRef;
+use crate::{BytesRef, CapabilityId};
 
 /// Severity classification for a diagnostic.
 ///
@@ -34,7 +34,9 @@ pub enum DiagnosticSeverity {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SourceLocation {
+    /// 1-based line. lint:allow(arvo-types-only, no-bare-numeric, no-public-raw-field) tracked: #207
     pub line: u32,
+    /// 0-based column. lint:allow(arvo-types-only, no-bare-numeric, no-public-raw-field) tracked: #207
     pub column: u32,
 }
 
@@ -71,10 +73,10 @@ pub struct Diagnostic {
     pub range: SourceRange,
     pub suggestion: BytesRef,
 
-    /// FNV-1a hash of the metadata schema name. `0` signals absent.
-    pub metadata_schema: u64,
+    /// Schema tag (FNV-1a 64-bit). Zero signals absent details.
+    pub metadata_schema: CapabilityId,
     pub metadata_ptr: *const c_void,
-    pub metadata_len: usize,
+    pub metadata_len: arvo::USize,
 }
 
 // SAFETY: Diagnostic holds raw pointers into plugin-owned buffers that
@@ -91,7 +93,7 @@ unsafe impl Sync for Diagnostic {}
 #[derive(Copy, Clone)]
 pub struct DiagnosticBatch {
     pub entries: *const Diagnostic,
-    pub len: usize,
+    pub len: arvo::USize,
 }
 
 // SAFETY: see Diagnostic.
