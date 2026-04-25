@@ -83,13 +83,34 @@ plugins = [
 # below override preset rules ("last wins").
 inherit = ["@hiisi/recommended"]
 
-# Per-gate severity threshold. Lints emit at their natural severity;
-# gates compare the captured severity against the threshold and
-# block iff some diagnostic meets or exceeds it.
+# Gate thresholds. Two layers:
+#
+# 1. Bare keys directly under [gates] are the global default for
+#    any lint without an explicit override.
+# 2. [gates.<lint-id>] overrides the global default per lint. This
+#    matches mockspace.toml's `[lints.<name>] commit = "..."`
+#    convention, so a viola.toml that absorbs mockspace's per-lint
+#    severity policy reads almost identically.
+#
+# Resolution order at gate time, for a given lint and gate name:
+# explicit [gates.<lint>].<gate> -> [gates].<gate> -> built-in
+# default ("error"). Missing keys fall through silently; this
+# means a per-lint table can override one gate while inheriting
+# the others from the global block.
 [gates]
 commit = "warn"
 build = "error"
 push = "error"
+
+[gates.no-bare-numeric]
+commit = "warn"
+build = "error"
+push = "error"
+
+[gates.duplicate-logic]
+commit = "off"   # do not block at commit
+build = "warn"   # warn but do not block at build
+push = "error"   # block at push
 
 # Per-linter config. The key is the linter id; the value is an
 # inline table whose shape the plugin documents and validates.
@@ -120,6 +141,16 @@ issue = "*::correctness>=major"
 files = ["src/**", "lib/**"]
 level = "error"
 min_confidence = 80
+
+# Severity rules can scope to a gate. Useful when the per-lint
+# [gates.<lint>] table is too coarse, e.g. "this lint is `off` at
+# commit only for files under fixtures/, but otherwise honours its
+# normal severity at every gate".
+[[severity]]
+issue = "no-bare-numeric/*"
+files = "**/fixtures/**"
+gate = "commit"
+level = "off"
 
 # Compound conditions: `all` (and), `any` (or), `not`. Each entry
 # inside `all` / `any` is a partial severity rule (subset of the
@@ -225,6 +256,58 @@ index wins; the comparison is `index <= threshold_index`.
 | `c1.and(c2)` | `all = [c1, c2]` |
 | `c1.or(c2)` | `any = [c1, c2]` |
 | `c.not()` | `not = c` |
+
+## Gate resolution model
+
+For each diagnostic the runtime captures, the gate decision answers
+"does this block the active gate?". The decision is a chain:
+
+1. Determine the diagnostic's effective severity. Start with the
+   intrinsic severity the lint emitted. Walk `[[severity]]` rules
+   top-to-bottom; a rule whose conditions match the (issue, file,
+   gate, confidence) tuple replaces the severity. Last match wins.
+   Rules without a `gate` field apply at every gate; rules with
+   `gate = "commit"` apply only at the commit gate, etc.
+2. Resolve the gate threshold for this lint at this gate.
+   `[gates.<lint-id>].<gate>` if present, else `[gates].<gate>`,
+   else the built-in `"error"` default.
+3. Compare effective severity to the threshold. Blocks iff
+   `severity_index <= threshold_index` (smaller index = more
+   severe; `error < warn < info < hint < off`).
+
+This three-step shape gives mockspace parity (per-lint per-gate
+severity via `[gates.<lint-id>]`) plus the additional axis viola
+inherited from the TS side (severity rules per (issue, file,
+gate)). Users authoring viola.toml from a mockspace.toml only need
+the `[gates.<lint>]` block; users coming from the TS side reach for
+`[[severity]]`.
+
+## Mockspace migration shape
+
+`mockspace.toml`:
+
+```toml
+[lints.no-bare-numeric]
+commit = "warn"
+build = "error"
+push = "error"
+```
+
+`viola.toml` (v2):
+
+```toml
+[gates.no-bare-numeric]
+commit = "warn"
+build = "error"
+push = "error"
+```
+
+The translation is the table rename `lints.<name>` -> `gates.<name>`
+(plus the optional `[viola] version = 2` marker). Per-linter config
+that lived in mockspace.toml's `[lints.<name>]` body alongside
+gate keys (rare today, but possible) splits between
+`[gates.<name>]` (gate keys) and `[lint.<name>]` (plugin config
+keys). #200's migration tool will handle this split.
 
 ## v1 → v2 migration
 
