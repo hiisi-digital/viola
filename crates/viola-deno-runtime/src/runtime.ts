@@ -1,39 +1,25 @@
-// viola-deno-runtime — embedded TS runtime.
+// viola-deno-runtime — embedded ES module wrapper.
 //
-// This script runs inside the embedded deno_core JsRuntime hosted by
-// the viola-deno-runtime plugin. It calls back into the host via a
-// registered op (`op_emit_diagnostic`) to deliver diagnostics. The
-// host drains the queued diagnostics and returns them to the viola
-// pipeline as a v1 DiagnosticBatch.
+// Loaded by the embedded JsRuntime as the main module
+// (`viola-internal:runtime.ts`). The runtime crate publishes the
+// user's `viola.config.ts` path through the `op_get_config_path` op
+// before each lint evaluation; this wrapper reads the path and
+// dynamically imports the user module so any TS sources it touches
+// flow through the host's `TsFsModuleLoader` (with deno_ast transpile).
 //
-// MVP scope: emit one hardcoded diagnostic so the embedding plumbing
-// (cdylib -> JsRuntime -> op -> Rust collector -> DiagnosticBatch ->
-// host) can be validated end-to-end. Real @hiisi/viola integration
-// (loading the user's viola.config.ts and running the full TS
-// pipeline) lands in a follow-up PR.
+// In PR-B the user config is responsible for emitting its own
+// diagnostics by calling `Deno.core.ops.op_emit_diagnostic(JSON.stringify(...))`.
+// PR-C wires the `@hiisi/viola` builder API so the user config exports
+// a builder result instead, and this wrapper translates that result
+// into op_emit_diagnostic calls.
 //
-// The runtime crate transpiles this with deno_ast before handing the
-// resulting JS to execute_script, so TypeScript syntax (interfaces,
-// type annotations, enums) is supported here.
+// If the path is empty (no `[ts].config` configured, or canonicalize
+// failed on the host side), the wrapper does nothing and the host
+// returns an empty diagnostic batch.
 
-interface RuntimeDiagnostic {
-  plugin_id: string;
-  rule_id: string;
-  severity: "info" | "warn" | "error";
-  message: string;
-  path: string;
-  line: number;
-  column: number;
+const path: string = (Deno as unknown as { core: { ops: Record<string, () => string> } })
+  .core.ops.op_get_config_path();
+
+if (path.length > 0) {
+  await import(path);
 }
-
-const diag: RuntimeDiagnostic = {
-  plugin_id: "org.viola.deno.runtime",
-  rule_id: "runtime-mvp",
-  severity: "warn",
-  message: "viola-deno-runtime embedded JsRuntime is alive",
-  path: "<runtime>",
-  line: 1,
-  column: 0,
-};
-
-Deno.core.ops.op_emit_diagnostic(JSON.stringify(diag));

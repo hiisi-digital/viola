@@ -2588,6 +2588,7 @@ dependencies = [
  "arvo",
  "deno_ast",
  "deno_core",
+ "deno_error",
  "hilavitkutin-extensions",
  "hilavitkutin-extensions-macros",
  "libc",
