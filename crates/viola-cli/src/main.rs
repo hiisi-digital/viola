@@ -288,7 +288,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
             io::eprintln(b"viola-cli: one or more lints failed during run");
         }
 
-        if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+        if *sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
     };
 
     // §7.4 LIFO drop ordering on scope exit is governed by RAII
@@ -334,9 +334,10 @@ fn run_v2<'a>(
     // any manual sequencing.
     let mut session: Session<MAX_PLUGINS> = Session::new();
 
-    let mut runner_idx: notko::Maybe<usize> = notko::Maybe::Isnt;
-    let mut lint_indices: [usize; MAX_PLUGINS] = [0; MAX_PLUGINS];
-    let mut lint_count = 0usize;
+    let mut runner_idx: notko::Maybe<arvo::USize> = notko::Maybe::Isnt;
+    let mut lint_indices: [arvo::USize; MAX_PLUGINS] =
+        [arvo::USize(0); MAX_PLUGINS];
+    let mut lint_count = arvo::USize(0);
 
     let plugins = cfg.plugins_slice();
     if plugins.is_empty() {
@@ -378,11 +379,11 @@ fn run_v2<'a>(
                         load_failed = true;
                         break;
                     }
-                    runner_idx = notko::Maybe::Is(i);
+                    runner_idx = notko::Maybe::Is(arvo::USize(i));
                 }
                 if has_lint {
-                    lint_indices[lint_count] = i;
-                    lint_count += 1;
+                    lint_indices[lint_count.0] = arvo::USize(i);
+                    lint_count = arvo::USize(lint_count.0 + 1);
                 }
                 if !has_runner && !has_lint {
                     io::eprint(b"viola-cli: plugin has no runner or lint capability: ");
@@ -414,7 +415,7 @@ fn run_v2<'a>(
             return EXIT_CONFIG;
         }
     };
-    let runner: &Extension = match session.get(runner_slot) {
+    let runner: &Extension = match session.get(runner_slot.0) {
         notko::Maybe::Is(ext) => ext,
         notko::Maybe::Isnt => {
             io::eprintln(b"viola-cli: internal error: runner slot vacated");
@@ -432,8 +433,8 @@ fn run_v2<'a>(
     // independent of that invariant.
     let mut written = 0usize;
     let mut k = 0;
-    while k < lint_count {
-        if let notko::Maybe::Is(ext) = session.get(lint_indices[k]) {
+    while k < lint_count.0 {
+        if let notko::Maybe::Is(ext) = session.get(lint_indices[k].0) {
             lint_refs[written].write(ext);
             written += 1;
         }
@@ -464,7 +465,10 @@ fn run_v2<'a>(
     let report = match run(
         runner,
         lints,
-        &configs[..lint_count],
+        // Size keyed to `written` to match `lints`; if Session ever
+        // gains a vacate API, `written < lint_count.0` is possible
+        // and the two slices must agree.
+        &configs[..written],
         &scope,
         core::ptr::null_mut(),
         &mut sink,
@@ -500,7 +504,7 @@ fn run_v2<'a>(
             if sink.count_blocking(cfg, g) > 0 { EXIT_DIAG } else { EXIT_OK }
         }
         notko::Maybe::Isnt => {
-            if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+            if *sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
         }
     }
 }
@@ -641,16 +645,16 @@ fn resolve_ts_config_path<'a>(
         Some(&0) => &viola_toml_path[..viola_toml_path.len() - 1],
         _ => viola_toml_path,
     };
-    let mut last_slash: notko::Maybe<usize> = notko::Maybe::Isnt;
+    let mut last_slash: notko::Maybe<arvo::USize> = notko::Maybe::Isnt;
     let mut i = 0;
     while i < toml_path.len() {
         if toml_path[i] == b'/' {
-            last_slash = notko::Maybe::Is(i);
+            last_slash = notko::Maybe::Is(arvo::USize(i));
         }
         i += 1;
     }
     let parent: &[u8] = match last_slash {
-        notko::Maybe::Is(idx) => &toml_path[..=idx],
+        notko::Maybe::Is(idx) => &toml_path[..=idx.0],
         notko::Maybe::Isnt => return ts_config,
     };
     let needed = parent.len() + ts_config.len();
@@ -850,6 +854,13 @@ fn emit_config_error(e: &viola_config::ConfigError) {
 struct CaptureSink {
     items: [core::mem::MaybeUninit<Diagnostic>; MAX_DIAGNOSTICS],
     arena: [u8; CAPTURE_ARENA_BYTES],
+    // Raw `usize` for the three accumulators is an implementation
+    // detail: `arvo::USize` is Deref-to-usize but does not impl
+    // arithmetic at the wrapper level, so `+=` / `>=` against an
+    // index would force a `.0` peek at every read. The public
+    // accessor `count()` and the `Len::len()` impl lift the count
+    // to the typed `arvo::USize` at the API boundary, which is
+    // where the substrate vocabulary actually lives.
     arena_used: usize,
     count: usize,
     dropped: usize,
@@ -866,8 +877,8 @@ impl CaptureSink {
         }
     }
 
-    fn count(&self) -> usize {
-        self.count
+    fn count(&self) -> arvo::USize {
+        arvo::USize(self.count)
     }
 
     /// Count diagnostics that block the named `gate` per the v2
@@ -1093,13 +1104,17 @@ fn bytes_ref_as_slice(b: &BytesRef) -> &[u8] {
 /// Severity ordering per `docs/VIOLA-TOML-V2-SCHEMA.md`: smaller
 /// index = more severe. The runtime today only emits `Info` / `Warn`
 /// / `Error`; the threshold tokens add `hint` and `off` (and the
-/// short-circuit-only `skip`).
-fn severity_index(s: viola_core::DiagnosticSeverity) -> u8 {
-    match s {
+/// short-circuit-only `skip`). The 8-bit storage shape is
+/// [`arvo_bits::Byte`]; comparisons drop to the inner `u8` because
+/// `Bits<N>` does not implement `PartialOrd` (opaque-bit-pattern
+/// identity, not arithmetic).
+fn severity_index(s: viola_core::DiagnosticSeverity) -> arvo_bits::Byte {
+    let raw: u8 = match s {
         viola_core::DiagnosticSeverity::Error => 0,
         viola_core::DiagnosticSeverity::Warn => 1,
         viola_core::DiagnosticSeverity::Info => 2,
-    }
+    };
+    arvo_bits::Byte::from_raw(raw)
 }
 
 /// Sentinel index used by [`threshold_index`] for the `"skip"`
@@ -1107,23 +1122,24 @@ fn severity_index(s: viola_core::DiagnosticSeverity) -> u8 {
 /// Any value larger than the largest real severity index works;
 /// `u8::MAX` makes the "never blocks" branch obvious at the
 /// comparison site.
-const SKIP_SENTINEL: u8 = u8::MAX;
+const SKIP_SENTINEL: arvo_bits::Byte = arvo_bits::Byte::from_raw(u8::MAX);
 
 /// Severity index for a threshold token (e.g. `b"warn"`). Unknown
 /// tokens fall back to `error`'s index, which is the conservative
 /// choice (a typo'd threshold lets the most severe issues through
 /// rather than silently downgrading the gate). Returns
 /// [`SKIP_SENTINEL`] for `"skip"`.
-fn threshold_index(token: &[u8]) -> u8 {
-    match token {
+fn threshold_index(token: &[u8]) -> arvo_bits::Byte {
+    let raw: u8 = match token {
         b"error" => 0,
         b"warn" => 1,
         b"info" => 2,
         b"hint" => 3,
         b"off" => 4,
-        b"skip" => SKIP_SENTINEL,
+        b"skip" => return SKIP_SENTINEL,
         _ => 0,
-    }
+    };
+    arvo_bits::Byte::from_raw(raw)
 }
 
 /// Decide whether a diagnostic at `sev` blocks given the threshold
@@ -1138,6 +1154,6 @@ fn blocks_at_threshold(
     if t == SKIP_SENTINEL {
         return false;
     }
-    severity_index(sev) <= t
+    severity_index(sev).to_raw() <= t.to_raw()
 }
 

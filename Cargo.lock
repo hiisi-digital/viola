@@ -22,7 +22,6 @@ dependencies = [
 [[package]]
 name = "arvo-bitmask"
 version = "0.1.0"
-source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
 dependencies = [
  "arvo",
  "arvo-bits",
@@ -33,7 +32,6 @@ dependencies = [
 [[package]]
 name = "arvo-bits"
 version = "0.1.0"
-source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
 dependencies = [
  "arvo",
  "mockspace",
@@ -42,7 +40,6 @@ dependencies = [
 [[package]]
 name = "arvo-tensor"
 version = "0.1.0"
-source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
 dependencies = [
  "arvo",
  "mockspace",
@@ -384,6 +381,7 @@ name = "viola-cli"
 version = "0.1.0"
 dependencies = [
  "arvo",
+ "arvo-bits",
  "hilavitkutin-api",
  "libc",
  "notko",
@@ -404,6 +402,8 @@ name = "viola-core"
 version = "0.1.0"
 dependencies = [
  "arvo",
+ "arvo-bitmask",
+ "arvo-bits",
  "hilavitkutin-api",
  "hilavitkutin-extensions",
  "notko",
