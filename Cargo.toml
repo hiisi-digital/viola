@@ -28,6 +28,7 @@ panic = "abort"
 hilavitkutin-linking = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions-macros = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
+hilavitkutin-api = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 
 notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
 arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
@@ -40,6 +41,7 @@ arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default
 hilavitkutin-linking = { path = "../hilavitkutin/mock/crates/hilavitkutin-linking" }
 hilavitkutin-extensions = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions" }
 hilavitkutin-extensions-macros = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }
+hilavitkutin-api = { path = "../hilavitkutin/mock/crates/hilavitkutin-api" }
 
 [patch."ssh://git@github.com/orgrinrt/notko.git"]
 notko = { path = "../notko" }

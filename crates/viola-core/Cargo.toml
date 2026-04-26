@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 hilavitkutin-extensions.workspace = true
+hilavitkutin-api.workspace = true
 notko.workspace = true
 arvo.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }

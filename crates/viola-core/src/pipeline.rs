@@ -13,33 +13,32 @@
 //! the call that produced them: each `LintEvaluateVtable::evaluate`
 //! result is consumed before the next plugin is invoked. Consumers that
 //! need to retain diagnostics across plugin invocations copy the bytes
-//! out inside [`DiagnosticSink::push`].
+//! out inside the sink's `push`.
+//!
+//! The diagnostic-egress contract is the substrate's:
+//! `hilavitkutin_api::DiagnosticSink<E>` is the named alias for
+//! `Push<E> + Len`. Consumer sinks impl those two atoms and pick up
+//! the named alias for free via the substrate's blanket. The pipeline
+//! pushes [`Diagnostic`] by value (the type is `Copy`); deep-copy of
+//! plugin-owned `BytesRef` payload still happens inside the sink, per
+//! the v1 ABI contract.
 
 use core::ffi::c_void;
 
+use hilavitkutin_api::{Len, Push};
 use hilavitkutin_extensions::Extension;
 use notko::{Maybe, Outcome};
 use viola_plugin_abi::{
-    AbiStatus, Diagnostic, DiagnosticBatch, NamPayload, PluginError, RunScope,
+    AbiStatus, BytesRef, Diagnostic, DiagnosticBatch, NamPayload, PluginError,
+    RunScope,
 };
 
 use crate::invoke::{lint_vtable, runner_vtable};
 
-/// Consumer-provided diagnostic egress.
-///
-/// Implementations receive each diagnostic exactly once during a host
-/// run, in the order plugins emit them. The pipeline does not sort
-/// before egress; consumers that need §10 deterministic order call
-/// [`crate::aggregate::sort_diagnostics`] over their accumulated buffer
-/// after the run completes.
-///
-/// `push` MAY truncate (return early without storing) when its backing
-/// store is full. The host neither queries nor cares about that state;
-/// it keeps invoking lints regardless. Consumers that need a hard cap
-/// signal track the truncation flag themselves.
-pub trait DiagnosticSink {
-    fn push(&mut self, diag: &Diagnostic);
-}
+/// Re-export so downstream consumers (`viola-cli`, plugin authors)
+/// can name the substrate trait without depending on
+/// `hilavitkutin-api` directly.
+pub use hilavitkutin_api::DiagnosticSink;
 
 /// Run the runner once, then fan out to every lint.
 ///
@@ -62,14 +61,17 @@ pub trait DiagnosticSink {
 /// plugin index and continues invoking subsequent lints (§4.4 partial
 /// failure tolerance: one bad lint does not silence the rest). The
 /// returned [`PipelineReport`] carries the first-failure marker.
-pub fn run<S: DiagnosticSink>(
+pub fn run<S>(
     runner: &Extension,
     lints: &[&Extension],
-    lint_configs: &[LintConfig],
+    lint_configs: &[BytesRef],
     scope: &RunScope,
     host_ctx: *mut c_void,
     sink: &mut S,
-) -> Outcome<PipelineReport, PluginError> {
+) -> Outcome<PipelineReport, PluginError>
+where
+    S: Push<Diagnostic> + Len,
+{
     let runner_vt = match runner_vtable(runner) {
         Maybe::Is(vt) => vt,
         Maybe::Isnt => return Outcome::Err(PluginError::RoleCapabilityMissing),
@@ -93,7 +95,7 @@ pub fn run<S: DiagnosticSink>(
     let mut i = 0;
     while i < lints.len() {
         let lint = lints[i];
-        let cfg = lint_configs.get(i).copied().unwrap_or(LintConfig::EMPTY);
+        let cfg = lint_configs.get(i).copied().unwrap_or(BytesRef::EMPTY);
 
         let lint_vt = match lint_vtable(lint) {
             Maybe::Is(vt) => vt,
@@ -137,7 +139,11 @@ pub fn run<S: DiagnosticSink>(
             };
             let mut k = 0;
             while k < entries.len() {
-                sink.push(&entries[k]);
+                // `Diagnostic` is `Copy`; pushing by value is the
+                // substrate's `Push<T>` shape. The sink deep-copies
+                // `BytesRef` payload internally per the v1 ABI
+                // contract before this slice goes out of scope.
+                sink.push(entries[k]);
                 k += 1;
             }
         }
@@ -148,23 +154,14 @@ pub fn run<S: DiagnosticSink>(
     Outcome::Ok(report)
 }
 
-/// Per-lint configuration carrier.
+/// Per-lint configuration carrier alias.
 ///
-/// `(ptr, len)` over host-owned config bytes. The encoding is opaque to
-/// the host; the lint plugin's contract defines it. `EMPTY` signals "no
-/// config supplied, use defaults".
-#[derive(Copy, Clone)]
-pub struct LintConfig {
-    pub data: *const u8,
-    pub len: arvo::USize,
-}
-
-impl LintConfig {
-    pub const EMPTY: Self = Self {
-        data: core::ptr::null(),
-        len: arvo::USize(0),
-    };
-}
+/// `LintConfig` was historically a viola-private duplicate of
+/// [`viola_plugin_abi::BytesRef`]; both are `(ptr, len)` over
+/// host-owned bytes. The alias preserves the historical name at the
+/// callsite while routing every use through the canonical type. New
+/// code should reach for `BytesRef` directly.
+pub type LintConfig = BytesRef;
 
 /// Aggregate report for a single pipeline run.
 ///

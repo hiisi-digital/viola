@@ -32,9 +32,17 @@
 
 pub use hilavitkutin_extensions::{
     CapabilityEntry, CapabilityExport, CapabilityId, DESCRIPTOR_SYMBOL,
-    ExtensionAbiStatus as AbiStatus, ExtensionDescriptor, ExtensionMeta,
-    ExtensionVersion, HOST_ABI_VERSION, InitHandler, ShutdownHandler,
+    ExtensionAbiStatus, ExtensionDescriptor, ExtensionMeta, ExtensionVersion,
+    HOST_ABI_VERSION, InitHandler, ShutdownHandler,
 };
+
+/// Historical alias for [`ExtensionAbiStatus`]. Plugin authors used
+/// to import `AbiStatus` from this crate before the substrate
+/// rebase; the alias preserves that callsite without forcing a
+/// rename. New code should prefer the canonical `ExtensionAbiStatus`
+/// name (and import it directly from `hilavitkutin_extensions` or
+/// via `viola_core`).
+pub type AbiStatus = ExtensionAbiStatus;
 
 mod diagnostic;
 mod nam;

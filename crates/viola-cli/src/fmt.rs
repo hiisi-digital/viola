@@ -5,6 +5,16 @@
 //! formatting infrastructure the no_std cli avoids. The CLI's only
 //! formatting need is decimal `u32` and `usize` for line/column and
 //! summary counts. A 30-line hand-rolled formatter covers it.
+//!
+//! Note: the canonical workspace shape for byte-stream encoding is
+//! [`hilavitkutin_api::codec::Encoder`] writing through a
+//! [`hilavitkutin_api::sink::ByteEmitter`]. This module is a
+//! deliberate deviation, scoped to viola-cli's `#![no_std]`
+//! `#![no_main]` host binary, kept because pulling the codec trait
+//! family + a sink wrapper around `&mut [u8]` adds linkage overhead
+//! the binary explicitly avoids. New host code that already pulls
+//! the codec layer in (anything above the cli's argv loop) should
+//! prefer `Encoder<T>` over these free functions.
 
 /// Format `n` as decimal into the tail of `buf`. Returns the populated
 /// suffix slice. `buf.len()` must be at least 10 for `u32` or 20 for
