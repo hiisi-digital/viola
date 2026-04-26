@@ -11,6 +11,8 @@ hilavitkutin-extensions.workspace = true
 hilavitkutin-api.workspace = true
 notko.workspace = true
 arvo.workspace = true
+arvo-bits.workspace = true
+arvo-bitmask.workspace = true
 viola-plugin-abi = { path = "../viola-plugin-abi" }
 
 [[test]]

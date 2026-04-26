@@ -32,6 +32,8 @@ hilavitkutin-api = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", bra
 
 notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
 arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-bits = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-bitmask = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 
 # Local iteration overrides. Hilavitkutin's mock workspace is the only
 # place these crates live until they graduate to crates.io. Sibling-
@@ -48,3 +50,5 @@ notko = { path = "../notko" }
 
 [patch."ssh://git@github.com/orgrinrt/arvo.git"]
 arvo = { path = "../arvo/mock/crates/arvo" }
+arvo-bits = { path = "../arvo/mock/crates/arvo-bits" }
+arvo-bitmask = { path = "../arvo/mock/crates/arvo-bitmask" }

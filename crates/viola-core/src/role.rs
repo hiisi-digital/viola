@@ -6,7 +6,14 @@
 //! [`CAP_RUNNER_EXECUTE_SCOPE`], a Grammar iff it exports
 //! [`CAP_GRAMMAR_EXTRACT`], a Lint iff it exports
 //! [`CAP_LINT_EVALUATE`]. An extension MAY hold more than one role.
+//!
+//! Role bits are stored in an [`arvo_bitmask::Mask64`]. The discriminant
+//! values on [`Role`] are bit positions (0, 1, 2), not bit-flag values:
+//! the mask exposes `insert(pos)` / `contains(pos)` / `is_empty()` over
+//! a [`USize`]-typed position.
 
+use arvo::USize;
+use arvo_bitmask::Mask64;
 use hilavitkutin_extensions::Extension;
 use viola_plugin_abi::{
     CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE,
@@ -14,38 +21,51 @@ use viola_plugin_abi::{
 
 /// Single viola role tag.
 ///
-/// `#[repr(u32)]` so the value is stable at the FFI boundary if a future
-/// host surface needs it; current consumers use it in-process only.
+/// The discriminant is the bit position the role occupies inside a
+/// [`RoleSet`], not a bit-flag value. Three roles fit in a `Mask64`'s
+/// first three bits with room to spare; future roles append further
+/// positions.
 #[repr(u32)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Role {
-    Runner = 1,
-    Grammar = 2,
-    Lint = 4,
+    Runner = 0,
+    Grammar = 1,
+    Lint = 2,
 }
 
 /// Bitset of roles an extension holds.
 ///
-/// Each role bit is the discriminant of [`Role`]. An empty set means the
-/// extension exports none of the three v1 viola caps and is therefore
-/// not a viola plugin (still a valid `hilavitkutin_extensions::Extension`,
-/// just with a different downstream contract).
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct RoleSet(u32); // lint:allow(arvo-types-only, no-bare-numeric, no-public-raw-field) tracked: #207
+/// Domain alias over [`Mask64`]. Empty means the extension exports
+/// none of the three v1 viola caps and is therefore not a viola
+/// plugin (still a valid `hilavitkutin_extensions::Extension`, just
+/// with a different downstream contract).
+#[derive(Copy, Clone, PartialEq, Eq, Default)]
+pub struct RoleSet(Mask64);
+
+impl core::fmt::Debug for RoleSet {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RoleSet")
+            .field("runner", &self.contains(Role::Runner))
+            .field("grammar", &self.contains(Role::Grammar))
+            .field("lint", &self.contains(Role::Lint))
+            .finish()
+    }
+}
 
 impl RoleSet {
-    pub const EMPTY: Self = Self(0);
+    pub const EMPTY: Self = Self(Mask64::from_word(arvo_bits::QWord::new(0)));
 
-    pub const fn contains(self, role: Role) -> bool {
-        (self.0 & role as u32) != 0
+    pub fn contains(self, role: Role) -> bool {
+        *self.0.contains(USize(role as usize))
     }
 
-    pub const fn is_empty(self) -> bool {
-        self.0 == 0
+    pub fn is_empty(self) -> bool {
+        *self.0.is_empty()
     }
 
-    pub const fn insert(self, role: Role) -> Self {
-        Self(self.0 | role as u32)
+    pub fn insert(mut self, role: Role) -> Self {
+        self.0.insert(USize(role as usize));
+        self
     }
 }
 
