@@ -5,12 +5,13 @@
 use std::env;
 use std::path::PathBuf;
 
+use hilavitkutin_api::{Len, Push};
 use viola_core::{
     BytesRef, CapabilityId, Diagnostic, ExtensionHost, ExtensionRequirement,
     RunScope, RunSurface,
     aggregate::sort_diagnostics,
     invoke::runner_vtable,
-    pipeline::{DiagnosticSink, LintConfig, run},
+    pipeline::run,
 };
 
 fn fixture_path(crate_name: &str) -> PathBuf {
@@ -76,8 +77,8 @@ fn br_to_vec(b: &BytesRef) -> Vec<u8> {
     unsafe { core::slice::from_raw_parts(b.data, b.len.0) }.to_vec()
 }
 
-impl DiagnosticSink for CapturingSink {
-    fn push(&mut self, diag: &Diagnostic) {
+impl Push<Diagnostic> for CapturingSink {
+    fn push(&mut self, diag: Diagnostic) {
         self.items.push(OwnedDiagnostic {
             plugin_id: br_to_vec(&diag.plugin_id),
             rule_id: br_to_vec(&diag.rule_id),
@@ -85,6 +86,12 @@ impl DiagnosticSink for CapturingSink {
             line: diag.range.start.line,
             column: diag.range.start.column,
         });
+    }
+}
+
+impl Len for CapturingSink {
+    fn len(&self) -> arvo::USize {
+        arvo::USize(self.items.len())
     }
 }
 
@@ -137,7 +144,7 @@ fn runner_once_lint_fan_out_egress_and_sort() {
 
     let mut sink = CapturingSink::new();
     let lints: [&viola_core::Extension; 1] = [&lint];
-    let configs = [LintConfig::EMPTY];
+    let configs = [BytesRef::EMPTY];
 
     let report = match run(
         &runner,

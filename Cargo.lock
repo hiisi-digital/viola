@@ -20,7 +20,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "arvo-bitmask"
+version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
+dependencies = [
+ "arvo",
+ "arvo-bits",
+ "arvo-tensor",
+ "mockspace",
+]
+
+[[package]]
 name = "arvo-bits"
+version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
+dependencies = [
+ "arvo",
+ "mockspace",
+]
+
+[[package]]
+name = "arvo-tensor"
 version = "0.1.0"
 source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#69b8271612134d50e9b0f5ca76c868b6bbbe7da1"
 dependencies = [
@@ -61,6 +81,21 @@ name = "hashbrown"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
+
+[[package]]
+name = "hilavitkutin-api"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "hilavitkutin-ctx",
+ "mockspace",
+ "notko",
+]
+
+[[package]]
+name = "hilavitkutin-ctx"
+version = "0.1.0"
 
 [[package]]
 name = "hilavitkutin-extensions"
@@ -349,6 +384,7 @@ name = "viola-cli"
 version = "0.1.0"
 dependencies = [
  "arvo",
+ "hilavitkutin-api",
  "libc",
  "notko",
  "viola-config",
@@ -368,6 +404,7 @@ name = "viola-core"
 version = "0.1.0"
 dependencies = [
  "arvo",
+ "hilavitkutin-api",
  "hilavitkutin-extensions",
  "notko",
  "viola-plugin-abi",

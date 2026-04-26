@@ -31,6 +31,8 @@ pub mod pipeline;
 pub mod role;
 pub mod session;
 
+pub use session::Session;
+
 pub use hilavitkutin_extensions::{
     CapabilityEntry, CapabilityExport, CapabilityId, DESCRIPTOR_SYMBOL,
     Extension, ExtensionAbiStatus, ExtensionDescriptor, ExtensionError,

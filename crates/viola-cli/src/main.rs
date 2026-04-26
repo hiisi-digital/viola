@@ -26,11 +26,13 @@ use core::panic::PanicInfo;
 mod fmt;
 mod io;
 
+use hilavitkutin_api::{Len, Push};
 use viola_core::{
     BytesRef, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE, CapabilityId,
-    Diagnostic, ExtensionHost, ExtensionRequirement, RunScope, RunSurface,
+    Diagnostic, Extension, ExtensionHost, ExtensionRequirement, RunScope,
+    RunSurface, Session,
     aggregate::sort_diagnostics,
-    pipeline::{DiagnosticSink, LintConfig, run},
+    pipeline::run,
 };
 
 const MAX_PLUGINS: usize = 16;
@@ -160,10 +162,12 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         }
     };
 
-    // Lint extensions are kept in stack-allocated MaybeUninit slots,
-    // populated up to lint_count, then borrowed as `[&Extension]` for
-    // pipeline::run. We rely on Drop running in reverse-declaration
-    // order at scope exit to honour shutdown LIFO.
+    // Lint extensions live in a `viola_core::Session<MAX_PLUGINS>`,
+    // which owns each `Extension` and drops them in reverse-insertion
+    // order on scope exit (the §7.4 LIFO shutdown contract). The
+    // runner is bound separately; because it was bound first, it
+    // drops last (after the session), giving runner-shuts-down-after-
+    // every-lint LIFO across the whole load set.
     //
     // When `[ts]` is active, the deno runtime is loaded once as the
     // runner and (here) once again as a lint slot. Two Extension
@@ -177,18 +181,20 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         cfg.lints_slice()
     };
     let lint_count = lint_paths.len();
-    let mut lint_holder: [core::mem::MaybeUninit<viola_core::Extension>;
-        MAX_PLUGINS] =
-        [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
-    let mut loaded_lints = 0usize;
+    let mut lint_session: Session<MAX_PLUGINS> = Session::new();
 
     let mut load_failed = false;
     let mut i = 0;
     while i < lint_count {
         match load_plugin(&host, lint_paths[i]) {
             notko::Maybe::Is(ext) => {
-                lint_holder[i].write(ext);
-                loaded_lints += 1;
+                if matches!(lint_session.push(ext), notko::Maybe::Is(_)) {
+                    io::eprintln(
+                        b"viola-cli: too many lints loaded for MAX_PLUGINS",
+                    );
+                    load_failed = true;
+                    break;
+                }
             }
             notko::Maybe::Isnt => {
                 io::eprint(b"viola-cli: failed to load lint: ");
@@ -200,30 +206,33 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         i += 1;
     }
 
+    let loaded_lints = *lint_session.len();
+
     let exit = if load_failed {
         EXIT_PLUGIN
     } else {
-        // Build &Extension slice over the loaded lints.
-        let mut lint_refs: [core::mem::MaybeUninit<&viola_core::Extension>;
+        // Build &[&Extension] over the session's resident slots.
+        let mut lint_refs: [core::mem::MaybeUninit<&Extension>;
             MAX_PLUGINS] =
             [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
         let mut k = 0;
         while k < loaded_lints {
-            // SAFETY: slot k was populated above via lint_holder[i].write.
-            let ext_ref: &viola_core::Extension =
-                unsafe { lint_holder[k].assume_init_ref() };
-            lint_refs[k].write(ext_ref);
+            if let notko::Maybe::Is(ext) = lint_session.get(k) {
+                lint_refs[k].write(ext);
+            }
             k += 1;
         }
-        // SAFETY: lint_refs[..loaded_lints] is fully initialised.
-        let lints: &[&viola_core::Extension] = unsafe {
+        // SAFETY: lint_refs[..loaded_lints] is fully initialised by
+        // the session-walk above; the session pins those `Extension`
+        // values for the rest of this scope.
+        let lints: &[&Extension] = unsafe {
             core::slice::from_raw_parts(
-                lint_refs.as_ptr() as *const &viola_core::Extension,
+                lint_refs.as_ptr() as *const &Extension,
                 loaded_lints,
             )
         };
 
-        let mut configs = [LintConfig::EMPTY; MAX_PLUGINS];
+        let mut configs = [BytesRef::EMPTY; MAX_PLUGINS];
         let mut ts_resolve_buf = [0u8; MAX_PATH_BYTES];
         if ts_active && loaded_lints > 0 {
             // Pass the user's viola.config.ts path through the lint
@@ -239,7 +248,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
                     ts_path,
                     &mut ts_resolve_buf,
                 );
-                configs[0] = LintConfig {
+                configs[0] = BytesRef {
                     data: resolved.as_ptr(),
                     len: arvo::USize(resolved.len()),
                 };
@@ -282,19 +291,11 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
     };
 
-    // Manually drop the lint Extensions in reverse-insertion order to
-    // honour the §7.4 LIFO shutdown convention. Runner drops last by
-    // virtue of falling off the function frame after this block.
-    let mut j = loaded_lints;
-    while j > 0 {
-        j -= 1;
-        // SAFETY: slot j was populated; we drop exactly once.
-        unsafe {
-            lint_holder[j].assume_init_drop();
-        }
-    }
-    drop(runner);
-
+    // §7.4 LIFO drop ordering on scope exit is governed by RAII
+    // declaration order: `runner` was declared before `lint_session`,
+    // so `lint_session` drops first (lints LIFO inside the session),
+    // then `runner`. No explicit `drop` calls or manual sequencing
+    // needed; preserving declaration order is the entire contract.
     exit
 }
 
@@ -327,9 +328,11 @@ fn run_v2<'a>(
     let host_caps: &'static [CapabilityId] = &[];
     let host = ExtensionHost::new(host_caps);
 
-    let mut holder: [core::mem::MaybeUninit<viola_core::Extension>; MAX_PLUGINS] =
-        [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
-    let mut loaded = 0usize;
+    // All loaded plugins live in a single `Session<MAX_PLUGINS>`.
+    // The session's Drop runs each plugin's `shutdown_fn` in reverse-
+    // insertion order on scope exit, satisfying §7.4 LIFO without
+    // any manual sequencing.
+    let mut session: Session<MAX_PLUGINS> = Session::new();
 
     let mut runner_idx: notko::Maybe<usize> = notko::Maybe::Isnt;
     let mut lint_indices: [usize; MAX_PLUGINS] = [0; MAX_PLUGINS];
@@ -360,8 +363,13 @@ fn run_v2<'a>(
                     ext.capability(CAP_LINT_EVALUATE),
                     notko::Maybe::Is(_)
                 );
-                holder[i].write(ext);
-                loaded += 1;
+                if matches!(session.push(ext), notko::Maybe::Is(_)) {
+                    io::eprintln(
+                        b"viola-cli: too many plugins loaded for MAX_PLUGINS",
+                    );
+                    load_failed = true;
+                    break;
+                }
                 if has_runner {
                     if let notko::Maybe::Is(_) = runner_idx {
                         io::eprintln(
@@ -393,44 +401,55 @@ fn run_v2<'a>(
         i += 1;
     }
 
-    let exit = if load_failed {
-        EXIT_PLUGIN
-    } else {
-        let runner_slot = match runner_idx {
-            notko::Maybe::Is(idx) => idx,
-            notko::Maybe::Isnt => {
-                io::eprintln(
-                    b"viola-cli: viola.toml v2 has no runner-capable plugin (export CAP_RUNNER_EXECUTE_SCOPE)",
-                );
-                drop_v2_holder(&mut holder, loaded);
-                return EXIT_CONFIG;
-            }
-        };
-        // SAFETY: holder[runner_slot] was populated above.
-        let runner: &viola_core::Extension =
-            unsafe { holder[runner_slot].assume_init_ref() };
+    if load_failed {
+        return EXIT_PLUGIN;
+    }
 
-        let mut lint_refs: [core::mem::MaybeUninit<&viola_core::Extension>;
-            MAX_PLUGINS] =
-            [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
-        let mut k = 0;
-        while k < lint_count {
-            // SAFETY: holder[lint_indices[k]] was populated above.
-            let ext_ref: &viola_core::Extension = unsafe {
-                holder[lint_indices[k]].assume_init_ref()
-            };
-            lint_refs[k].write(ext_ref);
-            k += 1;
+    let runner_slot = match runner_idx {
+        notko::Maybe::Is(idx) => idx,
+        notko::Maybe::Isnt => {
+            io::eprintln(
+                b"viola-cli: viola.toml v2 has no runner-capable plugin (export CAP_RUNNER_EXECUTE_SCOPE)",
+            );
+            return EXIT_CONFIG;
         }
-        // SAFETY: lint_refs[..lint_count] is fully initialised.
-        let lints: &[&viola_core::Extension] = unsafe {
-            core::slice::from_raw_parts(
-                lint_refs.as_ptr() as *const &viola_core::Extension,
-                lint_count,
-            )
-        };
+    };
+    let runner: &Extension = match session.get(runner_slot) {
+        notko::Maybe::Is(ext) => ext,
+        notko::Maybe::Isnt => {
+            io::eprintln(b"viola-cli: internal error: runner slot vacated");
+            return EXIT_PLUGIN;
+        }
+    };
 
-        let configs = [LintConfig::EMPTY; MAX_PLUGINS];
+    let mut lint_refs: [core::mem::MaybeUninit<&Extension>; MAX_PLUGINS] =
+        [const { core::mem::MaybeUninit::uninit() }; MAX_PLUGINS];
+    // Track refs actually written rather than reusing `lint_count`.
+    // Defensive against any future Session shape that could vacate a
+    // slot between push and read; today the session has no take/
+    // remove API, so written == lint_count is invariant, but keying
+    // the slice length to actual writes makes the unsafe contract
+    // independent of that invariant.
+    let mut written = 0usize;
+    let mut k = 0;
+    while k < lint_count {
+        if let notko::Maybe::Is(ext) = session.get(lint_indices[k]) {
+            lint_refs[written].write(ext);
+            written += 1;
+        }
+        k += 1;
+    }
+    // SAFETY: lint_refs[..written] is fully initialised by the
+    // session-walk above; the session pins those Extension values
+    // for the rest of this scope.
+    let lints: &[&Extension] = unsafe {
+        core::slice::from_raw_parts(
+            lint_refs.as_ptr() as *const &Extension,
+            written,
+        )
+    };
+
+    let configs = [BytesRef::EMPTY; MAX_PLUGINS];
 
         let scope = RunScope {
             workspace_root: BytesRef::EMPTY,
@@ -441,56 +460,49 @@ fn run_v2<'a>(
             _reserved: [0; 3],
         };
 
-        let mut sink = CaptureSink::new();
-        let report = match run(
-            runner,
-            lints,
-            &configs[..lint_count],
-            &scope,
-            core::ptr::null_mut(),
-            &mut sink,
-        ) {
-            notko::Outcome::Ok(r) => r,
-            notko::Outcome::Err(_) => {
-                io::eprintln(b"viola-cli: pipeline invocation failed");
-                // Cleanup is local to this early-return arm; the
-                // outer drop_v2_holder at function end is not
-                // reached from here. Same pattern as the no-runner
-                // early return above.
-                drop_v2_holder(&mut holder, loaded);
-                return EXIT_PLUGIN;
-            }
-        };
-
-        sink.sort();
-        sink.emit();
-
-        if let notko::Maybe::Is(failure) = report.first_failure {
-            let _ = failure;
-            io::eprintln(b"viola-cli: one or more lints failed during run");
-        }
-
-        // Gate-threshold filtering (PR-D-2). When `--gate <name>` is
-        // present, walk captured diagnostics and count how many block
-        // the named gate per the resolution chain in
-        // docs/VIOLA-TOML-V2-SCHEMA.md §"Gate resolution model":
-        // `[gates.<plugin_id>].<gate>` -> `[gates].<gate>` -> built-in
-        // "error" default. A diagnostic blocks iff its severity index
-        // is <= the threshold's severity index (smaller = more
-        // severe). Without `--gate`, fall back to v1 semantics: any
-        // captured diagnostic flips the exit code.
-        match gate {
-            notko::Maybe::Is(g) => {
-                if sink.count_blocking(cfg, g) > 0 { EXIT_DIAG } else { EXIT_OK }
-            }
-            notko::Maybe::Isnt => {
-                if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
-            }
+    let mut sink = CaptureSink::new();
+    let report = match run(
+        runner,
+        lints,
+        &configs[..lint_count],
+        &scope,
+        core::ptr::null_mut(),
+        &mut sink,
+    ) {
+        notko::Outcome::Ok(r) => r,
+        notko::Outcome::Err(_) => {
+            io::eprintln(b"viola-cli: pipeline invocation failed");
+            // `session` drops at function-frame exit, satisfying §7.4
+            // LIFO across all loaded plugins. No manual cleanup.
+            return EXIT_PLUGIN;
         }
     };
 
-    drop_v2_holder(&mut holder, loaded);
-    exit
+    sink.sort();
+    sink.emit();
+
+    if let notko::Maybe::Is(failure) = report.first_failure {
+        let _ = failure;
+        io::eprintln(b"viola-cli: one or more lints failed during run");
+    }
+
+    // Gate-threshold filtering (PR-D-2). When `--gate <name>` is
+    // present, walk captured diagnostics and count how many block
+    // the named gate per the resolution chain in
+    // docs/VIOLA-TOML-V2-SCHEMA.md §"Gate resolution model":
+    // `[gates.<plugin_id>].<gate>` -> `[gates].<gate>` -> built-in
+    // "error" default. A diagnostic blocks iff its severity index
+    // is <= the threshold's severity index (smaller = more
+    // severe). Without `--gate`, fall back to v1 semantics: any
+    // captured diagnostic flips the exit code.
+    match gate {
+        notko::Maybe::Is(g) => {
+            if sink.count_blocking(cfg, g) > 0 { EXIT_DIAG } else { EXIT_OK }
+        }
+        notko::Maybe::Isnt => {
+            if sink.count() > 0 { EXIT_DIAG } else { EXIT_OK }
+        }
+    }
 }
 
 #[cfg(not(unix))]
@@ -500,22 +512,6 @@ fn run_v2<'a>(
 ) -> i32 {
     io::eprintln(b"viola-cli: v2 plugin loading requires unix");
     EXIT_PLUGIN
-}
-
-/// Drop loaded v2 plugins in reverse-insertion order to honour the
-/// LIFO shutdown convention.
-fn drop_v2_holder(
-    holder: &mut [core::mem::MaybeUninit<viola_core::Extension>],
-    loaded: usize,
-) {
-    let mut j = loaded;
-    while j > 0 {
-        j -= 1;
-        // SAFETY: slot j was populated; we drop exactly once.
-        unsafe {
-            holder[j].assume_init_drop();
-        }
-    }
 }
 
 /// Parsed CLI arguments. The host has exactly two flag-shaped inputs
@@ -967,8 +963,8 @@ impl CaptureSink {
     }
 }
 
-impl DiagnosticSink for CaptureSink {
-    fn push(&mut self, diag: &Diagnostic) {
+impl Push<Diagnostic> for CaptureSink {
+    fn push(&mut self, diag: Diagnostic) {
         if self.count >= MAX_DIAGNOSTICS {
             self.dropped += 1;
             return;
@@ -1034,6 +1030,12 @@ impl DiagnosticSink for CaptureSink {
         };
         self.items[self.count].write(owned);
         self.count += 1;
+    }
+}
+
+impl Len for CaptureSink {
+    fn len(&self) -> arvo::USize {
+        arvo::USize(self.count)
     }
 }
 

@@ -16,6 +16,7 @@ viola-core = { path = "../viola-core" }
 viola-config = { path = "../viola-config" }
 notko.workspace = true
 arvo.workspace = true
+hilavitkutin-api.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
