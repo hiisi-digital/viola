@@ -9,12 +9,23 @@ members = [
     "crates/viola-test-plugin-fixture",
     "crates/viola-test-runner-fixture",
 ]
+default-members = [
+    "crates/viola-cli",
+    "crates/viola-config",
+    "crates/viola-core",
+    "crates/viola-plugin-abi",
+    "crates/viola-deno-runtime",
+]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MPL-2.0"
 repository = "https://github.com/hiisi-digital/viola"
+homepage = "https://github.com/hiisi-digital/viola"
+description = "Linter and diagnostic engine: in-process Rust host runtime with stable plugin ABI plus optional Deno bridge for TypeScript plugins."
+keywords = ["linter", "plugin-host", "diagnostics", "static-analysis", "deno"]
+categories = ["development-tools", "command-line-utilities"]
 
 [profile.dev]
 panic = "abort"
