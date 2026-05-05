@@ -1,75 +1,75 @@
-# TODO — Viola implementation roadmap (normalized checklist)
+# TODO: Viola implementation roadmap (normalized checklist)
 
-Status: planning-only.  
+Status: planning + active rollout.
 Scope: top-level coordination for Rust host + plugin ABI transition and TS bridge integration.
 
 ---
 
-## Phase 1 — Design lock
+## Phase 1: Design lock
 
-- [ ] Lock Plugin ABI v1 decisions in `docs/PLUGIN-ABI-V1-DESIGN.md`
-  - [ ] Confirm strict in-process host-loaded model
-  - [ ] Confirm unified roles (`runner`, `grammar`, `lint`)
-  - [ ] Confirm fail-closed load behavior for required plugins
-  - [ ] Confirm canonical TOML config + TS builder parity
-- [ ] Add distribution matrix to design doc
-  - [ ] Define package/artifact responsibilities (`viola-cli`, TS package, bridge dylibs)
-  - [ ] Define supported platform matrix (initial targets)
-- [ ] Freeze naming decisions
-  - [ ] Confirm crate naming (`viola-core` vs `viola-host`)
-  - [ ] Confirm plugin/bridge naming conventions
+- [x] Lock Plugin ABI v1 decisions in `docs/PLUGIN-ABI-V1-DESIGN.md`
+  - [x] Confirm strict in-process host-loaded model
+  - [x] Confirm unified roles (`runner`, `grammar`, `lint`)
+  - [x] Confirm fail-closed load behavior for required plugins
+  - [x] Confirm canonical TOML config + TS builder parity
+- [x] Add distribution matrix to design doc
+  - [x] Define package/artifact responsibilities (`viola-cli`, TS package, bridge dylibs)
+  - [x] Define supported platform matrix (initial targets)
+- [x] Freeze naming decisions
+  - [x] Confirm crate naming (`viola-core` vs `viola-host`)
+  - [x] Confirm plugin/bridge naming conventions
 
-## Phase 2 — Repo scaffolding
+## Phase 2: Repo scaffolding
 
-- [ ] Create/maintain `crates/` workspace docs
-  - [ ] Keep `crates/README.md` aligned with design doc
-  - [ ] Add missing crate README/TODO placeholders consistently
-- [ ] Add Rust workspace metadata (when implementation starts)
-  - [ ] Top-level Cargo workspace setup for planned crates
-  - [ ] Lint/format/test baseline config for Rust crates
+- [x] Create/maintain `crates/` workspace docs
+  - [x] Keep `crates/README.md` aligned with design doc
+  - [x] Add missing crate README/TODO placeholders consistently
+- [x] Add Rust workspace metadata
+  - [x] Top-level Cargo workspace setup for planned crates
+  - [x] Lint/format/test baseline config for Rust crates
 
-## Phase 3 — Contracts and schemas
+## Phase 3: Contracts and schemas
 
-- [ ] Define ABI contract source files in `viola-plugin-abi` (contract-first)
-  - [ ] Version constants
-  - [ ] Role IDs and capability IDs
-  - [ ] Descriptor and lifecycle contract shapes
-  - [ ] Structured error/result model
-  - [ ] Normative symbol constants
-- [ ] Define host-side schema boundaries
-  - [ ] Resolved config model schema
-  - [ ] NAM model schema/version markers
-  - [ ] Diagnostics schema/version markers
+- [x] Define ABI contract source files in `viola-plugin-abi` (contract-first)
+  - [x] Version constants
+  - [x] Role IDs and capability IDs
+  - [x] Descriptor and lifecycle contract shapes
+  - [x] Structured error/result model
+  - [x] Normative symbol constants
+- [x] Define host-side schema boundaries
+  - [x] Resolved config model schema
+  - [x] NAM model schema/version markers
+  - [x] Diagnostics schema/version markers
 
-## Phase 4 — Host runtime (`viola-core`/`viola-host`)
+## Phase 4: Host runtime (`viola-core`)
 
-- [ ] Implement plugin loading pipeline (using shared extension/plugin machinery later)
-  - [ ] Discovery inputs from resolved config
-  - [ ] Strict load-time validation
-  - [ ] Graceful structured load failure reporting
-- [ ] Implement execution lifecycle
-  - [ ] Resolve config
-  - [ ] Initialize plugins
-  - [ ] Runner pass once per scope
-  - [ ] Lint fan-out pass over single NAM snapshot
-  - [ ] Deterministic aggregation/sort
-  - [ ] Shutdown lifecycle
-- [ ] Implement failure policy behavior
-  - [ ] Required plugin fail-closed
-  - [ ] Optional plugin fail-open/fail-closed by config
+- [x] Implement plugin loading pipeline (using shared extension/plugin machinery later)
+  - [x] Discovery inputs from resolved config
+  - [x] Strict load-time validation
+  - [x] Graceful structured load failure reporting
+- [x] Implement execution lifecycle
+  - [x] Resolve config
+  - [x] Initialize plugins
+  - [x] Runner pass once per scope
+  - [x] Lint fan-out pass over single NAM snapshot
+  - [x] Deterministic aggregation/sort
+  - [x] Shutdown lifecycle
+- [x] Implement failure policy behavior
+  - [x] Required plugin fail-closed
+  - [x] Optional plugin fail-open/fail-closed by config
 
-## Phase 5 — CLI and assembly profiles
+## Phase 5: CLI and assembly profiles
 
-- [ ] Implement `viola-cli` host wiring profile
-  - [ ] Launch host runtime
-  - [ ] Resolve plugin search paths deterministically
-  - [ ] Attach default profile(s) (including TS bridge where configured)
-- [ ] Document assembly profiles
-  - [ ] CLI-on-PATH profile
-  - [ ] Embedded-host profile
-  - [ ] Bundled-CLI-with-app profile
+- [x] Implement `viola-cli` host wiring profile
+  - [x] Launch host runtime
+  - [x] Resolve plugin search paths deterministically
+  - [x] Attach default profile(s) (including TS bridge where configured)
+- [x] Document assembly profiles
+  - [x] CLI-on-PATH profile
+  - [x] Embedded-host profile
+  - [x] Bundled-CLI-with-app profile
 
-## Phase 6 — TS/Deno bridge profile
+## Phase 6: TS/Deno bridge profile
 
 - [ ] Integrate Deno bridge plugin profile contract
   - [ ] Bridge loading and validation in host
@@ -79,7 +79,7 @@ Scope: top-level coordination for Rust host + plugin ABI transition and TS bridg
   - [ ] CLI ships core runtime artifacts
   - [ ] No requirement for TS package to bundle core runtime
 
-## Phase 7 — Testing and determinism
+## Phase 7: Testing and determinism
 
 - [ ] Add compatibility tests
   - [ ] ABI mismatch rejection
@@ -89,11 +89,11 @@ Scope: top-level coordination for Rust host + plugin ABI transition and TS bridg
   - [ ] Init/invoke/shutdown ordering
   - [ ] Plugin failure policy paths
 - [ ] Add determinism tests
-  - [ ] Repeated identical run => stable output order/content
+  - [ ] Repeated identical run produces stable output order/content
   - [ ] Stable diagnostic sort invariants
 - [ ] Add cross-platform smoke matrix (initially for release targets)
 
-## Phase 8 — Docs and rollout
+## Phase 8: Docs and rollout
 
 - [ ] Keep all docs synchronized
   - [ ] `docs/PLUGIN-ABI-V1-DESIGN.md`
