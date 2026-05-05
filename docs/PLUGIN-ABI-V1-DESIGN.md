@@ -1,4 +1,4 @@
-# Viola Plugin ABI v1 — Design Specification
+# Viola Plugin ABI v1: Design Specification
 
 **Status:** Draft (implementation-targeted)  
 **Audience:** `viola-core` maintainers, plugin authors (`runner`, `grammar`, `lint`), integrators  
@@ -6,7 +6,7 @@
 
 ---
 
-## Part I — Normative Specification
+## Part I: Normative Specification
 
 This section is normative. Terms like **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are used in the RFC sense.
 
@@ -410,7 +410,7 @@ Failure behavior:
 
 ---
 
-## Part II — Integration Profile (Rust host + Deno ecosystem)
+## Part II: Integration Profile (Rust host + Deno ecosystem)
 
 This section is prescriptive for the current intended architecture profile.
 
@@ -520,7 +520,7 @@ Missing required plugins MUST produce structured fail-closed errors by default.
 
 ---
 
-## Part III — Rationale (Non-normative)
+## Part III: Rationale (Non-normative)
 
 ### 18. Why host-loaded dylib first
 
