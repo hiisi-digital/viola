@@ -7,13 +7,22 @@
 //! [`PROVIDER_GRAMMAR_EXTRACT`], a Lint iff it exports
 //! [`PROVIDER_LINT_EVALUATE`]. An extension MAY hold more than one role.
 //!
-//! Role bits are stored in an [`arvo_bitmask::Mask64`]. The discriminant
-//! values on [`Role`] are bit positions (0, 1, 2), not bit-flag values:
-//! the mask exposes `insert(pos)` / `contains(pos)` / `is_empty()` over
-//! a [`USize`]-typed position.
+//! Role bits are stored in an [`arvo_bitmask::Mask`] over
+//! `arvo_bits::QWord` (= `Bits<64, Hot>`). The discriminant values on
+//! [`Role`] are bit positions (0, 1, 2), not bit-flag values: the mask
+//! exposes `insert(pos)` / `contains(pos)` / `is_empty()` over a
+//! [`USize`]-typed position.
 
 use arvo::USize;
-use arvo_bitmask::Mask64;
+use arvo_bitmask::Mask;
+use arvo_bits::QWord;
+
+/// 64-bit bitmask alias matching the prior `Mask64` shorthand.
+///
+/// arvo round 202605031748 (#313) deleted the `Mask64` shipping alias
+/// from `arvo-bitmask`. The chassis-form spelling is what consumers
+/// name now; this local alias keeps the `RoleSet` field type readable.
+type Mask64 = Mask<QWord>;
 use hilavitkutin_extensions::Extension;
 use viola_plugin_abi::{
     PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE, PROVIDER_RUNNER_EXECUTE_SCOPE,
@@ -53,7 +62,7 @@ impl core::fmt::Debug for RoleSet {
 }
 
 impl RoleSet {
-    pub const EMPTY: Self = Self(Mask64::from_word(arvo_bits::QWord::new(0)));
+    pub const EMPTY: Self = Self(Mask::from_word(QWord::from_raw(0)));
 
     pub fn contains(self, role: Role) -> bool {
         *self.0.contains(USize(role as usize))
