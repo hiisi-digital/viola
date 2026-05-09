@@ -7,8 +7,9 @@
 //! [`PROVIDER_GRAMMAR_EXTRACT`], a Lint iff it exports
 //! [`PROVIDER_LINT_EVALUATE`]. An extension MAY hold more than one role.
 //!
-//! Role bits are stored in an [`arvo_bitmask::Mask`] over
-//! `arvo_bits::QWord` (= `Bits<64, Hot>`). The discriminant values on
+//! Role bits are stored in a `Mask64` (a local alias for
+//! `arvo_bitmask::Mask<arvo_bits::QWord>`, which lowers to
+//! `Bits<64, Hot>` storage). The discriminant values on
 //! [`Role`] are bit positions (0, 1, 2), not bit-flag values: the mask
 //! exposes `insert(pos)` / `contains(pos)` / `is_empty()` over a
 //! [`USize`]-typed position.
@@ -45,7 +46,7 @@ pub enum Role {
 /// Bitset of roles an extension holds.
 ///
 /// Domain alias over [`Mask64`]. Empty means the extension exports
-/// none of the three v1 viola caps and is therefore not a viola
+/// none of the three v1 viola providers and is therefore not a viola
 /// plugin (still a valid `hilavitkutin_extensions::Extension`, just
 /// with a different downstream contract).
 #[derive(Copy, Clone, PartialEq, Eq, Default)]
