@@ -1,11 +1,11 @@
 //! Cap-derived role classification for viola extensions.
 //!
 //! Per `docs/PLUGIN-ABI-V1-DESIGN.md` §5, a viola extension's role set
-//! is derived from its capability table, not declared separately. An
+//! is derived from its provider table, not declared separately. An
 //! extension is a Runner iff its descriptor exports
-//! [`CAP_RUNNER_EXECUTE_SCOPE`], a Grammar iff it exports
-//! [`CAP_GRAMMAR_EXTRACT`], a Lint iff it exports
-//! [`CAP_LINT_EVALUATE`]. An extension MAY hold more than one role.
+//! [`PROVIDER_RUNNER_EXECUTE_SCOPE`], a Grammar iff it exports
+//! [`PROVIDER_GRAMMAR_EXTRACT`], a Lint iff it exports
+//! [`PROVIDER_LINT_EVALUATE`]. An extension MAY hold more than one role.
 //!
 //! Role bits are stored in an [`arvo_bitmask::Mask64`]. The discriminant
 //! values on [`Role`] are bit positions (0, 1, 2), not bit-flag values:
@@ -16,7 +16,7 @@ use arvo::USize;
 use arvo_bitmask::Mask64;
 use hilavitkutin_extensions::Extension;
 use viola_plugin_abi::{
-    CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE,
+    PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE, PROVIDER_RUNNER_EXECUTE_SCOPE,
 };
 
 /// Single viola role tag.
@@ -69,38 +69,38 @@ impl RoleSet {
     }
 }
 
-/// Classify an extension into the viola role set its capability table implies.
+/// Classify an extension into the viola role set its provider table implies.
 pub fn roles_of(ext: &Extension) -> RoleSet {
     let mut set = RoleSet::EMPTY;
-    if has_cap(ext, CAP_RUNNER_EXECUTE_SCOPE) {
+    if has_cap(ext, PROVIDER_RUNNER_EXECUTE_SCOPE) {
         set = set.insert(Role::Runner);
     }
-    if has_cap(ext, CAP_GRAMMAR_EXTRACT) {
+    if has_cap(ext, PROVIDER_GRAMMAR_EXTRACT) {
         set = set.insert(Role::Grammar);
     }
-    if has_cap(ext, CAP_LINT_EVALUATE) {
+    if has_cap(ext, PROVIDER_LINT_EVALUATE) {
         set = set.insert(Role::Lint);
     }
     set
 }
 
 pub fn is_runner(ext: &Extension) -> bool {
-    has_cap(ext, CAP_RUNNER_EXECUTE_SCOPE)
+    has_cap(ext, PROVIDER_RUNNER_EXECUTE_SCOPE)
 }
 
 pub fn is_grammar(ext: &Extension) -> bool {
-    has_cap(ext, CAP_GRAMMAR_EXTRACT)
+    has_cap(ext, PROVIDER_GRAMMAR_EXTRACT)
 }
 
 pub fn is_lint(ext: &Extension) -> bool {
-    has_cap(ext, CAP_LINT_EVALUATE)
+    has_cap(ext, PROVIDER_LINT_EVALUATE)
 }
 
 fn has_cap(
     ext: &Extension,
-    id: hilavitkutin_extensions::CapabilityId,
+    id: hilavitkutin_extensions::ProviderId,
 ) -> bool {
-    matches!(ext.capability(id), notko::Maybe::Is(_))
+    matches!(ext.provider(id), notko::Maybe::Is(_))
 }
 
 #[cfg(test)]

@@ -4,14 +4,14 @@
 //! atomic counters.
 //!
 //! End-to-end pipeline orchestration with a runner fixture lands with
-//! #220 (rust-native plugin) once a CAP_RUNNER_EXECUTE_SCOPE-exporting
+//! #220 (rust-native plugin) once a PROVIDER_RUNNER_EXECUTE_SCOPE-exporting
 //! cdylib exists.
 
 use std::env;
 use std::path::PathBuf;
 
 use viola_core::{
-    CAP_LINT_EVALUATE, DiagnosticBatch, ExtensionAbiStatus, ExtensionHost,
+    PROVIDER_LINT_EVALUATE, DiagnosticBatch, ExtensionAbiStatus, ExtensionHost,
     ExtensionRequirement, NamPayload, NamVersion, default_policy,
     invoke::lint_vtable,
     role::{is_lint, is_runner, roles_of, Role},
@@ -51,7 +51,7 @@ fn fixture_loads_classifies_and_evaluates() {
         path.display(),
     );
 
-    let host_caps: &'static [viola_core::CapabilityId] = &[];
+    let host_caps: &'static [viola_core::ProviderId] = &[];
     let host = ExtensionHost::new(host_caps).with_policy(default_policy);
 
     let path_str = path
@@ -78,11 +78,11 @@ fn fixture_loads_classifies_and_evaluates() {
     assert!(!roles.contains(Role::Runner));
     assert!(!roles.contains(Role::Grammar));
     assert_eq!(
-        ext.capabilities().len(),
+        ext.providers().len(),
         1,
-        "fixture exports exactly one capability",
+        "fixture exports exactly one provider",
     );
-    assert!(ext.capabilities()[0].id == CAP_LINT_EVALUATE);
+    assert!(ext.providers()[0].id == PROVIDER_LINT_EVALUATE);
 
     let vt = match lint_vtable(&ext) {
         notko::Maybe::Is(vt) => vt,
