@@ -1,7 +1,7 @@
 #![no_std]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-//! Internal fixture cdylib exposing CAP_RUNNER_EXECUTE_SCOPE.
+//! Internal fixture cdylib exposing PROVIDER_RUNNER_EXECUTE_SCOPE.
 //!
 //! Produces an empty NAM with `model_version = 1.0.0`. Pairs with
 //! `viola-test-plugin-fixture` (Lint role) under
@@ -13,12 +13,12 @@ use core::panic::PanicInfo;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use hilavitkutin_extensions::{
-    CapabilityExport, CapabilityId, ExtensionAbiStatus, InitHandler,
+    ProviderExport, ProviderId, ExtensionAbiStatus, InitHandler,
     ShutdownHandler,
 };
 use hilavitkutin_extensions_macros::export_extension;
 use viola_plugin_abi::{
-    AbiStatus, CAP_RUNNER_EXECUTE_SCOPE, NamPayload, NamVersion, RunScope,
+    AbiStatus, PROVIDER_RUNNER_EXECUTE_SCOPE, NamPayload, NamVersion, RunScope,
     RunnerExecuteScopeVtable,
 };
 
@@ -62,8 +62,8 @@ static RUNNER_VTABLE: RunnerExecuteScopeVtable =
 
 pub struct RunnerCap;
 
-impl CapabilityExport for RunnerCap {
-    const ID: CapabilityId = CAP_RUNNER_EXECUTE_SCOPE;
+impl ProviderExport for RunnerCap {
+    const ID: ProviderId = PROVIDER_RUNNER_EXECUTE_SCOPE;
     const VTABLE_PTR: *const c_void =
         &RUNNER_VTABLE as *const _ as *const c_void;
 }
@@ -89,7 +89,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.runner.fixture",
     version = "0.1.0",
-    capabilities = [RunnerCap],
+    providers = [RunnerCap],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]

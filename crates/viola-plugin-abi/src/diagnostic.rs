@@ -12,7 +12,7 @@
 
 use core::ffi::c_void;
 
-use crate::{BytesRef, CapabilityId};
+use crate::{BytesRef, ProviderId};
 
 /// Severity classification for a diagnostic.
 ///
@@ -58,7 +58,7 @@ pub struct SourceRange {
 /// persistence step; it does not retain pointers across shutdown.
 ///
 /// `metadata` carries opaque structured metadata. Layout of the
-/// pointee is governed by `metadata_schema` (a [`crate::CapabilityId`]
+/// pointee is governed by `metadata_schema` (a [`crate::ProviderId`]
 /// hash); v1 reserves the slot, follow-up rounds (#233) populate
 /// concrete schemas for confidence, suggestion, fix patches, and
 /// workflow context.
@@ -74,7 +74,7 @@ pub struct Diagnostic {
     pub suggestion: BytesRef,
 
     /// Schema tag (FNV-1a 64-bit). Zero signals absent details.
-    pub metadata_schema: CapabilityId,
+    pub metadata_schema: ProviderId,
     pub metadata_ptr: *const c_void,
     pub metadata_len: arvo::USize,
 }

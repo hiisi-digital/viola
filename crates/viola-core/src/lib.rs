@@ -13,8 +13,8 @@
 //!
 //! - [`role`]: cap-derived role classification per
 //!   `docs/PLUGIN-ABI-V1-DESIGN.md` §5. A plugin's role set is the set
-//!   of v1 capability ids it exports.
-//! - [`invoke`]: typed vtable resolvers for the three v1 capabilities,
+//!   of v1 provider ids it exports.
+//! - [`invoke`]: typed vtable resolvers for the three v1 providers,
 //!   bridging raw `*const c_void` to the `#[repr(C)]` shapes pinned in
 //!   [`viola_plugin_abi::vtable`].
 //! - [`pipeline`]: runner-once + lint-fan-out orchestration over a
@@ -34,7 +34,7 @@ pub mod session;
 pub use session::Session;
 
 pub use hilavitkutin_extensions::{
-    CapabilityEntry, CapabilityExport, CapabilityId, DESCRIPTOR_SYMBOL,
+    ProviderEntry, ProviderExport, ProviderId, DESCRIPTOR_SYMBOL,
     Extension, ExtensionAbiStatus, ExtensionDescriptor, ExtensionError,
     ExtensionHost, ExtensionMeta, ExtensionRequirement, ExtensionVersion,
     FailurePolicyFn, HOST_ABI_VERSION, InitHandler, PolicyVerdict,
@@ -42,8 +42,8 @@ pub use hilavitkutin_extensions::{
 };
 
 pub use viola_plugin_abi::{
-    BytesRef, CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE,
-    CAP_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch,
+    BytesRef, PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE,
+    PROVIDER_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch,
     DiagnosticSeverity, FileEntry, GrammarExtractVtable, LintEvaluateVtable,
     NamPayload, NamVersion, PluginError, RunScope, RunSurface,
     RunnerExecuteScopeVtable, SourceLocation, SourceRange,

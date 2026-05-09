@@ -25,12 +25,12 @@ use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use hilavitkutin_extensions::{
-    CapabilityExport, CapabilityId, ExtensionAbiStatus, InitHandler,
+    ProviderExport, ProviderId, ExtensionAbiStatus, InitHandler,
     ShutdownHandler,
 };
 use hilavitkutin_extensions_macros::export_extension;
 use viola_plugin_abi::{
-    BytesRef, CAP_LINT_EVALUATE, Diagnostic, DiagnosticBatch,
+    BytesRef, PROVIDER_LINT_EVALUATE, Diagnostic, DiagnosticBatch,
     DiagnosticSeverity, LintEvaluateVtable, NamPayload, SourceLocation,
     SourceRange,
 };
@@ -67,7 +67,7 @@ static DIAGNOSTIC: Diagnostic = Diagnostic {
         end: SourceLocation { line: 1, column: 10 },
     },
     suggestion: BytesRef::EMPTY,
-    metadata_schema: CapabilityId(0),
+    metadata_schema: ProviderId(0),
     metadata_ptr: core::ptr::null(),
     metadata_len: arvo::USize(0),
 };
@@ -98,8 +98,8 @@ static LINT_EVAL_VTABLE: LintEvaluateVtable = LintEvaluateVtable { evaluate };
 
 pub struct LintEvalCap;
 
-impl CapabilityExport for LintEvalCap {
-    const ID: CapabilityId = CAP_LINT_EVALUATE;
+impl ProviderExport for LintEvalCap {
+    const ID: ProviderId = PROVIDER_LINT_EVALUATE;
     const VTABLE_PTR: *const c_void =
         &LINT_EVAL_VTABLE as *const _ as *const c_void;
 }
@@ -127,7 +127,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.lint.fixture",
     version = "0.1.0",
-    capabilities = [LintEvalCap],
+    providers = [LintEvalCap],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]

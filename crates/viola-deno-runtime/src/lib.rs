@@ -44,14 +44,14 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::Mutex;
 
 use hilavitkutin_extensions::{
-    CapabilityExport, CapabilityId, ExtensionAbiStatus, InitHandler,
+    ProviderExport, ProviderId, ExtensionAbiStatus, InitHandler,
     ShutdownHandler,
 };
 use hilavitkutin_extensions_macros::export_extension;
 use serde::{Deserialize, Serialize};
 use viola_plugin_abi::{
-    AbiStatus, BytesRef, CAP_GRAMMAR_EXTRACT, CAP_LINT_EVALUATE,
-    CAP_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch, DiagnosticSeverity,
+    AbiStatus, BytesRef, PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE,
+    PROVIDER_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch, DiagnosticSeverity,
     FileEntry, GrammarExtractVtable, LintEvaluateVtable, NamPayload,
     NamVersion, RunScope, RunnerExecuteScopeVtable, SourceLocation,
     SourceRange,
@@ -287,8 +287,8 @@ static RUNNER_VTABLE: RunnerExecuteScopeVtable =
 
 pub struct RunnerCap;
 
-impl CapabilityExport for RunnerCap {
-    const ID: CapabilityId = CAP_RUNNER_EXECUTE_SCOPE;
+impl ProviderExport for RunnerCap {
+    const ID: ProviderId = PROVIDER_RUNNER_EXECUTE_SCOPE;
     const VTABLE_PTR: *const c_void =
         &RUNNER_VTABLE as *const _ as *const c_void;
 }
@@ -324,8 +324,8 @@ static GRAMMAR_VTABLE: GrammarExtractVtable =
 
 pub struct GrammarCap;
 
-impl CapabilityExport for GrammarCap {
-    const ID: CapabilityId = CAP_GRAMMAR_EXTRACT;
+impl ProviderExport for GrammarCap {
+    const ID: ProviderId = PROVIDER_GRAMMAR_EXTRACT;
     const VTABLE_PTR: *const c_void =
         &GRAMMAR_VTABLE as *const _ as *const c_void;
 }
@@ -426,7 +426,7 @@ fn lint_evaluate_inner(
                     end: SourceLocation { line: d.line, column: d.column },
                 },
                 suggestion: BytesRef::EMPTY,
-                metadata_schema: CapabilityId(0),
+                metadata_schema: ProviderId(0),
                 metadata_ptr: core::ptr::null(),
                 metadata_len: arvo::USize(0),
             });
@@ -524,8 +524,8 @@ static LINT_EVAL_VTABLE: LintEvaluateVtable =
 
 pub struct LintEvalCap;
 
-impl CapabilityExport for LintEvalCap {
-    const ID: CapabilityId = CAP_LINT_EVALUATE;
+impl ProviderExport for LintEvalCap {
+    const ID: ProviderId = PROVIDER_LINT_EVALUATE;
     const VTABLE_PTR: *const c_void =
         &LINT_EVAL_VTABLE as *const _ as *const c_void;
 }
@@ -562,7 +562,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.deno.runtime",
     version = "0.1.0",
-    capabilities = [RunnerCap, GrammarCap, LintEvalCap],
+    providers = [RunnerCap, GrammarCap, LintEvalCap],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]

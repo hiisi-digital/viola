@@ -5,13 +5,13 @@
 //!
 //! Viola plugins are `hilavitkutin_extensions::Extension` instances
 //! specialized for the lint-runtime domain. The descriptor surface,
-//! lifecycle, capability dispatch, and version gating all come from
+//! lifecycle, provider dispatch, and version gating all come from
 //! `hilavitkutin-extensions`. This crate adds the viola-specific
 //! layer on top:
 //!
-//! - the three v1 capability ids
-//!   ([`CAP_RUNNER_EXECUTE_SCOPE`], [`CAP_GRAMMAR_EXTRACT`],
-//!   [`CAP_LINT_EVALUATE`]) and their `#[repr(C)]` vtable shapes;
+//! - the three v1 provider ids
+//!   ([`PROVIDER_RUNNER_EXECUTE_SCOPE`], [`PROVIDER_GRAMMAR_EXTRACT`],
+//!   [`PROVIDER_LINT_EVALUATE`]) and their `#[repr(C)]` vtable shapes;
 //! - the [`NamPayload`] / [`NamVersion`] carriers for the normalized
 //!   analysis model produced once per run;
 //! - the [`Diagnostic`] / [`DiagnosticBatch`] wire shapes the lint
@@ -31,7 +31,7 @@
 //! plugin-owned static memory whose lifetime equals the loaded library.
 
 pub use hilavitkutin_extensions::{
-    CapabilityEntry, CapabilityExport, CapabilityId, DESCRIPTOR_SYMBOL,
+    ProviderEntry, ProviderExport, ProviderId, DESCRIPTOR_SYMBOL,
     ExtensionAbiStatus, ExtensionDescriptor, ExtensionMeta, ExtensionVersion,
     HOST_ABI_VERSION, InitHandler, ShutdownHandler,
 };
@@ -85,17 +85,17 @@ impl BytesRef {
     }
 }
 
-/// Capability id for the runner role's scope-execution entrypoint.
-pub const CAP_RUNNER_EXECUTE_SCOPE: CapabilityId =
-    CapabilityId::from_name("viola.runner.execute_scope.v1");
+/// Provider id for the runner role's scope-execution entrypoint.
+pub const PROVIDER_RUNNER_EXECUTE_SCOPE: ProviderId =
+    ProviderId::from_name("viola.runner.execute_scope.v1");
 
-/// Capability id for the grammar role's extraction entrypoint.
-pub const CAP_GRAMMAR_EXTRACT: CapabilityId =
-    CapabilityId::from_name("viola.grammar.extract.v1");
+/// Provider id for the grammar role's extraction entrypoint.
+pub const PROVIDER_GRAMMAR_EXTRACT: ProviderId =
+    ProviderId::from_name("viola.grammar.extract.v1");
 
-/// Capability id for the lint role's evaluation entrypoint.
-pub const CAP_LINT_EVALUATE: CapabilityId =
-    CapabilityId::from_name("viola.lint.evaluate.v1");
+/// Provider id for the lint role's evaluation entrypoint.
+pub const PROVIDER_LINT_EVALUATE: ProviderId =
+    ProviderId::from_name("viola.lint.evaluate.v1");
 
 /// Run surface tag mirrored into NAM `run_context.surface`.
 ///
@@ -122,11 +122,11 @@ pub enum RunSurface {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PluginError {
     /// Plugin claims a viola role but does not export the corresponding
-    /// well-known capability id.
-    RoleCapabilityMissing = 1,
+    /// well-known provider id.
+    RoleProviderMissing = 1,
     /// Lint produced a NAM-version-incompatible diagnostic batch.
     ModelVersionMismatch = 2,
-    /// Capability invocation returned a non-`Ok` status.
+    /// Provider invocation returned a non-`Ok` status.
     InvocationFailed = 3,
     /// Configuration could not be resolved or validated.
     ConfigInvalid = 4,
@@ -135,7 +135,7 @@ pub enum PluginError {
 /// Wire shape of the normative error envelope per
 /// `docs/PLUGIN-ABI-V1-DESIGN.md` §11.
 ///
-/// `details_schema` is a [`CapabilityId`] (`#[repr(transparent)] u64`)
+/// `details_schema` is a [`ProviderId`] (`#[repr(transparent)] u64`)
 /// matching the same schema-tag convention as
 /// [`Diagnostic::metadata_schema`]. A zero id signals absent details.
 #[repr(C)]
@@ -143,7 +143,7 @@ pub enum PluginError {
 pub struct StructuredError {
     pub code: PluginError,
     pub message: BytesRef,
-    pub details_schema: CapabilityId,
+    pub details_schema: ProviderId,
     pub details_ptr: *const core::ffi::c_void,
     pub details_len: arvo::USize,
     /// `u8` (0 or 1) on the wire so the layout is stable across
@@ -163,16 +163,16 @@ mod tests {
     use core::mem::{align_of, size_of};
 
     #[test]
-    fn well_known_capabilities_distinct() {
-        assert_ne!(CAP_RUNNER_EXECUTE_SCOPE.0, CAP_GRAMMAR_EXTRACT.0);
-        assert_ne!(CAP_GRAMMAR_EXTRACT.0, CAP_LINT_EVALUATE.0);
-        assert_ne!(CAP_RUNNER_EXECUTE_SCOPE.0, CAP_LINT_EVALUATE.0);
+    fn well_known_providers_distinct() {
+        assert_ne!(PROVIDER_RUNNER_EXECUTE_SCOPE.0, PROVIDER_GRAMMAR_EXTRACT.0);
+        assert_ne!(PROVIDER_GRAMMAR_EXTRACT.0, PROVIDER_LINT_EVALUATE.0);
+        assert_ne!(PROVIDER_RUNNER_EXECUTE_SCOPE.0, PROVIDER_LINT_EVALUATE.0);
     }
 
     #[test]
-    fn capability_id_is_transparent_u64() {
-        assert_eq!(size_of::<CapabilityId>(), size_of::<u64>());
-        assert_eq!(align_of::<CapabilityId>(), align_of::<u64>());
+    fn provider_id_is_transparent_u64() {
+        assert_eq!(size_of::<ProviderId>(), size_of::<u64>());
+        assert_eq!(align_of::<ProviderId>(), align_of::<u64>());
     }
 
     #[test]
