@@ -259,7 +259,7 @@ fn config_path_from_bytes(bytes: &[u8]) -> Result<String, String> {
 }
 
 // ---------------------------------------------------------------------
-// Runner capability
+// Runner provider
 // ---------------------------------------------------------------------
 
 unsafe extern "C" fn run_execute_scope(
@@ -294,7 +294,7 @@ impl ProviderExport for RunnerCap {
 }
 
 // ---------------------------------------------------------------------
-// Grammar capability
+// Grammar provider
 // ---------------------------------------------------------------------
 
 unsafe extern "C" fn grammar_extract(
@@ -331,7 +331,7 @@ impl ProviderExport for GrammarCap {
 }
 
 // ---------------------------------------------------------------------
-// Lint capability
+// Lint provider
 // ---------------------------------------------------------------------
 
 /// Translate a v1 RunScope into the JSON payload the bridge expects.

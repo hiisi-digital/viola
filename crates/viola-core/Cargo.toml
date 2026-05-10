@@ -3,7 +3,7 @@ name = "viola-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Viola host runtime: viola-domain layering over hilavitkutin-extensions (cdylib loading, lifecycle, capability dispatch, deterministic diagnostic aggregation)."
+description = "Viola host runtime: viola-domain layering over hilavitkutin-extensions (cdylib loading, lifecycle, provider dispatch, deterministic diagnostic aggregation)."
 repository.workspace = true
 
 [dependencies]

@@ -106,7 +106,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
 
     // v2 plugin loading: when `[viola] version = 2` is declared,
     // walk `plugins = [...]` and categorise each loaded plugin by
-    // descriptor capability (runner / lint). v2 ignores the v1-only
+    // descriptor provider (runner / lint). v2 ignores the v1-only
     // `runner` / `grammars` / `lints` keys (the parser already
     // rejects them under version=2). `[gates]` / `[gates.<lint>]`
     // are evaluated when `--gate <name>` is supplied (PR-D-2);
@@ -172,7 +172,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     // When `[ts]` is active, the deno runtime is loaded once as the
     // runner and (here) once again as a lint slot. Two Extension
     // handles refer to the same dylib, but each gets its own
-    // descriptor + capability lookup; this keeps the v1 dispatch path
+    // descriptor + provider lookup; this keeps the v1 dispatch path
     // uniform without giving the runner double duty.
     let ts_lint: [&[u8]; 1] = [TS_RUNTIME_DYLIB];
     let lint_paths: &[&[u8]] = if ts_active {
@@ -300,7 +300,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
 }
 
 /// Run the v2 schema pipeline. Walks `cfg.plugins[]` once, loads
-/// each plugin, classifies by descriptor capability:
+/// each plugin, classifies by descriptor provider:
 /// `PROVIDER_RUNNER_EXECUTE_SCOPE` -> runner role,
 /// `PROVIDER_LINT_EVALUATE` -> lint role. A multi-role plugin (descriptor
 /// exports both) appears in both categories; the same `Extension`
@@ -352,8 +352,8 @@ fn run_v2<'a>(
     while i < plugins.len() {
         match load_plugin(&host, plugins[i]) {
             notko::Maybe::Is(ext) => {
-                // Classify by descriptor capability presence. The
-                // load is required-strict, so a missing capability
+                // Classify by descriptor provider presence. The
+                // load is required-strict, so a missing provider
                 // surface here is just role inference, not a load
                 // failure.
                 let has_runner = matches!(
@@ -386,7 +386,7 @@ fn run_v2<'a>(
                     lint_count = arvo::USize(lint_count.0 + 1);
                 }
                 if !has_runner && !has_lint {
-                    io::eprint(b"viola-cli: plugin has no runner or lint capability: ");
+                    io::eprint(b"viola-cli: plugin has no runner or lint provider: ");
                     io::eprintln(plugins[i]);
                     load_failed = true;
                     break;

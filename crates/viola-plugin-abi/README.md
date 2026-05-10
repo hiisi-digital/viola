@@ -12,15 +12,15 @@ and tasks.
 This crate owns the wire shapes and version primitives that cross the
 C-ABI boundary at plugin load and invocation:
 
-- `PluginDescriptor`, `PluginIdentity`, `CapabilityEntry`,
-  `CapabilityId` (FNV-1a 64 over an ASCII name, const-evaluated)
+- `PluginDescriptor`, `PluginIdentity`, `ProviderEntry`,
+  `ProviderId` (FNV-1a 64 over an ASCII name, const-evaluated)
 - `BytesRef` shared `(ptr, len)` carrier used for every byte slice
   crossing the boundary
 - Role and role-set bitflag (`Role`, `RoleSet`): runner, grammar, lint
-- Well-known capability constants for each role's primary operation
+- Well-known provider constants for each role's primary operation
 - `RunnerExecuteScopeVtable`, `GrammarExtractVtable`,
   `LintEvaluateVtable`: the `#[repr(C)]` vtable shapes behind each
-  well-known capability id, plus `RunScope` and `FileEntry` argument
+  well-known provider id, plus `RunScope` and `FileEntry` argument
   types
 - Version primitives (`AbiVersion`, `ManifestVersion`, `PluginVersion`,
   `NamVersion`, `VersionTriple`). `AbiVersion::is_compatible_with` is

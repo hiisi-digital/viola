@@ -57,11 +57,11 @@ Two paths.
 
 **v2 schema (`[viola] version = 2`).** Walk the `plugins = [...]` array,
 load each plugin through `viola_core::ExtensionHost`, classify by
-descriptor capability:
+descriptor provider:
 
-- A descriptor exporting `CAP_RUNNER_EXECUTE_SCOPE` is the runner.
+- A descriptor exporting `PROVIDER_RUNNER_EXECUTE_SCOPE` is the runner.
   At most one plugin may export this; the second is a load error.
-- A descriptor exporting `CAP_LINT_EVALUATE` is a lint. Multiple lints
+- A descriptor exporting `PROVIDER_LINT_EVALUATE` is a lint. Multiple lints
   are fine.
 - A descriptor exporting both is multi-role and registers in both
   positions.

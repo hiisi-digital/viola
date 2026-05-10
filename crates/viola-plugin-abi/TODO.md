@@ -10,10 +10,10 @@ Status: v1 contract surface landed (#193).
 - [x] Manifest, plugin, NAM version newtypes
 - [x] Exported-symbol constant `DESCRIPTOR_SYMBOL`
 - [x] Role enum + `RoleSet` bitflag
-- [x] `CapabilityId` (FNV-1a 64) + `CapabilityEntry`
-- [x] Well-known capability constants for runner / grammar / lint
+- [x] `ProviderId` (FNV-1a 64) + `ProviderEntry`
+- [x] Well-known provider constants for runner / grammar / lint
 - [x] `PluginDescriptor` + `PluginIdentity` `#[repr(C)]` shapes with
-      lifecycle, capabilities, NAM compat, host-cap requirements,
+      lifecycle, providers, NAM compat, host-provider requirements,
       config-schema reference
 - [x] `AbiStatus` (`#[repr(u32)]`) + `PluginError` category enum
 - [x] `Diagnostic`, `DiagnosticBatch`, `SourceLocation`, `SourceRange`,
@@ -30,10 +30,10 @@ Status: v1 contract surface landed (#193).
       attribute that statically monomorphizes a plugin's static metadata
       into the `repr(C)` `PluginDescriptor` + `extern "C"`
       `__viola_plugin_descriptor` symbol this crate defines.
-- [x] `CapabilityExport` / `InitHandler` / `ShutdownHandler` traits in
+- [x] `ProviderExport` / `InitHandler` / `ShutdownHandler` traits in
       `viola-plugin-abi::traits` for the macro to reference.
-- [ ] Future: dedicated `#[capability]` attribute that emits
-      `CapabilityExport` impls plus the per-capability vtable struct
+- [ ] Future: dedicated `#[provider]` attribute that emits
+      `ProviderExport` impls plus the per-provider vtable struct
       (currently authors hand-write the vtable).
 
 ### NAM concrete shape (post-#193)
@@ -46,16 +46,16 @@ Status: v1 contract surface landed (#193).
 
 - [ ] Once `hilavitkutin-extensions` graduates from its mock workspace
       into a published crate, evaluate re-basing the `PluginDescriptor`
-      shape onto `ExtensionDescriptor` + viola-specific capability
+      shape onto `ExtensionDescriptor` + viola-specific provider
       vtables, or keep the two as parallel infrastructure with mutual
-      capability-id compatibility.
+      provider-id compatibility.
 
 ### Host loader (#194)
 
 - [ ] `viola-core` host loader implements:
   - [ ] symbol resolution against `DESCRIPTOR_SYMBOL`
   - [ ] structured validation per `PluginError` categories
-  - [ ] role-bit / capability-id presence checks
+  - [ ] role-bit / provider-id presence checks
   - [ ] fail-closed default for required plugins; config-controlled
         for optional plugins
 
@@ -66,10 +66,10 @@ Status: v1 contract surface landed (#193).
       structured suggestion, fix patches, and workflow context
       (current task / phase / manifest references).
 
-### Capability invocation contracts
+### Provider invocation contracts
 
 - [ ] Document and pin the `repr(C)` vtable shape behind each
-      well-known capability id (`viola.runner.execute_scope.v1`,
+      well-known provider id (`viola.runner.execute_scope.v1`,
       `viola.grammar.extract.v1`, `viola.lint.evaluate.v1`). v1 of the
       contract crate names them; the vtable shapes live in adjacent
       contract files or sub-modules in a follow-up round.

@@ -159,7 +159,7 @@ impl GateOverride<'_> {
 }
 
 /// One `[lint.<lint-id>]` plugin-config sub-table. The runtime hands
-/// `raw_body` to the matching plugin's `lint_evaluate` capability via
+/// `raw_body` to the matching plugin's `lint_evaluate` provider via
 /// `LintConfig`. The parser validates the body is structurally
 /// `key = value` pairs whose values are strings / arrays of strings /
 /// integers, but does not interpret the keys.

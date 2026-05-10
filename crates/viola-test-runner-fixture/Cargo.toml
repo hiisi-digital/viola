@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
-description = "Internal cdylib fixture exposing CAP_RUNNER_EXECUTE_SCOPE. Pairs with viola-test-plugin-fixture to exercise pipeline::run end-to-end."
+description = "Internal cdylib fixture exposing PROVIDER_RUNNER_EXECUTE_SCOPE. Pairs with viola-test-plugin-fixture to exercise pipeline::run end-to-end."
 repository.workspace = true
 
 [lib]
