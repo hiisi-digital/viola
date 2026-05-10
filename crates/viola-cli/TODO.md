@@ -11,7 +11,7 @@ PR-D-2 landed v2 plugin loading and gate-threshold filtering).
 - [x] `--gate <name>` flag for `[[severity]]` gate-threshold
       filtering (#221 PR-D-2).
 - [x] v2 plugin loading: walk `cfg.plugins[]`, classify by descriptor
-      capability, load through `ExtensionHost` into `Session` (#221
+      provider, load through `ExtensionHost` into `Session` (#221
       PR-D-1).
 - [x] Runner-once + lint-fan-out pipeline against empty default
       `RunScope` (#194).

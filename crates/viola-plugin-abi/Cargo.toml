@@ -3,7 +3,7 @@ name = "viola-plugin-abi"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Viola plugin contract — viola-specific roles, capabilities, vtables, NAM, and diagnostics layered over hilavitkutin-extensions."
+description = "Viola plugin contract: viola-specific roles, providers, vtables, NAM, and diagnostics layered over hilavitkutin-extensions."
 repository.workspace = true
 
 [dependencies]
