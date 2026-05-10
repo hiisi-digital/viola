@@ -28,7 +28,7 @@ mod io;
 
 use hilavitkutin_api::{Len, Push};
 use viola_core::{
-    BytesRef, CAP_LINT_EVALUATE, CAP_RUNNER_EXECUTE_SCOPE, CapabilityId,
+    BytesRef, PROVIDER_LINT_EVALUATE, PROVIDER_RUNNER_EXECUTE_SCOPE, ProviderId,
     Diagnostic, Extension, ExtensionHost, ExtensionRequirement, RunScope,
     RunSurface, Session,
     aggregate::sort_diagnostics,
@@ -150,7 +150,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         }
     };
 
-    let host_caps: &'static [CapabilityId] = &[];
+    let host_caps: &'static [ProviderId] = &[];
     let host = ExtensionHost::new(host_caps);
 
     let runner = match load_plugin(&host, runner_path) {
@@ -301,14 +301,14 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
 
 /// Run the v2 schema pipeline. Walks `cfg.plugins[]` once, loads
 /// each plugin, classifies by descriptor capability:
-/// `CAP_RUNNER_EXECUTE_SCOPE` -> runner role,
-/// `CAP_LINT_EVALUATE` -> lint role. A multi-role plugin (descriptor
+/// `PROVIDER_RUNNER_EXECUTE_SCOPE` -> runner role,
+/// `PROVIDER_LINT_EVALUATE` -> lint role. A multi-role plugin (descriptor
 /// exports both) appears in both categories; the same `Extension`
 /// reference is passed twice to `pipeline::run`, mirroring the v1
 /// `[ts]` shape where the deno cdylib was loaded twice.
 ///
 /// Constraints:
-/// - At most one plugin may export `CAP_RUNNER_EXECUTE_SCOPE`. Two
+/// - At most one plugin may export `PROVIDER_RUNNER_EXECUTE_SCOPE`. Two
 ///   runners is a config error (multi-runner is not yet a defined
 ///   composition in the v1 ABI).
 /// - At least one runner is required. v2 may eventually permit
@@ -325,7 +325,7 @@ fn run_v2<'a>(
     cfg: &viola_config::ViolaConfig<'a, MAX_PLUGINS>,
     gate: notko::Maybe<&[u8]>,
 ) -> i32 {
-    let host_caps: &'static [CapabilityId] = &[];
+    let host_caps: &'static [ProviderId] = &[];
     let host = ExtensionHost::new(host_caps);
 
     // All loaded plugins live in a single `Session<MAX_PLUGINS>`.
@@ -357,11 +357,11 @@ fn run_v2<'a>(
                 // surface here is just role inference, not a load
                 // failure.
                 let has_runner = matches!(
-                    ext.capability(CAP_RUNNER_EXECUTE_SCOPE),
+                    ext.provider(PROVIDER_RUNNER_EXECUTE_SCOPE),
                     notko::Maybe::Is(_)
                 );
                 let has_lint = matches!(
-                    ext.capability(CAP_LINT_EVALUATE),
+                    ext.provider(PROVIDER_LINT_EVALUATE),
                     notko::Maybe::Is(_)
                 );
                 if matches!(session.push(ext), notko::Maybe::Is(_)) {
@@ -374,7 +374,7 @@ fn run_v2<'a>(
                 if has_runner {
                     if let notko::Maybe::Is(_) = runner_idx {
                         io::eprintln(
-                            b"viola-cli: multiple plugins export CAP_RUNNER_EXECUTE_SCOPE; only one runner per project",
+                            b"viola-cli: multiple plugins export PROVIDER_RUNNER_EXECUTE_SCOPE; only one runner per project",
                         );
                         load_failed = true;
                         break;
@@ -410,7 +410,7 @@ fn run_v2<'a>(
         notko::Maybe::Is(idx) => idx,
         notko::Maybe::Isnt => {
             io::eprintln(
-                b"viola-cli: viola.toml v2 has no runner-capable plugin (export CAP_RUNNER_EXECUTE_SCOPE)",
+                b"viola-cli: viola.toml v2 has no runner-capable plugin (export PROVIDER_RUNNER_EXECUTE_SCOPE)",
             );
             return EXIT_CONFIG;
         }
