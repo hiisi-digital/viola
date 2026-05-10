@@ -60,9 +60,9 @@ unsafe extern "C" fn execute_scope(
 static RUNNER_VTABLE: RunnerExecuteScopeVtable =
     RunnerExecuteScopeVtable { execute_scope };
 
-pub struct RunnerCap;
+pub struct RunnerProvider;
 
-impl ProviderExport for RunnerCap {
+impl ProviderExport for RunnerProvider {
     const ID: ProviderId = PROVIDER_RUNNER_EXECUTE_SCOPE;
     const VTABLE_PTR: *const c_void =
         &RUNNER_VTABLE as *const _ as *const c_void;
@@ -89,7 +89,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.runner.fixture",
     version = "0.1.0",
-    providers = [RunnerCap],
+    providers = [RunnerProvider],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]
