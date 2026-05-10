@@ -96,9 +96,9 @@ unsafe extern "C" fn evaluate(
 
 static LINT_EVAL_VTABLE: LintEvaluateVtable = LintEvaluateVtable { evaluate };
 
-pub struct LintEvalCap;
+pub struct LintEvalProvider;
 
-impl ProviderExport for LintEvalCap {
+impl ProviderExport for LintEvalProvider {
     const ID: ProviderId = PROVIDER_LINT_EVALUATE;
     const VTABLE_PTR: *const c_void =
         &LINT_EVAL_VTABLE as *const _ as *const c_void;
@@ -127,7 +127,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.lint.fixture",
     version = "0.1.0",
-    providers = [LintEvalCap],
+    providers = [LintEvalProvider],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]

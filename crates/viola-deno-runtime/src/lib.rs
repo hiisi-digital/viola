@@ -285,9 +285,9 @@ unsafe extern "C" fn run_execute_scope(
 static RUNNER_VTABLE: RunnerExecuteScopeVtable =
     RunnerExecuteScopeVtable { execute_scope: run_execute_scope };
 
-pub struct RunnerCap;
+pub struct RunnerProvider;
 
-impl ProviderExport for RunnerCap {
+impl ProviderExport for RunnerProvider {
     const ID: ProviderId = PROVIDER_RUNNER_EXECUTE_SCOPE;
     const VTABLE_PTR: *const c_void =
         &RUNNER_VTABLE as *const _ as *const c_void;
@@ -322,9 +322,9 @@ unsafe extern "C" fn grammar_extract(
 static GRAMMAR_VTABLE: GrammarExtractVtable =
     GrammarExtractVtable { extract: grammar_extract };
 
-pub struct GrammarCap;
+pub struct GrammarProvider;
 
-impl ProviderExport for GrammarCap {
+impl ProviderExport for GrammarProvider {
     const ID: ProviderId = PROVIDER_GRAMMAR_EXTRACT;
     const VTABLE_PTR: *const c_void =
         &GRAMMAR_VTABLE as *const _ as *const c_void;
@@ -522,9 +522,9 @@ unsafe extern "C" fn lint_evaluate(
 static LINT_EVAL_VTABLE: LintEvaluateVtable =
     LintEvaluateVtable { evaluate: lint_evaluate };
 
-pub struct LintEvalCap;
+pub struct LintEvalProvider;
 
-impl ProviderExport for LintEvalCap {
+impl ProviderExport for LintEvalProvider {
     const ID: ProviderId = PROVIDER_LINT_EVALUATE;
     const VTABLE_PTR: *const c_void =
         &LINT_EVAL_VTABLE as *const _ as *const c_void;
@@ -562,7 +562,7 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.deno.runtime",
     version = "0.1.0",
-    providers = [RunnerCap, GrammarCap, LintEvalCap],
+    providers = [RunnerProvider, GrammarProvider, LintEvalProvider],
     init = InitImpl,
     shutdown = ShutdownImpl,
 )]
