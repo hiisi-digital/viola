@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use hilavitkutin_api::{Len, Push};
 use viola_core::{
-    BytesRef, CapabilityId, Diagnostic, ExtensionHost, ExtensionRequirement,
+    BytesRef, ProviderId, Diagnostic, ExtensionHost, ExtensionRequirement,
     RunScope, RunSurface,
     aggregate::sort_diagnostics,
     invoke::runner_vtable,
@@ -108,7 +108,7 @@ fn runner_once_lint_fan_out_egress_and_sort() {
         "build viola-test-plugin-fixture before running this test",
     );
 
-    let host_caps: &'static [CapabilityId] = &[];
+    let host_caps: &'static [ProviderId] = &[];
     let host = ExtensionHost::new(host_caps);
 
     let runner_bytes = null_terminated(&runner_path);
@@ -246,7 +246,7 @@ fn synth_diag(
             end: viola_core::SourceLocation { line, column },
         },
         suggestion: BytesRef::EMPTY,
-        metadata_schema: viola_core::CapabilityId(0),
+        metadata_schema: viola_core::ProviderId(0),
         metadata_ptr: std::ptr::null(),
         metadata_len: arvo::USize(0),
     }

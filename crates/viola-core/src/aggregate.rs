@@ -107,7 +107,7 @@ mod tests {
                 end: SourceLocation { line, column: col },
             },
             suggestion: BytesRef::EMPTY,
-            metadata_schema: viola_plugin_abi::CapabilityId(0),
+            metadata_schema: viola_plugin_abi::ProviderId(0),
             metadata_ptr: core::ptr::null(),
             metadata_len: arvo::USize(0),
         }

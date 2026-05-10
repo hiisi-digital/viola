@@ -42,9 +42,9 @@ pub use hilavitkutin_api::DiagnosticSink;
 
 /// Run the runner once, then fan out to every lint.
 ///
-/// `runner` MUST hold the runner role (cap [`viola_plugin_abi::CAP_RUNNER_EXECUTE_SCOPE`]).
+/// `runner` MUST hold the runner role (cap [`viola_plugin_abi::PROVIDER_RUNNER_EXECUTE_SCOPE`]).
 /// Each entry of `lints` MUST hold the lint role; entries that do not
-/// surface as [`PluginError::RoleCapabilityMissing`].
+/// surface as [`PluginError::RoleProviderMissing`].
 ///
 /// `host_ctx` is the opaque per-load context pointer the host threaded
 /// through `ExtensionHost::load`. The runner and each lint receive it
@@ -74,7 +74,7 @@ where
 {
     let runner_vt = match runner_vtable(runner) {
         Maybe::Is(vt) => vt,
-        Maybe::Isnt => return Outcome::Err(PluginError::RoleCapabilityMissing),
+        Maybe::Isnt => return Outcome::Err(PluginError::RoleProviderMissing),
     };
 
     let mut nam = empty_nam();
@@ -100,7 +100,7 @@ where
         let lint_vt = match lint_vtable(lint) {
             Maybe::Is(vt) => vt,
             Maybe::Isnt => {
-                report.note_failure(i, PluginError::RoleCapabilityMissing);
+                report.note_failure(i, PluginError::RoleProviderMissing);
                 i += 1;
                 continue;
             }

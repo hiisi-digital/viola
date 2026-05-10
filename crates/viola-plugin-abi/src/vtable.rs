@@ -1,19 +1,19 @@
-//! `#[repr(C)]` vtable shapes behind each well-known capability id.
+//! `#[repr(C)]` vtable shapes behind each well-known provider id.
 //!
 //! Per `docs/PLUGIN-ABI-V1-DESIGN.md` §7.3, role invocations are direct
 //! in-process calls via the v1 function table. A
-//! [`hilavitkutin_extensions::CapabilityEntry::vtable_ptr`] is a thin
+//! [`hilavitkutin_extensions::ProviderEntry::vtable_ptr`] is a thin
 //! extension-owned pointer; the layout behind that pointer is specific
-//! to the capability id. This module pins the layout for the three v1
-//! capability ids:
+//! to the provider id. This module pins the layout for the three v1
+//! provider ids:
 //!
-//! - [`crate::CAP_RUNNER_EXECUTE_SCOPE`] -> [`RunnerExecuteScopeVtable`]
-//! - [`crate::CAP_GRAMMAR_EXTRACT`] -> [`GrammarExtractVtable`]
-//! - [`crate::CAP_LINT_EVALUATE`] -> [`LintEvaluateVtable`]
+//! - [`crate::PROVIDER_RUNNER_EXECUTE_SCOPE`] -> [`RunnerExecuteScopeVtable`]
+//! - [`crate::PROVIDER_GRAMMAR_EXTRACT`] -> [`GrammarExtractVtable`]
+//! - [`crate::PROVIDER_LINT_EVALUATE`] -> [`LintEvaluateVtable`]
 //!
 //! Vtable shapes are append-only within an ABI major. Adding a new
 //! function pointer to a vtable would silently change the layout for
-//! existing plugins; instead, register a NEW capability id (e.g.
+//! existing plugins; instead, register a NEW provider id (e.g.
 //! `viola.lint.evaluate.v2`) and ship a parallel vtable.
 
 use core::ffi::c_void;

@@ -89,7 +89,7 @@ pub struct ViolaConfig<'a, const MAX_PLUGINS: usize> {
     /// Unified plugin list. v2 users put every plugin (runner /
     /// grammar / lint, Rust cdylib or jsr: / npm: TS specifier) into
     /// `plugins = [...]`. Roles are derived from the descriptor's
-    /// capability table at load time.
+    /// provider table at load time.
     pub plugins: [&'a [u8]; MAX_PLUGINS],
     pub plugin_len: arvo::USize,
     /// Preset names inherited from plugin-exported preset bundles.
