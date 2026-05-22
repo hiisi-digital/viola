@@ -1,4 +1,4 @@
-# TODO — `viola-plugin-abi`
+# TODO: `viola-plugin-abi`
 
 Status: v1 contract surface landed (#193).
 
@@ -24,7 +24,7 @@ Status: v1 contract surface landed (#193).
 
 ## Follow-up rounds
 
-### Companion macro crate (#232) — landed in PR #2
+### Companion macro crate (#232): landed in PR #2
 
 - [x] `viola-plugin-abi-macros` crate carrying `#[export_plugin]`
       attribute that statically monomorphizes a plugin's static metadata

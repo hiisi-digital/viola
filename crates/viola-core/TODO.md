@@ -1,4 +1,4 @@
-# TODO — `viola-core`
+# TODO: `viola-core`
 
 Status: planning scaffold only (no implementation yet)
 

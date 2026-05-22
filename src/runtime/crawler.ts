@@ -5,7 +5,7 @@
  * This is the heart of viola - it crawls once and provides immutable data to all linters.
  *
  * Requires at least one grammar to be registered. All code extraction is performed
- * using tree-sitter grammars — files without a matching grammar are skipped.
+ * using tree-sitter grammars: files without a matching grammar are skipped.
  *
  * @module
  */
@@ -149,7 +149,7 @@ export async function crawlCodebase(
           const matchingGrammars = grammarRegistry.findMatchingGrammars(relativePath);
 
           if (matchingGrammars.length === 0) {
-            // No grammar matches this file — skip it
+            // No grammar matches this file: skip it
             skippedCount++;
             if (config.verbose) {
               console.warn(`No grammar matches ${relativePath}, skipping`);
@@ -171,7 +171,7 @@ export async function crawlCodebase(
             );
             files.push(fileData);
           } catch (grammarErr) {
-            // Grammar extraction failed — skip this file
+            // Grammar extraction failed: skip this file
             skippedCount++;
             if (config.verbose) {
               console.error(`Grammar extraction failed for ${entry.path}, skipping:`, grammarErr);
