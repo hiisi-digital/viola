@@ -2,7 +2,7 @@
  * Integration tests for grammar-aware extraction in the crawler.
  *
  * Tests that tree-sitter grammars are correctly used for extraction.
- * Grammar registration is required — files without a matching grammar are skipped.
+ * Grammar registration is required: files without a matching grammar are skipped.
  */
 
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
@@ -101,7 +101,7 @@ function createTestTsGrammar(): GrammarDefinition {
           body: (enum_body) @type.body) @type
       `,
     },
-    // No transforms — use default capture-based extraction
+    // No transforms: use default capture-based extraction
   };
 }
 
@@ -111,7 +111,7 @@ async function createTestFixture(): Promise<string> {
   const srcDir = `${tmpDir}/src`;
   await Deno.mkdir(srcDir);
 
-  // File with export async function — the bug we're fixing
+  // File with export async function: the bug we're fixing
   await Deno.writeTextFile(`${srcDir}/async-exports.ts`, `
 export async function fetchData(url: string): Promise<string> {
   return await fetch(url).then(r => r.text());

@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-//! `viola-cli` — host executable.
+//! `viola-cli`: host executable.
 //!
 //! `#![no_std]` + `#![no_main]` libc entry. Reads `./viola.toml` (or
 //! the path supplied as argv[1]), parses it via [`viola_config`],
@@ -11,10 +11,10 @@
 //! `docs/PLUGIN-ABI-V1-DESIGN.md` §10, and emits one line per
 //! diagnostic to stderr. Exit codes:
 //!
-//! - `0` — config parsed, plugins ran, zero diagnostics
-//! - `1` — config parsed, plugins ran, at least one diagnostic
-//! - `2` — config could not be read or parsed
-//! - `3` — plugin load or pipeline invocation failed
+//! - `0`: config parsed, plugins ran, zero diagnostics
+//! - `1`: config parsed, plugins ran, at least one diagnostic
+//! - `2`: config could not be read or parsed
+//! - `3`: plugin load or pipeline invocation failed
 //!
 //! No `alloc`, no formatting infrastructure beyond [`fmt`]'s decimal
 //! converter, no `core::fmt` machinery linked in. All buffers are
@@ -85,7 +85,7 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     let bytes_read = io::read_file(config_path, &mut config_buf);
 
     // Pure-TS path: no viola.toml means the user runs viola the way
-    // the existing TS CLI does — point at a viola.config.ts in cwd.
+    // the existing TS CLI does: point at a viola.config.ts in cwd.
     // Pass through to `deno run -A jsr:@hiisi/viola-cli` with the
     // user's argv so behaviour and output match the existing CLI
     // exactly. Returns only on exec failure.

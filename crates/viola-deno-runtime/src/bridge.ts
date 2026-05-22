@@ -1,4 +1,4 @@
-// viola-deno-runtime — embedded bridge worker.
+// viola-deno-runtime: embedded bridge worker.
 //
 // Runs as `deno run --allow-all bridge.ts <user-config-path>` in a
 // long-lived child process spawned by the cdylib at init. Loops on

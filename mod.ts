@@ -1,7 +1,7 @@
 /**
  * Viola - Convention linter for codebases
  *
- * Checks for convention violations — naming patterns, file organization,
+ * Checks for convention violations: naming patterns, file organization,
  * code duplication, and project-specific rules. Not a replacement for
  * language linters; those handle correctness. This handles everything else.
  *
