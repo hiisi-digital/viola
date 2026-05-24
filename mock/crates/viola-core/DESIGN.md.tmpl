@@ -387,3 +387,49 @@ The five Slice 7a-ratified design tensions and Slice 7b's chosen paths:
 | Per-L row-range gap handling | `Resource<DiagnosticCounts>`: `[arvo::USize; MAX_LINTS]` populated counts. RunLint Write extension writes per-L count; EmitDiagnostics iterates per-L only up to count. **The RunLint AccessSet extension is a load-bearing change**: Slice 9 parallel fan-out audit re-checks COMMUTATIVE-flag commutativity against the extended Write set. |
 
 Each path is tracked as a Slice 7b BACKLOG entry below.
+
+## Slice 7b EmitDiagnostics body shapes
+
+Slice 7b lands the body proper and the supporting Resources. The five Slice 7a tensions ratified above collapse into shipped source. The `EmitWriter` return-type call settled in the topic memo as **unit-return** (no useful per-write recovery action at WU body level; viola-cli's concrete impl handles syscall context). The DiagnosticCounts shape ships **without a shared `populated` counter**: the parallel RunLint cohort writes only disjoint per-L slots; a sibling shared scalar would be a Cell read-modify-write race regardless of end-state commutativity.
+
+### `EmitWriter`
+
+`pub trait EmitWriter` with three unit-return methods: `write_str(&mut self, s: &str)`, `write_bytes(&mut self, bytes: &[u8])`, `flush(&mut self)`. No additional bounds on the trait body; consumers compose `'static` + `Send` + `Sync` at the Resource registration site. The minimal surface bridges WU dispatch into the concrete writer impl held inside `Resource<DiagnosticSink<W>>` without dragging IO failure into the WU body. viola-cli's impl handles failure (panic, log, drop) per CLI policy.
+
+### `EmitFlat`
+
+ZST no-op `EmitWriter` default. Lets the AccessSet witness tests instantiate `EmitDiagnostics<EmitFlat>` and `DiagnosticSink<EmitFlat>` without pulling viola-cli's concrete impl into the test build.
+
+### `DiagnosticSink` Slice 7b flip
+
+Flips from the Slice 7a non-ZST placeholder to `pub struct DiagnosticSink<W: EmitWriter> { writer: UnsafeCell<W> }` with private `writer` field. `unsafe impl<W: EmitWriter> Sync for DiagnosticSink<W>` carries the four-invariant SAFETY contract: EmitDiagnostics is the sole declared writer (in its Write set); the scheduler serialises Write access; no other WU touches this Resource; interior mutability through `&self` is single-threaded under per-WU dispatch. `pub const fn new(writer: W) -> Self` lets viola-cli register the Resource at scheduler-builder time with its concrete impl. No `Default` impl: `EmitWriter` does not bound `Default`.
+
+### `DiagnosticCounts`
+
+`pub struct DiagnosticCounts { counts: UnsafeCell<[arvo::USize; MAX_LINTS]> }`. **Single field**; no sibling shared counter. Distinct from the host-shim-populated Resources (DiscoveredFilePaths, FileEntryBuffer, LintSlots, LintConfigBuffer): writes happen at WU dispatch time by the parallel RunLint cohort, with each L writing only `counts[L]`. Disjoint per-L slot indexes commute by construction under the COMMUTATIVE flag.
+
+`pub unsafe fn set_count(&self, slot: arvo::Cap, count: arvo::USize)` writer-side seam. The `# Safety` clause requires the caller to be a `RunLint<L>::execute` body holding a Write projection of this Resource where `slot.0 == L`; the disjoint-slot strategy is the only synchronisation. No shared scalar is touched; the function is a pure indexed write into the per-L slot of the `UnsafeCell`-wrapped array.
+
+`pub fn count_at(&self, slot: arvo::Cap) -> arvo::USize` safe read accessor for EmitDiagnostics. Out-of-range returns zero (the empty-slot sentinel). `pub fn any_populated(&self) -> arvo::Bool` walks `counts[0..MAX_LINTS]` once and returns `Bool::TRUE` if any slot is non-zero. The 32-entry scan replaces the dropped shared counter; lives entirely on the read side where phase-separation past the RunLint cohort guarantees no concurrent writer.
+
+The four-invariant `unsafe impl Sync` SAFETY contract: RunLint<L> is the writer cohort declared in its Write set; each L writes only `counts[L]`, distinct slot indexes across the parallel cohort; EmitDiagnostics declares this Resource in its Read set, and the scheduler's phase-separation analysis proves no concurrent dispatch between the cohort and EmitDiagnostics; interior mutability through `&self` during RunLint dispatch is single-threaded per-L by the disjoint-slot strategy.
+
+### `EmitDiagnostics` Slice 7b body
+
+`pub struct EmitDiagnostics<W: EmitWriter>` becomes generic with `PhantomData<fn() -> W>` so the struct itself is `Send + Sync` regardless of `W`. The thread-safety bound `W: Send + Sync + 'static` lives on the `impl WorkUnit` block where the Resource carrier actually needs it. AccessSet: Read = `Cons<Resource<DiagnosticCounts>, Cons<Column<WuDiagnostic>, Empty>>`; Write = `Cons<Resource<DiagnosticSink<W>>, Empty>`. Hint stays `(Relaxed, Atomic, Important)`.
+
+Body shape:
+
+1. Short-circuit when `counts.any_populated().as_bool() == false` after flushing the sink. The 32-entry scan is the cheap O(MAX_LINTS) check; the per-L iteration loop below is already O(MAX_LINTS) so there is no additional asymptotic cost.
+2. Stage populated records into a stack-cap working array sized `MAX_LINTS * MAX_DIAGS_PER_LINT` (2048 entries; `static_assertions::const_assert!` pins the array size against the cap product so the buffer cannot drift silently if those caps revise upward). Walks `DiagnosticCounts::count_at(L)` for L in [0, MAX_LINTS); for each L with non-zero count, walks slots `[L * MAX_DIAGS_PER_LINT, L * MAX_DIAGS_PER_LINT + count)` of `Column<WuDiagnostic>` and stages each record with its `original_slot_index`.
+3. Sorts the staged prefix in place via **insertion sort** (stable, simple, no_std-friendly, dominated by per-record emit cost for typical N). Comparator: `(source, severity, range.start_line, range.start_col, original_slot_index)`. The `original_slot_index` tiebreaker makes the comparator total; stability is theoretically redundant under a total comparator but the stable + total pair is the safer combination than non-stable + total.
+4. Walks the sorted prefix, formats each diagnostic as one line `"[severity] source: <no message>\n"` (message is `Str::default()` placeholder pending the LintFinding carrier upgrade; range fields stay placeholders for the same reason), calls `EmitWriter::write_str` per line.
+5. Calls `EmitWriter::flush` at end-of-emit.
+
+The stack-buffer cap matches `MAX_LINTS * MAX_DIAGS_PER_LINT` per the Slice 7a-deferred BACKLOG entry. Approximate stack pressure at current `StagedRecord` size is 130 to 160 KB. Pre-1.0; transient-Resource fallback lands in a future slice if benchmarks surface stack pressure.
+
+### RunLint Slice 7b AccessSet extension
+
+`RunLint<L>::Write` extends from `Cons<Column<WuDiagnostic>, Empty>` to `Cons<Column<WuDiagnostic>, Cons<Resource<DiagnosticCounts>, Empty>>`. The body acquires a `DiagnosticCounts` resource projection through the Write set's HasResourceProvider and calls `DiagnosticCounts::set_count(arvo::Cap(USize(L)), USize(count))` at every exit point: empty-plugin-slot (count zero), vtable-resolution-failure (count one for the failure record), evaluate-status-failure (count one for the failure record), normal-exit (count equals the staged record count).
+
+This is a load-bearing AccessSet change to the previously-closed Slice 6b RunLint WU body. Pre-1.0 permits in-round edits per the Slice 7a CL framing. Slice 9 audit re-checks COMMUTATIVE-flag commutativity against the extended Write set; per-L writes to `counts[L]` for distinct L touch disjoint slot indexes by construction; no shared scalar is touched; commutativity holds.

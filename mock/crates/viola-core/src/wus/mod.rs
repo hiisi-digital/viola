@@ -129,20 +129,97 @@ pub enum WuDiagnosticSource {
     Emit,
 }
 
-/// Diagnostic egress sink Resource. Slice 7a non-ZST placeholder so
-/// the type is non-ZST; the placeholder field is private (not `pub`)
-/// so it does not become a backwards-compat surface between 7a and 7b.
-/// Slice 7b flips to a generic-carrier shape `DiagnosticSink<W: EmitWriter>`
-/// with private `writer: UnsafeCell<W>` per the Slice 7a DOC CL.
-pub struct DiagnosticSink {
-    staged: core::cell::Cell<arvo::USize>,
+/// Diagnostic egress writer trait. `EmitDiagnostics<W>` drives one
+/// `EmitWriter` impl held inside `Resource<DiagnosticSink<W>>`. The
+/// trait is minimal by design: per-write failure has no useful
+/// recovery action at WU body level, so methods return unit.
+/// Concrete impls (viola-cli's stderr writer, future LSP-buffered
+/// emitter, future network sink) handle syscall context internally.
+pub trait EmitWriter {
+    /// Emit `s` as part of the current diagnostic line. Implementors
+    /// may buffer, route, drop, or panic on failure per their
+    /// concrete policy.
+    fn write_str(&mut self, s: &str);
+    /// Emit `bytes` (raw, non-UTF-8 path or pre-formatted span).
+    fn write_bytes(&mut self, bytes: &[u8]);
+    /// Flush any buffered output. Called once at end-of-emit.
+    fn flush(&mut self);
 }
 
-impl Default for DiagnosticSink {
-    fn default() -> Self {
+/// No-op `EmitWriter` default. ZST, `Default`-constructible. Used by
+/// AccessSet witness tests so `EmitDiagnostics<EmitFlat>` and
+/// `DiagnosticSink<EmitFlat>` can be instantiated without pulling
+/// viola-cli's concrete impl into the test build. Production code in
+/// viola-cli supplies its own `EmitWriter` impl.
+#[derive(Copy, Clone, Default)]
+pub struct EmitFlat;
+
+impl EmitWriter for EmitFlat {
+    fn write_str(&mut self, _s: &str) {}
+    fn write_bytes(&mut self, _bytes: &[u8]) {}
+    fn flush(&mut self) {}
+}
+
+/// Diagnostic egress sink Resource. Generic over the `EmitWriter` impl
+/// that viola-cli registers at scheduler-builder time. `EmitDiagnostics`
+/// is the sole writer (declared in its Write set); the scheduler
+/// serialises Write access; no other WU touches this Resource.
+pub struct DiagnosticSink<W: EmitWriter> {
+    writer: core::cell::UnsafeCell<W>,
+}
+
+impl<W: EmitWriter> DiagnosticSink<W> {
+    /// Construct a sink wrapping the given writer. Called at
+    /// scheduler-builder time when viola-cli registers the Resource.
+    pub const fn new(writer: W) -> Self {
         Self {
-            staged: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: empty-counter init; tracked: #72
+            writer: core::cell::UnsafeCell::new(writer),
         }
     }
+
+    /// Emit one string through the wrapped writer.
+    ///
+    /// # Safety
+    ///
+    /// Caller MUST hold a `Write` projection of this Resource for the
+    /// scheduler-dispatched WU. Concretely: `EmitDiagnostics<W>` is
+    /// the sole declared writer (see `wus/emit_diagnostics.rs`); the
+    /// scheduler's per-WU dispatch serialises that WU's `execute`,
+    /// so the `&mut W` reborrow through the `UnsafeCell` is the only
+    /// live borrow of the writer for the duration of the call.
+    pub unsafe fn write_str(&self, s: &str) {
+        let writer: &mut W = unsafe { &mut *self.writer.get() };
+        writer.write_str(s);
+    }
+
+    /// Emit raw bytes through the wrapped writer.
+    ///
+    /// # Safety
+    ///
+    /// Same contract as `write_str`.
+    pub unsafe fn write_bytes(&self, bytes: &[u8]) {
+        let writer: &mut W = unsafe { &mut *self.writer.get() };
+        writer.write_bytes(bytes);
+    }
+
+    /// Flush the wrapped writer. Called once at end-of-emit.
+    ///
+    /// # Safety
+    ///
+    /// Same contract as `write_str`.
+    pub unsafe fn flush(&self) {
+        let writer: &mut W = unsafe { &mut *self.writer.get() };
+        writer.flush();
+    }
 }
+
+// SAFETY: `EmitDiagnostics<W>` is the sole declared writer of
+// `Resource<DiagnosticSink<W>>` (see `wus/emit_diagnostics.rs`'s Write
+// set). The scheduler serialises that WU's `execute` against any
+// reader of the Resource by AccessSet contract. No other WU declares
+// `Resource<DiagnosticSink<W>>` in its AccessSet. Interior mutability
+// through `&self` is single-threaded for the duration of one WU
+// dispatch, satisfying the four-invariant Sync contract paralleling
+// the host-shim Resources.
+unsafe impl<W: EmitWriter> Sync for DiagnosticSink<W> {}
 
