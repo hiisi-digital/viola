@@ -30,13 +30,28 @@ pub use run_runner::RunRunner;
 
 pub use stub::WuCtxStub;
 
-/// Placeholder for the per-plugin record. Slice 3 wires real fields.
+/// Host-side per-plugin record carried by `Column<PluginEntry>`.
 ///
-/// `Copy + Clone + Debug` so `Column<PluginEntry>` body slices can call
-/// `ColumnReaderApi::read::<PluginEntry>` (which requires `ColumnValue`,
-/// `= Copy + 'static`) without revisiting this declaration.
-#[derive(Copy, Clone, Debug)]
-pub struct PluginEntry;
+/// Slice 3 flips this from the Slice 1 ZST to fields-bearing. The
+/// loaded `Library` instance lives in `Resource<ExtensionHost>`;
+/// `host_idx` is the bridge. `Column<T>` requires `ColumnValue = Copy
+/// + 'static`; all four field types are `Copy` (`Str` is a 4-byte
+/// handle, `Mask64` is `Bits<64, Hot>`, `AbiVersion(u32)` is a
+/// wrapper, `Cap` wraps `USize` which wraps `usize`). No `Drop`.
+///
+/// `Debug` derive is intentionally omitted: `arvo_bitmask::Mask<W>`
+/// and `hilavitkutin_extensions::AbiVersion` do not derive `Debug` in
+/// the current upstream releases. A workspace-local newtype wrapping
+/// to add Debug is out of scope; either upstream PR adds the derives
+/// or this comment guides the next reader to manually format if
+/// needed.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct PluginEntry {
+    pub name: hilavitkutin_str::Str,
+    pub roles: crate::role::Mask64,
+    pub abi_version: hilavitkutin_extensions::AbiVersion,
+    pub host_idx: arvo::Cap,
+}
 
 /// Placeholder for the per-file record. Slice 4 wires real fields.
 #[derive(Copy, Clone, Debug)]

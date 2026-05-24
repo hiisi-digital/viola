@@ -23,7 +23,7 @@ use arvo_bits::QWord;
 /// arvo round 202605031748 (#313) deleted the `Mask64` shipping alias
 /// from `arvo-bitmask`. The chassis-form spelling is what consumers
 /// name now; this local alias keeps the `RoleSet` field type readable.
-type Mask64 = Mask<QWord>;
+pub type Mask64 = Mask<QWord>;
 use hilavitkutin_extensions::Extension;
 use viola_plugin_abi::{
     PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE, PROVIDER_RUNNER_EXECUTE_SCOPE,
