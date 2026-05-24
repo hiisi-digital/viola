@@ -1,0 +1,7 @@
+# `viola-core` BACKLOG
+
+Designed-but-deferred entries for `viola-core`. Items here are decisions made; they ship in the slice that first needs them.
+
+## InvocationSurface
+
+Restore as a new `Resource<InvocationSurface>` when a real use case surfaces. The Slice 1 SRC CL hinted at an Lsp-initiated run egressing through a Hook, but no current code path needs the distinction. Re-introducing the distinction is a public-layout change to `Workspace`; pre-1.0 absorbs the churn, but consumers that pin Workspace by-field will need an update.

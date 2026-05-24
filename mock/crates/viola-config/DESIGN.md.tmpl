@@ -89,3 +89,49 @@ Enum naming the impact levels (low, medium, high, etc.) used as severity overrid
 ## Design notes
 
 `#![no_std]` with no alloc to match viola-cli's `#![no_main]` constraint. Parser uses zero-copy slicing into the input bytes; `ViolaConfig` borrows from the input bytes through lifetimes the caller manages. No internal allocation; all storage is the caller's buffer.
+
+## Slice 2a additions
+
+The owned-form bridge that lets `viola_config` data slot into a `hilavitkutin_api::Resource<T: 'static>`. The borrowed `ViolaConfig<'a, N>` stays for parser output; the owned shape below is what every WorkUnit reading the parsed config consumes.
+
+### `ViolaConfigOwned`
+
+Owned-form viola config. Generic over five const parameters: `MAX_PLUGINS`, `MAX_GATES`, `MAX_RULES`, `MAX_PARTIAL_RULES`, `ARENA_BYTES`. Carries fixed-cap arrays for plugins, gates, rules, and partial rules each paired with an `arvo::Cap` length tracker, plus a private `arena: ConfigArena<ARENA_BYTES>` field that backs every `Str` handle interned during parse. The bundle is `'static` (no borrows escape) and slots into `Resource<T>` directly.
+
+### `ViolaCfg`
+
+Workspace-default alias for `ViolaConfigOwned`. Instantiates with the workspace cap parameters: `MAX_PLUGINS`, `MAX_GATES`, `MAX_RULES`, `MAX_PARTIAL_RULES`, `ARENA_BYTES`. Consumers reference this alias rather than the full generic instantiation.
+
+### `ConfigArena`
+
+Crate-private fixed-cap byte arena. Implements `hilavitkutin_str::ArenaInterner`. Slice 2a ships the type with `unimplemented!()` `arena_intern` and `arena_resolve` bodies; Slice 2b wires the real intern path. The constructor is `#[doc(hidden)]` so Slice 2a callers do not accidentally trigger the trap.
+
+### `ConfigBytes`
+
+Raw bytes of the workspace `viola.toml`, populated by the host shim at scheduler-builder time. `LoadConfig` reads this Resource and parses into `Resource<ViolaCfg>`. Fixed-cap byte array plus `arvo::Cap` length tracker; `CONFIG_MAX_BYTES = 16384` caps the buffer at 16KB.
+
+### `CONFIG_MAX_BYTES`
+
+Maximum byte length of the raw `ConfigBytes` buffer the host shim hands to `LoadConfig`. Workspace-default `16384` (16KB). Pre-1.0; observed real viola.toml configs stay well under 4KB.
+
+### `MAX_PLUGINS`
+
+Maximum number of plugins in one `ViolaConfigOwned`. Workspace-default `16`. Honours the existing `ViolaConfig<'a, const MAX_PLUGINS: usize>` default. Pre-1.0; observed real configs use 2 to 4 plugins.
+
+### `MAX_GATES`
+
+Maximum number of `[gates]` entries in one `ViolaConfigOwned`. Workspace-default `32`. One gate per lint; pre-1.0.
+
+### `MAX_RULES`
+
+Maximum number of `[[severity]]` rules in one `ViolaConfigOwned`. Workspace-default `64`. Per-lint severity overrides; pre-1.0.
+
+### `MAX_PARTIAL_RULES`
+
+Maximum number of `[[severity.partial]]` rules in one `ViolaConfigOwned`. Workspace-default `16`. Per-lint partial-match severity overrides; pre-1.0.
+
+### `ARENA_BYTES`
+
+Arena byte capacity for one `ViolaConfigOwned`. Workspace-default `8192` (8KB). Backs every `Str` handle interned during parse. Pre-1.0; sized for typical plugin-name plus rule-string totals with 2x headroom past observed configs.
+
+The existing `ViolaConfig` section above remains the source-of-truth for the borrowed-form parser output. `ViolaConfigOwned` is the bridge for the `Resource` boundary; the two coexist.

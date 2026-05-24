@@ -89,3 +89,29 @@ The interim scaffolding (`Session`, `PipelineReport`, `run`, `cmp_diag`, `sort_d
 ## Dependencies
 
 Depends on `viola-plugin-abi` for the vtable plus provider-id contract, on `hilavitkutin-extensions` for the loader, on `notko` for `Maybe` / `Outcome` / `Just`, on `arvo` for numeric primitives.
+
+## Slice 2a resource shapes
+
+### `Workspace`
+
+Run-context Resource. Single field: `path: hilavitkutin_str::Str`. The host shim interns the workspace root path in its long-lived interner at scheduler-builder time and writes the resulting handle into this Resource. The interner outlives the scheduler run; this dependency is the host shim's contract, not a Resource the scheduler manages.
+
+### `CiState`
+
+CI-invocation-context Resource. Two fields: `is_ci: arvo::Bool` and `agent: AgentKind`. The host shim detects environment signals (CI provider variables, TTY presence, user-agent shape) and sets the fields accordingly at scheduler-builder time. Manual `Default` impl rather than derived: `arvo::Bool` does not impl `core::Default` directly today.
+
+### `AgentKind`
+
+Enum classifying the invoking actor behind one viola run. Four variants: `Unknown` (default; absence of detection signal is the safer default), `None` (host shim positively determined no agent is involved), `Human` (a human invoked viola directly), `Bot` (a bot or automation invoked viola).
+
+### `LoadConfig` Slice 2a revision
+
+The Slice 1 stub declared `Read = Cons<Resource<Workspace>, Cons<Resource<RunSurface>, Empty>>` and `Write = Cons<Resource<ViolaConfigOpaque>, Empty>`. Slice 2a updates Read to add `Resource<ConfigBytes>` and Write to use `Resource<ViolaCfg>` (the owned-form bridge) plus `Column<Diagnostic>` (the per-WU error-emit channel). Slice 2b body parses `ConfigBytes` into `ViolaCfg` and writes a `Diagnostic` to the Column on parse failure.
+
+### `LoadPlugins` Slice 2a revision
+
+Read swap: `Resource<ViolaConfigOpaque>` becomes `Resource<ViolaCfg>`. Write unchanged at `Column<PluginEntry>`. Slice 3 body resolves the config's plugin manifest entries and pushes one record per loaded plugin.
+
+### `DiscoverFiles` Slice 2a revision
+
+Read swap: `Resource<Workspace>` plus `Resource<ViolaCfg>` (previously `ViolaConfigOpaque`). Write unchanged at `Column<FileInfo>`. Slice 4 body walks the workspace filesystem honouring the config's include/exclude patterns.
