@@ -626,10 +626,30 @@ impl<
     const ARENA_BYTES_CAP: usize,
 > ViolaConfigOwned<MAX_PLUGINS_CAP, MAX_GATES_CAP, MAX_RULES_CAP, MAX_PARTIAL_RULES_CAP, ARENA_BYTES_CAP>
 {
-    /// Construct an empty owned config. `LoadConfig::execute` (Slice 2b body)
-    /// will populate fields through a `populate_from_borrowed(&self, _)`
-    /// method that takes `&self` because the bundled arena carries interior
-    /// mutability.
+    /// Populate this owned config from a borrowed parser result.
+    ///
+    /// Takes `&self` because the bundled `arena` carries interior mutability
+    /// (`Cell` cursor plus `UnsafeCell` byte buffer plus offsets table).
+    /// `LoadConfig::execute` (Slice 2b body) calls this through the `&T`
+    /// borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`.
+    /// `Resource<ViolaCfg>` is declared in `LoadConfig::Write`; the scheduler's
+    /// AccessSet contract serialises that producer slot, so the `&self`
+    /// receiver here is sound.
+    ///
+    /// Slice 2b ships a no-op body. The owned-record fields
+    /// (`PluginEntryOwned`, `GateOwned`, `RuleOwned`, `PartialRuleOwned`)
+    /// are zero-sized placeholders; nothing to project until each producer
+    /// body slice (Slice 3 for plugins, validator slices for gates / rules)
+    /// flips its owned-record type to fields-bearing and fills the
+    /// projection. Slice 3 will revisit this method.
+    pub fn populate_from_borrowed(
+        &self,
+        _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>,
+    ) {
+        let _ = self;
+    }
+
+    /// Construct an empty owned config.
     pub const fn new() -> Self {
         Self {
             plugins: [PluginEntryOwned; MAX_PLUGINS_CAP],
