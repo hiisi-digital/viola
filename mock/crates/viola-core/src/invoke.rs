@@ -47,3 +47,63 @@ fn cast<'a, T>(raw: Maybe<*const c_void>) -> Maybe<&'a T> {
         _ => Maybe::Isnt,
     }
 }
+
+/// Resolve the runner role's vtable directly from a loaded `Library`
+/// without going through the pre-#254 `Extension` shape.
+///
+/// Walks the descriptor's provider table per the Slice 3
+/// `resolve_descriptor` pattern. Delegates tag and version validation
+/// to `hilavitkutin_extensions::validate_descriptor`.
+///
+/// Returns `Maybe::Isnt` when the descriptor symbol is missing, the
+/// descriptor pointer is null, `validate_descriptor` rejects the
+/// descriptor, the runner provider is not present in the descriptor's
+/// provider table, or the vtable pointer is null.
+pub fn runner_vtable_from_library(
+    lib: &hilavitkutin_linking::Library,
+) -> Maybe<&'static RunnerExecuteScopeVtable> {
+    use hilavitkutin_extensions::{DESCRIPTOR_SYMBOL, ExtensionDescriptor};
+    use notko::Outcome;
+
+    type DescriptorFn = extern "C" fn() -> *const ExtensionDescriptor;
+    let sym = match lib.resolve::<DescriptorFn>(DESCRIPTOR_SYMBOL.to_bytes_with_nul()) {
+        Outcome::Ok(s) => s,
+        Outcome::Err(_) => return Maybe::Isnt,
+    };
+    let ptr = (sym.get())();
+    if ptr.is_null() {
+        return Maybe::Isnt;
+    }
+    // SAFETY: the descriptor pointer addresses extension-static memory
+    // valid for the loaded library's lifetime; the host keeps the
+    // library alive inside `Resource<ExtensionHost>` for the duration
+    // of the scheduler run.
+    let descriptor: &'static ExtensionDescriptor = unsafe { &*ptr };
+
+    if let Outcome::Err(_) = hilavitkutin_extensions::validate_descriptor(descriptor) {
+        return Maybe::Isnt;
+    }
+
+    let n: usize = descriptor.providers_len as usize; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: u32 ABI field projects to usize for slice iteration; tracked: #72
+    let mut i: usize = 0; // lint:allow(no-bare-numeric) reason: loop counter; tracked: #72
+    while i < n {
+        // SAFETY: providers_ptr and providers_len validated by
+        // `validate_descriptor` above; the slice is initialised by the
+        // extension before the descriptor function returns it.
+        let entry = unsafe { *descriptor.providers_ptr.add(i) };
+        if entry.id == PROVIDER_RUNNER_EXECUTE_SCOPE {
+            if entry.vtable_ptr.is_null() {
+                return Maybe::Isnt;
+            }
+            // SAFETY: provider table guarantees the vtable_ptr targets
+            // a `&'static RunnerExecuteScopeVtable` inside the loaded
+            // library. The descriptor walk's null-check above the only
+            // soundness gate.
+            return Maybe::Is(unsafe {
+                &*(entry.vtable_ptr as *const RunnerExecuteScopeVtable)
+            });
+        }
+        i += 1; // lint:allow(no-bare-numeric) reason: loop counter increment; tracked: #72
+    }
+    Maybe::Isnt
+}

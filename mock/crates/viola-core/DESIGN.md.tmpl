@@ -234,3 +234,54 @@ Column record carried by `Column<Nam>`. One `Copy` field:
 Derives `Copy, Clone`. `Debug` is intentionally omitted because `NamPayload` carries `data: *const c_void` and does not derive `Debug` upstream. The `viola-core/SHAME.md.tmpl` `## Nam` entry tracks the discipline gap.
 
 The singleton-row convention on `Column<Nam>`: the runner's `execute_scope` is scope-shaped (one call per scheduler run, returning one NAM covering every file). Slice 5b's body writes ONE row to slot zero. Future per-file incremental runners can extend the column-row count without an AccessSet change. The Slice 1 declaration `Write = Cons<Column<Nam>, Empty>` is preserved on this basis.
+
+## Slice 5b RunRunner body
+
+Slice 5b lands the `RunRunner::execute` body announced in the Slice 5a NAM carrier section. Adds `Resource<FileEntryBuffer>` (host-shim seam paralleling DiscoveredFilePaths), `runner_vtable_from_library` helper, and the body proper.
+
+### `FileEntryBuffer`
+
+Host-shim-populated FFI-shape array Resource. Carries the `[FileEntry; MAX_DISCOVERED_FILES]` array the runner's `execute_scope` reads via `RunScope.files: *const FileEntry`. Same interior-mutability pattern as `DiscoveredFilePaths`: `UnsafeCell` over the entries array plus `Cell<arvo::USize>` length counter. The two Resources are sibling host-shim-populated stores: the host shim walks the workspace filesystem once, populates both `DiscoveredFilePaths` (Str-handle view for WU consumers) and `FileEntryBuffer` (FFI-shape view for the runner) at scheduler-builder time.
+
+`unsafe impl Sync` carries the same four-invariant contract: host shim is the sole producer at scheduler-builder time, every WU declares the Resource in `Read` only with no `Write` declaration anywhere, single-threaded build phase, cap-bounded `push`.
+
+Public API mirrors `DiscoveredFilePaths`:
+
+- `pub fn new() -> Self`. Empty store; every slot is the zero-init `FileEntry { path: BytesRef::EMPTY, language: BytesRef::EMPTY, hash: BytesRef::EMPTY, size_bytes: 0 }`.
+- `pub unsafe fn push(&self, entry: FileEntry) -> arvo::Cap`. Host-shim seam with `# Safety` clause naming the four caller-asserted invariants.
+- `pub fn entries_len(&self) -> arvo::USize`. Populated-slot count.
+- `pub fn entries_ptr(&self) -> *const FileEntry`. Raw pointer the WU passes to `RunScope.files`. The pointer addresses memory inside the `UnsafeCell`; the read-only-after-builder contract makes the pointer valid for the duration of the scheduler run.
+
+### `runner_vtable_from_library`
+
+New crate-public helper in `viola_core::invoke`. Takes `&hilavitkutin_linking::Library`, walks the descriptor's provider table to find `PROVIDER_RUNNER_EXECUTE_SCOPE`, returns `Maybe<&'static RunnerExecuteScopeVtable>`. Parallels the Slice 3 `resolve_descriptor` walk; delegates descriptor tag and version validation to `hilavitkutin_extensions::validate_descriptor` per the `use-the-stack-not-reinvent.md` rule.
+
+Returns `Maybe::Isnt` on:
+- Descriptor symbol missing from the library.
+- Descriptor pointer null.
+- `validate_descriptor` rejects the descriptor.
+- Runner provider not present in the descriptor's provider table.
+- Vtable pointer is null.
+
+The pre-#254 `runner_vtable(&Extension)` helper stays alongside until Slice 8 deletes the `Extension` type. Both ship; consumers pick by which surface they hold.
+
+### RunRunner Slice 5b body
+
+The Slice 1 stub declared `Read = Cons<Column<FileInfo>, Empty>`, `Write = Cons<Column<Nam>, Empty>`. Slice 5b narrows Read to drop `Column<FileInfo>` (the body consumes the FFI-shape array in `FileEntryBuffer` directly, not per-FileInfo records), adds the Resources it consumes, and extends Write with `Column<WuDiagnostic>` for the failure path:
+
+```
+Read = Cons<Resource<CiState>,
+       Cons<Resource<ExtensionHost>,
+       Cons<Column<PluginEntry>,
+       Cons<Resource<FileEntryBuffer>, Empty>>>>
+Write = Cons<Column<Nam>, Cons<Column<WuDiagnostic>, Empty>>
+```
+
+Body walks `Column<PluginEntry>` row-by-row to find the first entry with the runner-role bit set (`roles.contains(USize(0))` where bit 0 maps to `PROVIDER_RUNNER_EXECUTE_SCOPE` per Slice 3's `resolve_descriptor`). Uses that entry's `host_idx` to get `&Library` via `ExtensionHost::library_at`. Calls `runner_vtable_from_library` to get the vtable. Builds `RunScope` on stack with `files = FileEntryBuffer::entries_ptr()`, `files_len = FileEntryBuffer::entries_len()`, `workspace_root = BytesRef::EMPTY` (BACKLOG: workspace path Str-to-bytes), `surface = RunSurface::Cli` (BACKLOG: Resource<RunSurface>), `ci` projected from `CiState.is_ci`. Calls the FFI with `host_ctx = null_mut()` (BACKLOG: host_ctx model). Writes the returned `NamPayload` into `Column<Nam>` at slot zero on success.
+
+Failure paths emit `WuDiagnostic { source: WuDiagnosticSource::RunRunner }`:
+- Runner plugin not found in `Column<PluginEntry>`.
+- `runner_vtable_from_library` returns `Maybe::Isnt`.
+- FFI call returns `AbiStatus != Ok`.
+
+The local-counter pattern (`written_count`, `failure_count`) tracks column lengths by construction per the Slice 3 LoadPlugins precedent. Slice 5b body needs `Column<PluginEntry>` reader access; uses the same `<Stub as ColumnReaderApi<R>>::read` pattern Slice 3 LoadPlugins used for `Column<PluginEntry>` writes (here as reads).
