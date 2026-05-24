@@ -1,0 +1,50 @@
+5f9ca84 feat: viola 254 slice 1 scaffolding
+5df2456 docs: draft viola 254 slice 1 src cl
+57286f6 docs: draft and lock #254 Slice 1 DOC CL
+400ce45 docs: open #254 Slice 1 scaffolding round TOPIC
+b577d7e chore: lock viola-deno-runtime IPC refactor src CL
+1303ef9 feat: viola-deno-runtime no-alloc IPC refactor
+25efcce chore: align viola mockspace.toml with hilavitkutin stack discipline
+434a3cd docs: seed per-crate DESIGN.md.tmpl for all seven viola crates
+2088e7e docs: scoping memo for #254 viola-as-hilavitkutin-app implementation
+718e0f4 feat: install mockspace workflow foundation; re-root source under mock/
+3c69c74 docs: close both #254 design Qs in HILAVITKUTIN-APP-SHAPE.md
+0ae9975 docs: update hilavitkutin-app-shape against locked megaround
+8dc14fe docs: commit hilavitkutin-app-shape design memo
+2228f87 chore: scrub em-dashes from viola source and TODO docs
+8294f2e refactor!: rename *Cap marker structs to *Provider (#7)
+69a1df8 docs: sweep cap/Capability/CAP_* vocab to provider/Provider/PROVIDER_* (#6)
+4fbc163 Merge pull request #5 from hiisi-digital/feat/hilavitkutin-provider-migration
+4face2b docs: clean Mask64/Mask vocabulary in role.rs module doc
+3dc8ce7 fix: adopt arvo Round D Mask<W> chassis in role.rs
+1924218 feat!: migrate viola to hilavitkutin Provider* + .with builder
+af16884 feat: enrich workspace Cargo metadata for crates.io presentation (#4)
+61b9fb7 docs: sweep em-dashes from plugin abi design doc
+f7aa568 docs: sweep em-dashes from TODO and mark phases 1-5 complete
+32cb286 docs: add viola-cli README and TODO (#1)
+8653674 refactor: viola substrate-reuse Tier 2 (#248) (#27)
+40d54ab refactor: viola substrate-reuse Tier 1 (#247) (#26)
+d854653 feat: viola.toml v2 gate threshold filtering (#221 PR-D-2) (#25)
+a116d28 feat: viola-cli loads v2 plugins (#221 PR-D-1) (#24)
+8b4cb50 feat: viola.toml v2 compound severity conditions (#221 PR-C2) (#23)
+c2b721f feat: viola.toml v2 [[severity]] rules + issue-pattern parser (#221 PR-C) (#22)
+2b65beb feat: viola.toml v2 [lint.<id>] config blocks (#221 PR-B) (#21)
+4e20b72 feat: viola.toml v2 parser skeleton (#221 PR-A) (#20)
+45f122f docs: viola.toml v2 schema design memo (#19)
+5931644 test: passthrough conformance harness for viola-cli (#18)
+2d01c19 fix: pre-resolve [ts].config against viola.toml parent dir (#17)
+3fe0358 feat: viola-cli auto-passthrough to jsr:@hiisi/viola-cli for pure-TS projects (#16)
+0b20251 refactor: subprocess deno worker for TS lints (#196 PR-C) (#15)
+a81a216 feat: ES module loading with TsFsModuleLoader (#196 PR-B) (#14)
+eb5134e feat: rename viola-bridge-deno to viola-deno-runtime + expose all three caps + [ts] section (#196 PR-A) (#13)
+7e5cd4c fix: viola-cli CaptureSink deep-copies plugin bytes per v1 ABI contract (#12)
+6097599 feat: viola-bridge-deno embeds deno_core JsRuntime in cdylib (#11)
+80bea42 feat: viola-cli host executable wires the full pipeline (#10)
+d643f9b feat: viola-config no_std TOML subset parser for viola.toml (#9)
+d9c52b5 test: end-to-end pipeline run with runner+lint fixture pair (#8)
+bb187d7 feat: viola-core host body on hilavitkutin-extensions (#7)
+18ec521 refactor!: rebase viola onto hilavitkutin-extensions, no_std across the board (#6)
+85e4382 feat: viola-core host loader, validation, lifecycle, capability dispatch (#4)
+9b4d152 feat: tighten viola-plugin-abi v1 to spec parity (#3)
+767f779 feat: viola-plugin-abi v1 + macros companion (#193, #232) (#2)
+d5957d9 chore: untrack target/ and scaffold viola-cli (#1)
