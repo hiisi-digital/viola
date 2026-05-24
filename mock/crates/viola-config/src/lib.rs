@@ -48,6 +48,7 @@
 //! corresponding fields empty when those keys are absent and rejects
 //! them with [`ConfigError::UnknownKey`] when present.
 
+use hilavitkutin_str::ArenaInterner as _;
 use notko::{Maybe, Outcome};
 
 // Brings `USize::ZERO` into scope for the const constructors below.
@@ -597,11 +598,16 @@ pub struct ViolaConfigOwned<
     arena: ConfigArena<ARENA_BYTES_CAP>,
 }
 
-/// Placeholder for one plugin entry in `ViolaConfigOwned`. Slice 3
-/// (`LoadPlugins` body) replaces with real fields (`name: Str`,
-/// `path: Str`, etc.).
-#[derive(Copy, Clone, Debug, Default)]
-pub struct PluginEntryOwned;
+/// One plugin entry in `ViolaConfigOwned`. Parser-side owned shape:
+/// the host-side post-load `viola_core::wus::PluginEntry` is distinct
+/// and lives in `Column<PluginEntry>`. This owned-record carries the
+/// manifest data the parser emitted (display name and filesystem path),
+/// interned via the bundled `ConfigArena` during `populate_from_borrowed`.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub struct PluginEntryOwned {
+    pub name: hilavitkutin_str::Str,
+    pub path: hilavitkutin_str::Str,
+}
 
 /// Placeholder for one gate entry. Validator slices replace with real
 /// fields.
@@ -628,20 +634,26 @@ impl<
 {
     /// Populate this owned config from a borrowed parser result.
     ///
-    /// Takes `&self` because the bundled `arena` carries interior mutability
-    /// (`Cell` cursor plus `UnsafeCell` byte buffer plus offsets table).
-    /// `LoadConfig::execute` (Slice 2b body) calls this through the `&T`
-    /// borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`.
-    /// `Resource<ViolaCfg>` is declared in `LoadConfig::Write`; the scheduler's
-    /// AccessSet contract serialises that producer slot, so the `&self`
-    /// receiver here is sound.
+    /// Slice 2b shipped this as a no-op stub. Slice 3a flips
+    /// `PluginEntryOwned` from ZST to fields-bearing but defers the
+    /// plugins-arm write to a follow-up that resolves the
+    /// interior-mutability shape. The bundled `arena` carries `Cell`
+    /// cursor plus `UnsafeCell` byte buffer (was designed for `&self`
+    /// from the start); the `self.plugins` array is plain
+    /// `[PluginEntryOwned; N]`, NOT wrapped in `UnsafeCell` / `Cell`.
+    /// Writing through `&self` triggers rustc's `&T`-to-`&mut T`-cast-
+    /// is-UB error.
     ///
-    /// Slice 2b ships a no-op body. The owned-record fields
-    /// (`PluginEntryOwned`, `GateOwned`, `RuleOwned`, `PartialRuleOwned`)
-    /// are zero-sized placeholders; nothing to project until each producer
-    /// body slice (Slice 3 for plugins, validator slices for gates / rules)
-    /// flips its owned-record type to fields-bearing and fills the
-    /// projection. Slice 3 will revisit this method.
+    /// `LoadConfig::execute` (Slice 2b body) calls this through the
+    /// `&T` borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`.
+    /// `Resource<ViolaCfg>` is declared in `LoadConfig::Write`; the
+    /// scheduler's AccessSet contract serialises that producer slot,
+    /// so the `&self` receiver is sound for the arena interior-mutability
+    /// path. The follow-up either wraps `self.plugins` plus
+    /// `self.plugins_len` in `UnsafeCell` / `Cell` mirroring the arena's
+    /// pattern, or introduces a hilavitkutin-api Resource-write surface
+    /// so this method can take `&mut self`. Both options are non-trivial;
+    /// tracked in BACKLOG.
     pub fn populate_from_borrowed(
         &self,
         _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>,
@@ -649,10 +661,31 @@ impl<
         let _ = self;
     }
 
+    /// Plugin filesystem path resolved back from the arena. Returns
+    /// `Maybe::Isnt` when `i` is past the populated prefix (the bound
+    /// `*self.plugins_len.0`). Callers must NOT treat an out-of-bounds
+    /// `Maybe::Isnt` as an empty string; an empty path fed to
+    /// `Library::load` is a real crash vector.
+    pub fn plugin_path(&self, i: arvo::Cap) -> notko::Maybe<&str> {
+        let idx: usize = *i.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to std slice-index API; tracked: #72
+        let len: usize = *self.plugins_len.0; // lint:allow(no-bare-numeric) reason: same; tracked: #72
+        if idx >= len || idx >= MAX_PLUGINS_CAP {
+            return notko::Maybe::Isnt;
+        }
+        let id: u32 = self.plugins[idx].path.id().to_raw(); // lint:allow(no-bare-numeric) reason: Str id projection; tracked: #72
+        notko::Maybe::Is(self.arena.arena_resolve(id))
+    }
+
     /// Construct an empty owned config.
-    pub const fn new() -> Self {
+    ///
+    /// Not `const fn`: `PluginEntryOwned` carries two `hilavitkutin_str::Str`
+    /// handles whose `Default::default()` is not const-callable in stable
+    /// Rust today. The `Default` constructor seeds the workspace's
+    /// `Resource<ViolaCfg>` and runs once per scheduler-builder, so the
+    /// const-ness loss has no runtime cost.
+    pub fn new() -> Self {
         Self {
-            plugins: [PluginEntryOwned; MAX_PLUGINS_CAP],
+            plugins: [PluginEntryOwned::default(); MAX_PLUGINS_CAP],
             plugins_len: arvo::Cap(arvo::USize::ZERO),
             gates: [GateOwned; MAX_GATES_CAP],
             gates_len: arvo::Cap(arvo::USize::ZERO),
