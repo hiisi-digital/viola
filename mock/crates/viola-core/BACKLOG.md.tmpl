@@ -73,3 +73,31 @@ The FFI signature passes `host_ctx: *mut c_void` opaquely; the plugin uses it to
 ## Workspace path Str-to-bytes resolution for FFI
 
 `RunScope.workspace_root: BytesRef` is a raw bytes pointer. `Resource<Workspace>.path: Str` is an interned handle. Resolving the handle back to raw bytes requires the host-shim long-lived interner (already tracked in the Slice 2b "Host-shim long-lived interner wiring" BACKLOG entry). Slice 5b ships `BytesRef::EMPTY` for workspace_root until the interner lands; downstream plugins tolerate empty workspace_root per the ABI.
+
+## RunLint body and FFI invocation
+
+Slice 6a sets the COMMUTATIVE flag and MAX_LINTS const; the `RunLint<L>::execute` body stays `unimplemented!()`. Slice 6b lands the body proper: reads the per-slot LintSlots entry, resolves the lint plugin via ExtensionHost + library_at + lint_vtable_from_library, reads NamPayload from Column<Nam> slot zero, reads the per-slot config bytes from LintConfigBuffer, calls evaluate FFI, projects the returned DiagnosticBatch into the per-L row range of Column<WuDiagnostic>. On failure (slot empty, vtable absent, AbiStatus != Ok), writes a single WuDiagnostic record at the L row range's start with source RunLint. AccessSet extends accordingly.
+
+## Resource<LintSlots> for RunLint slot-to-plugin mapping
+
+Slice 6b adds `Resource<LintSlots>`: a `[arvo::Cap; MAX_LINTS]` array mapping slot L to the ExtensionHost host_idx of the lint plugin at that slot, with a sentinel (e.g. `arvo::Cap` of `arvo::USize::MAX` or a parallel `Cell<[bool; MAX_LINTS]>` populated-bit array) for "no plugin at this slot". Populator either extends LoadPlugins to write `Resource<LintSlots>` as a parallel output, OR a new tiny IndexLints WU between LoadPlugins and the first RunLint takes `Column<PluginEntry>` in Read and `Resource<LintSlots>` in Write. Slice 6b ratifies which.
+
+## Resource<LintConfigBuffer> for per-slot lint config bytes
+
+Slice 6b adds a host-shim-built `Resource<LintConfigBuffer>` carrying `[BytesRef; MAX_LINTS]`, each pointing into the ViolaCfg arena's bytes. RunLint<L> body reads `buffer[L]` and passes its data + len to the FFI `evaluate` call's `lint_config_bytes` + `lint_config_len` args. The indirection lets each RunLint<L> read only its own slot without taking ViolaCfg in Read; shared Resource Reads across the parallel cohort would force the scheduler to serialise.
+
+## lint_vtable_from_library helper for viola-core invoke
+
+Slice 6b adds `lint_vtable_from_library(&hilavitkutin_linking::Library) -> Maybe<&'static LintEvaluateVtable>` parallelling Slice 5b's `runner_vtable_from_library`. Walks the descriptor's provider table looking for `PROVIDER_LINT_EVALUATE`, returns the casted vtable on success.
+
+## MAX_DIAGS_PER_LINT const and per-L row-range projection
+
+Slice 6b adds `MAX_DIAGS_PER_LINT` const (workspace-default candidates: 64, 128, 256; depends on realistic per-lint output budgets). Each RunLint<L> writes to slots `[L * MAX_DIAGS_PER_LINT, L * MAX_DIAGS_PER_LINT + MAX_DIAGS_PER_LINT)` of `Column<WuDiagnostic>`. Slice 6b body's local counter tracks per-L writes; counter wraps to the per-L row-range cap.
+
+## Host-side LintFinding carrier richer than WuDiagnostic
+
+Slice 6b reuses the existing WuDiagnostic with `Str::default()` for plugin_id, rule_id, message, path, suggestion until the Slice 2b host-shim long-lived interner lands. Tracks a future richer carrier that mirrors the FFI Diagnostic fields with interned Str handles. Trigger: the Slice 2b host-shim long-lived interner BACKLOG entry shipping; then either WuDiagnostic extends with the rich fields or a new LintFinding type replaces it at the Column element layer.
+
+## Slice 9 parallel fan-out verification
+
+Audit pass against landed hilavitkutin dispatch codegen confirming `COMMUTATIVE = Bool::TRUE` on RunLint<L> yields reduce-style parallel fan-out across `RunLint<0>..RunLint<MAX_LINTS - 1>`. Per the scoping memo Slice 9 entry: if the codegen serialises, the design needs revisiting per the cdylib boundary memo's first remaining deferral. Slice 6a's COMMUTATIVE flag set is the precondition for this audit; Slice 9 is the verification.
