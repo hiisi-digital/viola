@@ -2,30 +2,18 @@
 
 Known doc-coverage gaps. Each `## <type>` entry silences the matching `undocumented-type` lint while the design rounds catch up.
 
-## ConfigBytes
-
-Raw byte buffer for the workspace `viola.toml`. Host shim populates this Resource at scheduler-builder time; `LoadConfig` reads it and parses. Fixed-cap byte array plus `arvo::Cap` length tracker; `CONFIG_MAX_BYTES = 16384` caps the buffer at 16KB. Type-shape committed in the Slice 2 DOC CL at `mock/design_rounds/202605241900_changelist.doc.lock.md`; the doc-section addition to `DESIGN.md.tmpl` is the follow-up DOC round's work since Slice 2a's SRC CL phase blocks template edits.
-
-## ConfigArena
-
-Crate-private fixed-cap byte arena that backs every `Str` handle inside one `ViolaConfigOwned`. Implements `hilavitkutin_str::ArenaInterner`. Slice 2a ships the type with `unimplemented!()` `arena_intern` and `arena_resolve`; Slice 2b wires the real intern path. The arena is `pub` only at the trait-impl boundary; the type itself is crate-private and never appears in viola-config's user-facing surface. Design committed in Slice 2 DOC CL.
-
-## ViolaConfigOwned
-
-Owned-form viola config bundling a private arena field plus fixed-cap arrays for plugins, gates, rules, and partial rules. Generic over five cap parameters: `MAX_PLUGINS`, `MAX_GATES`, `MAX_RULES`, `MAX_PARTIAL_RULES`, `ARENA_BYTES`. Self-contained `'static` value so it slots into `Resource<T: 'static>` directly. The bridge between borrowed `ViolaConfig<'a, N>` and Resource-bound shape. Design committed in Slice 2 DOC CL; doc-section addition follows in the DOC round.
-
 ## PluginEntryOwned
 
-Placeholder for one plugin entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. Slice 3 (`LoadPlugins` body) replaces with real fields including `name: Str`, `path: Str`, plus any plugin-manifest metadata the loader needs. Until then the array of `[PluginEntryOwned; MAX_PLUGINS]` exists for type compatibility with the AccessSet contract. Design committed in Slice 2 DOC CL.
+Placeholder for one plugin entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. Slice 3 (`LoadPlugins` body) replaces with real fields including `name: Str`, `path: Str`, plus any plugin-manifest metadata the loader needs. Until then the array of `[PluginEntryOwned; MAX_PLUGINS]` exists for type compatibility with the AccessSet contract. Documenting a ZST placeholder is documentation theatre; the body slice that flips the type to fields-bearing authors the real DESIGN section.
 
 ## GateOwned
 
-Placeholder for one gate entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume gate configurations replace with real fields (gate name, threshold, override pattern). Until then `[GateOwned; MAX_GATES]` exists for type compatibility. Design committed in Slice 2 DOC CL.
+Placeholder for one gate entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume gate configurations replace with real fields (gate name, threshold, override pattern). Until then `[GateOwned; MAX_GATES]` exists for type compatibility. The DESIGN section follows when the type flips to fields-bearing.
 
 ## RuleOwned
 
-Placeholder for one `[[severity]]` rule entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume severity rules replace with real fields (pattern, severity, scope). Until then `[RuleOwned; MAX_RULES]` exists for type compatibility. Design committed in Slice 2 DOC CL.
+Placeholder for one `[[severity]]` rule entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume severity rules replace with real fields (pattern, severity, scope). Until then `[RuleOwned; MAX_RULES]` exists for type compatibility. The DESIGN section follows when the type flips to fields-bearing.
 
 ## PartialRuleOwned
 
-Placeholder for one `[[severity.partial]]` rule entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume partial-match rules replace with real fields. Until then `[PartialRuleOwned; MAX_PARTIAL_RULES]` exists for type compatibility. Design committed in Slice 2 DOC CL.
+Placeholder for one `[[severity.partial]]` rule entry inside `ViolaConfigOwned`. Zero-sized in Slice 2a. The validator slices that consume partial-match rules replace with real fields. Until then `[PartialRuleOwned; MAX_PARTIAL_RULES]` exists for type compatibility. The DESIGN section follows when the type flips to fields-bearing.
