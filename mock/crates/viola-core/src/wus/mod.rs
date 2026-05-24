@@ -79,9 +79,21 @@ pub enum FileKind {
     Other,
 }
 
-/// Placeholder for the per-file parser snapshot. Slice 5 wires real fields.
-#[derive(Copy, Clone, Debug)]
-pub struct Nam;
+/// Column record carried by `Column<Nam>`. One `Copy` field:
+/// `payload` (the FFI carrier returned by the runner's `execute_scope`
+/// vtable; plugin-owned memory immutable for the scheduler-run duration
+/// per the ABI doc). Slice 5a flips this from the Slice 1 ZST
+/// placeholder; Slice 5b lands the RunRunner body that writes one row
+/// per scheduler run (singleton-row convention; the runner is scope-
+/// shaped per `viola_plugin_abi`).
+///
+/// `Debug` is intentionally omitted: `NamPayload` carries
+/// `data: *const c_void` and does not derive `Debug` upstream. The
+/// `viola-core/SHAME.md.tmpl` `## Nam` entry tracks the discipline gap.
+#[derive(Copy, Clone)]
+pub struct Nam {
+    pub payload: viola_plugin_abi::NamPayload,
+}
 
 /// Per-finding record carried by `Column<WuDiagnostic>`. The host-side
 /// element type for the diagnostic fan-in. Distinct from

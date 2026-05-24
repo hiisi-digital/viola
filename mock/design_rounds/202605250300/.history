@@ -1,0 +1,50 @@
+95d92c8 feat: viola 254 slice 5a nam fields-bearing flip
+83b84a5 docs: viola 254 slice 5a runrunner design doc phase
+a5150c2 feat: viola 254 slice 4 discover files body
+6efd7d3 docs: viola 254 slice 3 design sections
+254959a chore: lock and close viola 254 round 202605250000
+1909f5c feat: loadplugins body plus resolve_descriptor helper
+2f05a3e feat: wrap viola-config plugins array in unsafecell plus cell
+3e6704e feat: viola-core slice 3b types resource and accessset witness
+73aaba8 feat: flip PluginEntryOwned to fields-bearing in viola-config
+aa8ff0b docs: draft viola 254 slice 3 src cl
+15aff35 docs: draft and lock slice 3 doc cl for viola 254
+4470cf4 docs: open viola 254 slice 3 topic for loadplugins body
+f82a693 feat: ship slice 2b design sections and backlog entries
+2f3cdb6 chore: lock and close viola 254 round 202605242200
+ba59711 feat: ship loadconfig body and accessset witness test
+1feb01e feat: ship slice 2b partial source for viola #254
+6f4314f docs: draft viola 254 slice 2b src cl
+52cca05 docs: draft and lock viola 254 slice 2b doc cl
+178729a docs: open viola 254 slice 2b topic
+daa8d8e docs: viola 254 slice 2 design sections
+36465f0 chore: close round 1900 after slice 2a source merge
+3a84db1 feat: viola 254 slice 2a source
+d8ac273 docs: draft viola 254 slice 2a src cl
+0c2005e docs: draft and lock viola 254 slice 2 doc cl
+eff47ab chore: close round 1600 and open slice 2 topic
+5f9ca84 feat: viola 254 slice 1 scaffolding
+5df2456 docs: draft viola 254 slice 1 src cl
+57286f6 docs: draft and lock #254 Slice 1 DOC CL
+400ce45 docs: open #254 Slice 1 scaffolding round TOPIC
+b577d7e chore: lock viola-deno-runtime IPC refactor src CL
+1303ef9 feat: viola-deno-runtime no-alloc IPC refactor
+25efcce chore: align viola mockspace.toml with hilavitkutin stack discipline
+434a3cd docs: seed per-crate DESIGN.md.tmpl for all seven viola crates
+2088e7e docs: scoping memo for #254 viola-as-hilavitkutin-app implementation
+718e0f4 feat: install mockspace workflow foundation; re-root source under mock/
+3c69c74 docs: close both #254 design Qs in HILAVITKUTIN-APP-SHAPE.md
+0ae9975 docs: update hilavitkutin-app-shape against locked megaround
+8dc14fe docs: commit hilavitkutin-app-shape design memo
+2228f87 chore: scrub em-dashes from viola source and TODO docs
+8294f2e refactor!: rename *Cap marker structs to *Provider (#7)
+69a1df8 docs: sweep cap/Capability/CAP_* vocab to provider/Provider/PROVIDER_* (#6)
+4fbc163 Merge pull request #5 from hiisi-digital/feat/hilavitkutin-provider-migration
+4face2b docs: clean Mask64/Mask vocabulary in role.rs module doc
+3dc8ce7 fix: adopt arvo Round D Mask<W> chassis in role.rs
+1924218 feat!: migrate viola to hilavitkutin Provider* + .with builder
+af16884 feat: enrich workspace Cargo metadata for crates.io presentation (#4)
+61b9fb7 docs: sweep em-dashes from plugin abi design doc
+f7aa568 docs: sweep em-dashes from TODO and mark phases 1-5 complete
+32cb286 docs: add viola-cli README and TODO (#1)
+8653674 refactor: viola substrate-reuse Tier 2 (#248) (#27)
