@@ -232,7 +232,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 [[package]]
 name = "mockspace"
 version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#d5f478a399457b8eded8aee24c971d55a4ea2d57"
+source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#678c5854ef33463c5821bfb74872c4ec703897ac"
 dependencies = [
  "libloading",
  "mockspace-lint-rules 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
@@ -258,7 +258,7 @@ dependencies = [
 [[package]]
 name = "mockspace-lint-rules"
 version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#d5f478a399457b8eded8aee24c971d55a4ea2d57"
+source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#678c5854ef33463c5821bfb74872c4ec703897ac"
 dependencies = [
  "tree-sitter",
  "tree-sitter-rust",
@@ -502,7 +502,7 @@ version = "0.1.0"
 dependencies = [
  "arvo",
  "hilavitkutin-extensions",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
