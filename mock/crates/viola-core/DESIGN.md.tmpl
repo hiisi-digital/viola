@@ -363,3 +363,27 @@ On evaluate success, projects up to `MAX_DIAGS_PER_LINT` `Diagnostic` records fr
 The column-capacity contract: callers MUST provision `Column<WuDiagnostic>` with at least `MAX_LINTS * MAX_DIAGS_PER_LINT` slots. The body's projection loop carries a `debug_assert!` at the writer boundary to catch a misprovisioned column at write time during development builds.
 
 `host_ctx = null_mut()` is the documented Slice 6a placeholder (same as Slice 5b RunRunner; plugins tolerate per ABI doc).
+
+## Slice 7a EmitDiagnostics design
+
+Slice 7a ratifies the design tensions that gate the EmitDiagnostics body and flips `DiagnosticSink` from the Slice 1 ZST to a non-ZST placeholder so the WU stub compiles with a non-ZST type. Slice 7b lands the body proper plus the supporting Resources.
+
+### `DiagnosticSink`
+
+Slice 7a flip: non-ZST placeholder. The type holds a transient counter field for the lone purpose of being non-ZST so consumers can extend without backwards-compat churn between 7a and 7b. The placeholder field is non-`pub` (private or `pub(crate)`); it is not a stable surface. Slice 7b flips to `DiagnosticSink<W: EmitWriter>` with private `writer: UnsafeCell<W>` per the locked design.
+
+Pre-#254 `viola_core::aggregate::CaptureSink` is the eventual replacement target. Slice 8 viola-cli rewire deletes CaptureSink and wires its replacement to `Resource<DiagnosticSink>` per the established Resource-not-direct-state pattern from `hilavitkutin-workunit-mental-model.md`.
+
+### Slice 7b body chosen paths
+
+The five Slice 7a-ratified design tensions and Slice 7b's chosen paths:
+
+| Tension | Path chosen |
+|---|---|
+| DiagnosticSink shape | Trait-driven generic carrier: `DiagnosticSink<W: EmitWriter>` with private `UnsafeCell<W>`. viola-cli provides the concrete EmitWriter impl. |
+| EmitWriter trait surface | Minimal trait with `write_str`, `write_bytes`, `flush`. **Return type is an open question for Slice 7b's CL**: unit-return is simpler; `notko::Outcome<()>` surfaces I/O failure to the caller for explicit handling. |
+| Host-side sort | Approximate by `(source, severity, range.start_line, range.start_col, original_slot_index)`. The trailing slot-index tiebreaker pins stability across runs against the same input. Canonical ABI §10 sort restoration waits on the LintFinding-carrier upgrade. |
+| Surface choice | Hardcode human-readable; JSON / LSP defer to Resource<RunSurface> shipping in a later slice. |
+| Per-L row-range gap handling | `Resource<DiagnosticCounts>`: `[arvo::USize; MAX_LINTS]` populated counts. RunLint Write extension writes per-L count; EmitDiagnostics iterates per-L only up to count. **The RunLint AccessSet extension is a load-bearing change**: Slice 9 parallel fan-out audit re-checks COMMUTATIVE-flag commutativity against the extended Write set. |
+
+Each path is tracked as a Slice 7b BACKLOG entry below.

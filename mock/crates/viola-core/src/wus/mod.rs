@@ -129,7 +129,20 @@ pub enum WuDiagnosticSource {
     Emit,
 }
 
-/// Placeholder for the diagnostic egress sink. Slice 7 wires real fields.
-#[derive(Copy, Clone, Debug)]
-pub struct DiagnosticSink;
+/// Diagnostic egress sink Resource. Slice 7a non-ZST placeholder so
+/// the type is non-ZST; the placeholder field is private (not `pub`)
+/// so it does not become a backwards-compat surface between 7a and 7b.
+/// Slice 7b flips to a generic-carrier shape `DiagnosticSink<W: EmitWriter>`
+/// with private `writer: UnsafeCell<W>` per the Slice 7a DOC CL.
+pub struct DiagnosticSink {
+    staged: core::cell::Cell<arvo::USize>,
+}
+
+impl Default for DiagnosticSink {
+    fn default() -> Self {
+        Self {
+            staged: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: empty-counter init; tracked: #72
+        }
+    }
+}
 
