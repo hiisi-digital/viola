@@ -12,7 +12,8 @@ use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
 
 use super::stub::WuCtxStub;
-use super::{PluginEntry, ViolaConfigOpaque};
+use super::PluginEntry;
+use viola_config::ViolaCfg;
 
 /// Reads config, writes the discovered plugin set.
 pub struct LoadPlugins;
@@ -23,7 +24,7 @@ impl BuilderInput for LoadPlugins {
 }
 
 impl WorkUnit for LoadPlugins {
-    type Read = Cons<Resource<ViolaConfigOpaque>, Empty>;
+    type Read = Cons<Resource<ViolaCfg>, Empty>;
     type Write = Cons<Column<PluginEntry>, Empty>;
     type Hint = (Immediate, Atomic, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;

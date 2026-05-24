@@ -44,11 +44,15 @@ hilavitkutin-linking = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git",
 hilavitkutin-extensions = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions-macros = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-api = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
+hilavitkutin-str = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 
 notko = { git = "ssh://git@github.com/orgrinrt/notko.git", branch = "dev", default-features = false }
 arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 arvo-bits = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 arvo-bitmask = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-refit = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-storage = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-bits-contracts = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 
 # Local iteration overrides. Sibling-checkout layout
 # (`~/Dev/clause-dev/{viola,hilavitkutin,arvo,notko}`) is the assumed
@@ -59,6 +63,7 @@ hilavitkutin-linking = { path = "../../hilavitkutin/mock/crates/hilavitkutin-lin
 hilavitkutin-extensions = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions" }
 hilavitkutin-extensions-macros = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }
 hilavitkutin-api = { path = "../../hilavitkutin/mock/crates/hilavitkutin-api" }
+hilavitkutin-str = { path = "../../hilavitkutin/mock/crates/hilavitkutin-str" }
 
 [patch."ssh://git@github.com/orgrinrt/notko.git"]
 notko = { path = "../../notko" }
@@ -67,3 +72,6 @@ notko = { path = "../../notko" }
 arvo = { path = "../../arvo/mock/crates/arvo" }
 arvo-bits = { path = "../../arvo/mock/crates/arvo-bits" }
 arvo-bitmask = { path = "../../arvo/mock/crates/arvo-bitmask" }
+arvo-refit = { path = "../../arvo/mock/crates/arvo-refit" }
+arvo-storage = { path = "../../arvo/mock/crates/arvo-storage" }
+arvo-bits-contracts = { path = "../../arvo/mock/crates/arvo-bits-contracts" }

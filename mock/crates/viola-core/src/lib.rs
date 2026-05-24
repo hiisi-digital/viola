@@ -43,6 +43,8 @@ pub use hilavitkutin_extensions::{
     ShutdownHandler, default_policy,
 };
 
+pub use viola_config::ViolaCfg;
+
 pub use viola_plugin_abi::{
     BytesRef, PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE,
     PROVIDER_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch,

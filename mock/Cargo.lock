@@ -82,6 +82,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arvo-refit"
+version = "0.1.0"
+dependencies = [
+ "arvo-bitmask",
+ "arvo-bits-contracts",
+ "arvo-mask-contracts",
+ "arvo-storage",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+ "notko",
+]
+
+[[package]]
 name = "arvo-storage"
 version = "0.1.0"
 dependencies = [
@@ -195,6 +207,16 @@ dependencies = [
  "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "notko",
  "windows-sys",
+]
+
+[[package]]
+name = "hilavitkutin-str"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bits",
+ "arvo-refit",
+ "notko",
 ]
 
 [[package]]
@@ -468,6 +490,7 @@ name = "viola-config"
 version = "0.1.0"
 dependencies = [
  "arvo",
+ "hilavitkutin-str",
  "notko",
 ]
 
@@ -480,7 +503,9 @@ dependencies = [
  "arvo-bits",
  "hilavitkutin-api",
  "hilavitkutin-extensions",
+ "hilavitkutin-str",
  "notko",
+ "viola-config",
  "viola-plugin-abi",
 ]
 

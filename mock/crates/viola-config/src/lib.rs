@@ -50,6 +50,9 @@
 
 use notko::{Maybe, Outcome};
 
+// Brings `USize::ZERO` into scope for the const constructors below.
+use arvo::Identity as _;
+
 mod parse;
 pub mod issue_pattern;
 
@@ -416,6 +419,172 @@ pub fn parse_default<'a>(
 ) -> Outcome<ViolaConfig<'a, 16>, ConfigError> {
     parse::<16>(input)
 }
+
+// ---------------------------------------------------------------------
+// Slice 2a: owned-form bridge for the Resource<T: 'static> boundary.
+//
+// `ViolaConfig<'a, N>` is the borrowed parser output. The host shim and
+// `LoadConfig` WorkUnit need an owned form that satisfies `T: 'static`,
+// because `hilavitkutin_api::Resource<T>` requires `'static`. The owned
+// form below copies borrowed slices into stable storage: each `&[u8]`
+// becomes a `hilavitkutin_str::Str` handle, and each fixed-cap list is
+// paired with a `Cap<N>` length tracker. The arena that backs every
+// `Str` lives as a private field on the owned struct itself, so the
+// bundle is self-contained.
+//
+// Slice 2a ships the types; Slice 2b (`LoadConfig::execute` body) wires
+// the parse path and the arena's real intern/resolve. The arena and the
+// owned-record placeholders are zero-sized for Slice 2a.
+// ---------------------------------------------------------------------
+
+/// Maximum number of plugins one `ViolaConfigOwned` can carry. Matches
+/// the workspace-default `MAX_PLUGINS` for the borrowed `ViolaConfig`.
+pub const MAX_PLUGINS: usize = 16; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; ConstParamTy on usize is the stack convention; tracked: #72
+
+/// Maximum number of gates (`[gates]` entries) in one config.
+pub const MAX_GATES: usize = 32; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
+/// Maximum number of `[[severity]]` rules in one config.
+pub const MAX_RULES: usize = 64; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
+/// Maximum number of `[[severity.partial]]` rules in one config.
+pub const MAX_PARTIAL_RULES: usize = 16; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
+/// Arena byte capacity for one `ViolaConfigOwned`. Backs every `Str`
+/// handle interned during parse.
+pub const ARENA_BYTES: usize = 8192; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
+/// Maximum byte length of the raw viola.toml buffer the host shim hands
+/// to `LoadConfig`. The buffer lives in `Resource<ConfigBytes>`.
+pub const CONFIG_MAX_BYTES: usize = 16384; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
+/// Host-shim-populated raw bytes of the workspace viola.toml.
+///
+/// `LoadConfig` reads this Resource and parses into `Resource<ViolaCfg>`.
+/// `len` tracks the populated prefix of `bytes`; the trailing region is
+/// uninitialised in practice but `[u8; N]` zeroes it for type-safety.
+pub struct ConfigBytes {
+    pub bytes: [u8; CONFIG_MAX_BYTES], // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: raw byte buffer at host-shim boundary; tracked: #72
+    pub len: arvo::Cap,
+}
+
+/// Crate-private fixed-cap arena backing every `Str` handle inside one
+/// `ViolaConfigOwned`. Slice 2a ships the type with `unimplemented!()`
+/// `ArenaInterner` methods; Slice 2b wires the real intern path.
+///
+/// Slice 2a callers must not invoke `arena_intern` or `arena_resolve`.
+/// `ViolaCfg::new()` constructs an empty arena (no interning happens
+/// at construction); the panicking methods only fire if a caller
+/// reaches them through `StringInterner<ConfigArena<N>>::intern`. No
+/// Slice 2a code path does.
+struct ConfigArena<const N: usize> {
+    _bytes: [u8; N], // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: raw arena buffer; the arena IS the irreducible byte-storage primitive; tracked: #72
+}
+
+impl<const N: usize> ConfigArena<N> {
+    /// Empty arena. Slice 2b replaces the body with real allocator
+    /// state; until then this is `[0u8; N]`-init only.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    const fn new() -> Self {
+        Self {
+            _bytes: [0u8; N], // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: zero-init of the raw arena buffer; tracked: #72
+        }
+    }
+}
+
+impl<const N: usize> hilavitkutin_str::ArenaInterner for ConfigArena<N> {
+    fn arena_intern(&self, _s: &str) -> u32 { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
+        unimplemented!("ConfigArena::arena_intern not implemented until Slice 2b. Slice 2a Resource<ViolaCfg> must not be read or written by any WU body.")
+    }
+    fn arena_resolve(&self, _id: u32) -> &str { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
+        unimplemented!("ConfigArena::arena_resolve not implemented until Slice 2b. Slice 2a Resource<ViolaCfg> must not be read or written by any WU body.")
+    }
+}
+
+/// Owned-form viola config. Self-contained `'static` value: every
+/// borrowed slice in `ViolaConfig` becomes a `Str` handle into the
+/// bundled `arena`, every variable-length list becomes a fixed-cap
+/// `[T; CAP]` plus a `Cap<CAP>` length tracker.
+///
+/// Slice 2a ships the type with zero-sized placeholder records
+/// (`PluginEntryOwned`, etc.) inside the fixed-cap arrays. Body slices
+/// land real field shapes when they first need each.
+pub struct ViolaConfigOwned<
+    const MAX_PLUGINS: usize,
+    const MAX_GATES: usize,
+    const MAX_RULES: usize,
+    const MAX_PARTIAL_RULES: usize,
+    const ARENA_BYTES: usize,
+> {
+    pub plugins: [PluginEntryOwned; MAX_PLUGINS],
+    pub plugins_len: arvo::Cap,
+    pub gates: [GateOwned; MAX_GATES],
+    pub gates_len: arvo::Cap,
+    pub rules: [RuleOwned; MAX_RULES],
+    pub rules_len: arvo::Cap,
+    pub partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES],
+    pub partial_rules_len: arvo::Cap,
+    arena: ConfigArena<ARENA_BYTES>,
+}
+
+/// Placeholder for one plugin entry in `ViolaConfigOwned`. Slice 3
+/// (`LoadPlugins` body) replaces with real fields (`name: Str`,
+/// `path: Str`, etc.).
+#[derive(Copy, Clone, Debug, Default)]
+pub struct PluginEntryOwned;
+
+/// Placeholder for one gate entry. Validator slices replace with real
+/// fields.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct GateOwned;
+
+/// Placeholder for one `[[severity]]` rule. Validator slices replace
+/// with real fields.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct RuleOwned;
+
+/// Placeholder for one `[[severity.partial]]` rule. Validator slices
+/// replace with real fields.
+#[derive(Copy, Clone, Debug, Default)]
+pub struct PartialRuleOwned;
+
+impl<
+    const MAX_PLUGINS: usize,
+    const MAX_GATES: usize,
+    const MAX_RULES: usize,
+    const MAX_PARTIAL_RULES: usize,
+    const ARENA_BYTES: usize,
+> ViolaConfigOwned<MAX_PLUGINS, MAX_GATES, MAX_RULES, MAX_PARTIAL_RULES, ARENA_BYTES>
+{
+    /// Construct an empty owned config. Slice 2b's `ViolaConfigOwned::from_borrowed`
+    /// will project a `ViolaConfig<'_, N>` into this shape; for Slice 2a
+    /// the constructor exists so the type can be instantiated in tests
+    /// once they land.
+    pub const fn new() -> Self {
+        Self {
+            plugins: [PluginEntryOwned; MAX_PLUGINS],
+            plugins_len: arvo::Cap(arvo::USize::ZERO),
+            gates: [GateOwned; MAX_GATES],
+            gates_len: arvo::Cap(arvo::USize::ZERO),
+            rules: [RuleOwned; MAX_RULES],
+            rules_len: arvo::Cap(arvo::USize::ZERO),
+            partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES],
+            partial_rules_len: arvo::Cap(arvo::USize::ZERO),
+            arena: ConfigArena::<ARENA_BYTES>::new(),
+        }
+    }
+}
+
+/// Workspace-default instantiation of `ViolaConfigOwned`. Consumers
+/// reference this alias rather than the full const-generic shape.
+pub type ViolaCfg = ViolaConfigOwned<
+    MAX_PLUGINS,
+    MAX_GATES,
+    MAX_RULES,
+    MAX_PARTIAL_RULES,
+    ARENA_BYTES,
+>;
 
 #[cfg(test)]
 mod gate_resolution_tests {
