@@ -1,0 +1,59 @@
+# viola-cli: Design
+
+`viola` binary. Entry point that reads config, loads plugins, drives the run, and emits diagnostics. `#![no_std]`, `#![no_main]`.
+
+The crate is intentionally thin: argument parsing plus diagnostic formatting plus glue to `viola-core`. The pipeline orchestration itself lives in `viola-core::run` today and, per the locked target state in `docs/internal/HILAVITKUTIN-APP-SHAPE.md`, will move to a `scheduler.run()` call wired up via the registered WorkUnit graph in viola-core.
+
+## Numeric formatters
+
+`#![no_std]` plus `#![no_main]` rules out `std::fmt` heap allocation, so the crate ships hand-rolled byte-buffer formatters for the small set of numeric widths the CLI prints.
+
+### `u32_to_dec`
+
+Formats a `u32` as decimal bytes into a caller-provided buffer. Returns the slice of the buffer that was filled.
+
+### `usize_to_dec`
+
+Formats a `usize` as decimal bytes into a caller-provided buffer. Returns the slice that was filled.
+
+Justified deviation from the stack's `hilavitkutin-api::Encoder` codec contract: pulling the full codec trait machinery into a no_std no_main binary inflates the dependency surface for what is effectively two tiny formatters. Documented at the module doc comment, with a pointer to `Encoder<T>` for consumers that want the unified surface.
+
+## Stderr helpers
+
+### `STDERR`
+
+`pub const` holding the stderr file descriptor (the platform integer 2). Used by `eprint` and `eprintln` to address the stream via the raw `libc::write` syscall.
+
+### `eprint`
+
+Writes bytes to stderr without panic-on-error semantics. Caller passes the bytes; the function attempts the write and silently ignores partial-write or EINTR cases (the caller can retry if needed).
+
+### `eprintln`
+
+Same as `eprint` plus a trailing newline. Convenience for the common case.
+
+## IO
+
+### `read_file`
+
+Slurps a file into a caller-provided buffer. Returns the slice of the buffer that was filled. Caller manages buffer sizing; the function does not allocate.
+
+### `write_to_buf_with_nul`
+
+Copies bytes to a buffer and null-terminates. Used for FFI-shaped paths the host needs to pass as C strings. The buffer must have one byte of slack beyond the input length for the terminator.
+
+## Locked target state
+
+Per `docs/internal/HILAVITKUTIN-APP-SHAPE.md`, the binary becomes a thin `main` that:
+
+1. Parses args into `Resource<Args>` and `Resource<Env>` carriers.
+2. Builds a `Scheduler` registering the seven viola WorkUnits, the stores (`Workspace`, `CiState`, `RunSurface`, `ViolaConfig`, `ExtensionHost`, `Column<FileInfo>`, `Column<Nam>`, `Column<Diagnostic>`, the nine `*Metrics` Resources, `Virtual<AnomalyFired>`), and `AdaptWu` from `hilavitkutin-providers`.
+3. Calls `scheduler.run()` and exits with the outcome's encoded status.
+
+`MAX_LINTS` (the `const L: usize` parameter on `RunLint<L>`) is a compile-time constant declared in this crate. Default candidate value: 32 or 64; settled during #254 implementation.
+
+## Dependencies
+
+Depends on `viola-core`, `viola-config`, `viola-plugin-abi` (re-exported types), `notko` for fallibility primitives, `arvo` for numeric types.
+
+The `Cargo.toml` for this crate has its own `build.rs` for platform-link work (the `-lSystem` link on macOS); the mockspace bootstrap call lives in `viola-plugin-abi`'s `build.rs` instead.
