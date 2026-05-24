@@ -21,3 +21,27 @@ The hilavitkutin-api `ColumnWriterApi` surface today exposes `write(&self, i: US
 ## Runtime test-Ctx fixture for LoadPlugins
 
 Slice 3 shipped a compile-time AccessSet-shape witness test for `LoadPlugins` but deferred the runtime parse-success and dlopen-failure tests. Inherits the same blocker as the LoadConfig fixture above: WuCtxStub Stub provider calls unimplemented on every API method. The LoadPlugins fixture is more involved than LoadConfig's: it needs concrete storage for `Resource<ViolaCfg>`, `Resource<ExtensionHost>`, `Column<PluginEntry>`, and `Column<WuDiagnostic>` simultaneously, plus a strategy for the dlopen side (real `Library::load` against a workspace-local fixture cdylib, or a mockable indirection). Lands per a separate body-and-fixture PR after the LoadConfig fixture proves the shape; the LoadPlugins fixture reuses LoadConfig's `Has`-accessor scaffolding.
+
+## Filesystem walker for no_std host
+
+Slice 4 picks Path B (host shim walks at scheduler-builder time, WU projects). Path A (in-WU walker via libc-syscalls) is the eventual right shape once a hilavitkutin-fs stack-side helper exists. The walker would mirror the `hilavitkutin_linking` pattern: wrap libc opendir / readdir / closedir without alloc, expose a Cap-bounded iteration surface, integrate with hilavitkutin-persistence cold-store for incremental walks. Open design questions (error semantics, symlink loop detection, max-depth caps) defer until the stack-side conversation opens. Once it lands, the DiscoverFiles body shifts from reading `Resource<DiscoveredFilePaths>` to in-WU walking; the host shim drops its filesystem-walking responsibility.
+
+## Include exclude pattern matching for DiscoverFiles
+
+The scoping memo names include / exclude pattern matching as a DiscoverFiles responsibility. `viola_config::ViolaConfigOwned` today carries no `includes` or `excludes` field; the patterns themselves need a viola-config round that designs the `IncludePattern` and `ExcludePattern` newtypes, the array caps, the populate-arm fill-in, and the matching semantics (glob, prefix, exact). The DiscoverFiles body refinement waits for that round. When it lands, DiscoverFiles AccessSet extends: Read gains `Resource<ViolaCfg>`, Write gains `Column<WuDiagnostic>` for invalid-pattern errors. Today's Slice 4 body unconditionally projects every input slot.
+
+## FileKind classification beyond Regular
+
+Slice 4 constructs only `FileKind::Regular` on every projection because the host shim today reports only path existence. Refinement: extend `Resource<DiscoveredFilePaths>` to carry per-path kind classification (sibling `Cell<[FileKind; MAX_DISCOVERED_FILES]>` array, or a packed bitfield, or a sibling `Resource<FileKinds>`) populated by the host shim at scheduler-builder time. Once available, the body reads the per-entry kind and constructs the matching `FileInfo` variant.
+
+## FileInfo size hints
+
+`FileInfo` ships two fields in Slice 4: path and kind. Future Slice 6 (RunLint) may want file-size hints for buffer pre-sizing and dispatch prioritisation. Tracks the third field shape as a future scoping decision: a `size: arvo::USize` field, a per-Kind enum payload, or a sibling `Column<FileSize>`. The right shape depends on RunLint specifics.
+
+## Workspace-relative diagnostic context for DiscoverFiles
+
+Slice 4 narrows the AccessSet to consume only `Resource<DiscoveredFilePaths>`; `Resource<Workspace>` drops from the Slice 1 forward-looking Read. When a future producer slice extends DiscoverFiles to emit `WuDiagnostic` records (e.g. invalid-pattern errors after the include / exclude refinement, or kind-classification errors), the workspace root may want to anchor diagnostic messages. That refinement extends Read to include `Resource<Workspace>` at the point of consumption. Tracked here as the trigger.
+
+## Runtime test-Ctx fixture for DiscoverFiles
+
+Slice 4 ships a compile-time AccessSet-shape witness test for DiscoverFiles. Runtime projection tests defer to a follow-up that shares fixture infrastructure with the Slice 2b LoadConfig and Slice 3 LoadPlugins runtime fixtures. The DiscoverFiles fixture needs concrete storage for `Resource<DiscoveredFilePaths>` and `Column<FileInfo>` at minimum; refinement extensions add more Resources/Columns as their AccessSet extensions land.

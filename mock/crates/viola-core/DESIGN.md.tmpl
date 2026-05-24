@@ -171,3 +171,50 @@ Column record carried by `Column<PluginEntry>`. Four `Copy` fields:
 Derives `Copy, Clone, PartialEq, Eq`. `Debug` is intentionally omitted: `arvo_bitmask::Mask<W>` and `hilavitkutin_extensions::AbiVersion` do not derive `Debug` in their current upstream releases. The `viola-core/SHAME.md.tmpl` entry under `## PluginEntry` tracks the discipline gap; future upstream PRs adding `Debug` lift the omission. A workspace-local Debug-newtype wrapping that adds the derive is rejected on its own merit: the wrap would shadow the upstream type in every downstream signature for one synthetic format trait, which costs more readability than the missing `Debug` does. The SHAME entry is the right tracking shape.
 
 Why the split between `ExtensionHost` (Resource) and `PluginEntry` (Column record) rather than a single Column carrying the `Library` directly: `Column<T>` constrains `T: ColumnValue = Copy + 'static`. `Library` has a `Drop` impl for RAII dlopen cleanup, so it cannot satisfy `Copy`. The pre-Slice-3 design memo enumerated two paths: Path A had `PluginEntry` carrying `Library` by value (infeasible per the Copy constraint); Path B splits the loaded handle into the Resource and keeps the column carrying small Copy descriptors with the `host_idx` bridge. Slice 3 ships Path B.
+
+## Slice 4 file-discovery shapes
+
+Slice 4 lands the `DiscoverFiles` body. The body consumes a host-shim-populated input Resource and projects each entry into one `FileInfo` record on `Column<FileInfo>`. Filesystem walking lives in the host shim at scheduler-builder time; the WU stays pure no_std data-transformation code per the hilavitkutin-workunit-mental-model.md framing.
+
+### `DiscoveredFilePaths`
+
+Host-shim-populated input Resource carrying every workspace-discovered path the viola run will lint. Internal storage is `UnsafeCell<[hilavitkutin_str::Str; MAX_DISCOVERED_FILES]>` plus `Cell<arvo::USize>` length counter; mirrors the `ExtensionHost` interior-mutability pattern but in the read-only-after-builder direction (host shim populates once at scheduler-builder time, every WU consumes via `Read`).
+
+`unsafe impl Sync for DiscoveredFilePaths` pins a four-invariant SAFETY contract: the host shim is the sole producer at scheduler-builder time (no writes after `Scheduler::build()`); every WU that consumes discovered paths declares `Resource<DiscoveredFilePaths>` in its `Read` set only; no WU declares it in `Write`; the interior mutability through `&self` during the build phase is single-threaded by construction (the host shim runs on the main thread before scheduler dispatch begins).
+
+The write surface is an `unsafe` host-shim seam: `pub unsafe fn push(&self, path: Str) -> arvo::Cap`. The caller-asserted invariants (four of them, naming the temporal contract, single-threaded build phase, the cap bound, and no-Write-declaration-by-any-WU) live in a `# Safety` clause on `push` mirroring `ExtensionHost::push`'s pattern. Read accessors `paths_len(&self) -> arvo::Cap` and `path_at(&self, idx) -> Maybe<Str>` are safe; `path_at` returns `Maybe::Isnt` past `paths_len`.
+
+### `MAX_DISCOVERED_FILES`
+
+Const cap for the `DiscoveredFilePaths` Resource. Workspace-default `4096`. Pre-1.0; revisable once realistic viola runs surface average-case file counts. Tracked alongside the other workspace caps (MAX_PLUGINS, MAX_LINTS).
+
+### `FileInfo`
+
+Column record carried by `Column<FileInfo>`. Two `Copy` fields:
+
+| Field | Type | Role |
+|---|---|---|
+| `path` | `hilavitkutin_str::Str` | Interned path handle copied from the matching `DiscoveredFilePaths` slot during projection. |
+| `kind` | `FileKind` | File-type classification. Slice 4 constructs only the Regular variant until the host shim supplies kind info; future refinement (see BACKLOG) populates the full classification. |
+
+Derives `Copy, Clone, Debug, PartialEq, Eq` to satisfy the `ColumnValue` blanket (`Copy + 'static`).
+
+### `FileKind`
+
+Closed-vocabulary enum classifying one discovered file. Three variants:
+
+| Variant | Meaning |
+|---|---|
+| Regular | A regular file (the common case; lints operate on these). |
+| Symlink | A symbolic link. Lints may follow or skip per future config. |
+| Other | Anything else (fifo, device, socket, directory if the host shim emits one). |
+
+Per `vocabulary.md`'s closed-enum-as-spec pattern (`Phase` precedent). Slice 4 constructs only the Regular variant because the host shim today reports only existence. Once the host shim's walker enriches kind info, the body picks the matching variant.
+
+### `DiscoverFiles` Slice 4 body
+
+The Slice 1 stub declared a forward-looking AccessSet (`Read = Cons<Resource<Workspace>, Cons<Resource<ViolaCfg>, Empty>>` and `Write = Cons<Column<FileInfo>, Empty>`). Slice 4 narrows the AccessSet to match body usage exactly: Read becomes `Cons<Resource<DiscoveredFilePaths>, Empty>` (the Slice 1 Workspace and ViolaCfg declarations were anticipatory; the body does not consume them today); Write stays `Cons<Column<FileInfo>, Empty>`. AccessSet declarations are scheduler-visible contracts that force serialisation around named Resources; declaring access the body does not consume costs scheduler concurrency for no benefit.
+
+Future slices extend the AccessSet at the point of consumption: the include/exclude filtering refinement adds `Resource<ViolaCfg>` to Read and `Column<WuDiagnostic>` to Write; the workspace-relative diagnostic context refinement adds `Resource<Workspace>` to Read. Each extension lands in the slice that consumes it; the BACKLOG entries explicitly name these triggers.
+
+Body reads `Resource<DiscoveredFilePaths>`, iterates from slot zero to `paths_len()`, projects each `Str` handle into a `FileInfo { path: handle, kind: FileKind::Regular }` record, writes the record to `Column<FileInfo>` at a local-counter slot. The local-counter (`written_count: usize`) tracks column length by construction because `Column::len` on the writer side does not exist yet (see BACKLOG entry on `viola-core`). The `Maybe::Isnt` arm from `path_at` is unreachable by construction (the loop guard is `paths_len()` and `path_at` only returns `Isnt` past `paths_len`); the body asserts that contract with `unreachable!()` to surface a logic bug if the invariant ever fires.

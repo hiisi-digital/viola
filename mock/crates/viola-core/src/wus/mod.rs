@@ -53,9 +53,31 @@ pub struct PluginEntry {
     pub host_idx: arvo::Cap,
 }
 
-/// Placeholder for the per-file record. Slice 4 wires real fields.
-#[derive(Copy, Clone, Debug)]
-pub struct FileInfo;
+/// Column record carried by `Column<FileInfo>`. Two `Copy` fields:
+/// `path` (a host-shim-interned `Str` handle copied from the matching
+/// `DiscoveredFilePaths` slot during projection) and `kind` (the
+/// file-type classification; Slice 4 constructs only `FileKind::Regular`
+/// until the host shim supplies kind info per the BACKLOG entry).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct FileInfo {
+    pub path: hilavitkutin_str::Str,
+    pub kind: FileKind,
+}
+
+/// Closed-vocabulary enum classifying one discovered file. Per
+/// `vocabulary.md`'s closed-enum-as-spec pattern; the three variants
+/// are the spec.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+pub enum FileKind {
+    /// A regular file. The common case; lints operate on these.
+    #[default]
+    Regular,
+    /// A symbolic link. Lints may follow or skip per future config.
+    Symlink,
+    /// Anything else (fifo, device, socket, directory if the host shim
+    /// emits one).
+    Other,
+}
 
 /// Placeholder for the per-file parser snapshot. Slice 5 wires real fields.
 #[derive(Copy, Clone, Debug)]

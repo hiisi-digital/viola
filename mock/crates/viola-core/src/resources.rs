@@ -166,3 +166,114 @@ impl Drop for ExtensionHost {
         }
     }
 }
+
+/// Workspace-default cap for the `DiscoveredFilePaths` Resource. Pre-1.0;
+/// revisable once realistic viola runs surface average-case file counts.
+pub const MAX_DISCOVERED_FILES: usize = 4096; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: ConstParamTy positions require bare usize; sibling MAX_PLUGINS pattern; tracked: #72
+
+/// Singleton store of host-shim-discovered file paths.
+///
+/// The host shim walks the workspace filesystem at scheduler-builder
+/// time and pushes each discovered path as a `Str` handle into this
+/// Resource. `DiscoverFiles` (Slice 4) reads it via `Read` and projects
+/// each entry into `Column<FileInfo>`.
+///
+/// Unlike `ExtensionHost` the slot type (`Str`) is `Copy` with a
+/// well-defined default sentinel, so no `MaybeUninit` is needed. The
+/// store initialises every slot to `Str::default()`; populated slots
+/// carry the host-shim-interned handles up to `paths_len`.
+pub struct DiscoveredFilePaths {
+    paths: core::cell::UnsafeCell<[hilavitkutin_str::Str; MAX_DISCOVERED_FILES]>,
+    paths_len: core::cell::Cell<arvo::USize>,
+}
+
+// SAFETY: Four-invariant contract pinning the `unsafe impl Sync`. First,
+// the host shim is the sole producer; every `push` call happens between
+// `Scheduler::builder()` and `Scheduler::build()` on the main host
+// thread. Second, every WU declares `Resource<DiscoveredFilePaths>` in
+// its `Read` set only; no WU declares it in `Write`, so the scheduler's
+// AccessSet contract gives every consumer immutable access at dispatch
+// time. Third, the interior mutability through `&self` during the build
+// phase is single-threaded by construction (the host shim runs before
+// scheduler dispatch begins; no parallel WU executes at that point).
+// Fourth, post-build the Resource is effectively read-only because no
+// WU's Write set names it; the `Cell` and `UnsafeCell` never see a
+// second writer.
+unsafe impl Sync for DiscoveredFilePaths {}
+
+impl DiscoveredFilePaths {
+    /// Construct an empty store. Every slot is `Str::default()`;
+    /// `paths_len` is zero.
+    pub fn new() -> Self {
+        Self {
+            paths: core::cell::UnsafeCell::new(
+                [hilavitkutin_str::Str::default(); MAX_DISCOVERED_FILES],
+            ),
+            paths_len: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: zero literal for the empty-store counter; tracked: #72
+        }
+    }
+
+    /// Append one discovered path and return its slot index.
+    ///
+    /// # Safety
+    ///
+    /// Caller asserts four invariants that pin the `unsafe impl Sync`
+    /// contract:
+    ///
+    /// 1. This call happens between `Scheduler::builder()` and
+    ///    `Scheduler::build()`. No WU has begun dispatching.
+    /// 2. The caller is the sole writer for this Resource for the
+    ///    duration of the scheduler-builder phase. No other thread or
+    ///    code path calls `push` concurrently.
+    /// 3. No WU declares `Resource<DiscoveredFilePaths>` in its `Write`
+    ///    set anywhere in the scheduler. Read-only-after-builder is the
+    ///    Sync contract; a Write declaration would invalidate it.
+    /// 4. `paths_len < MAX_DISCOVERED_FILES`. The body defensively
+    ///    asserts this before mutation.
+    pub unsafe fn push(&self, path: hilavitkutin_str::Str) -> arvo::Cap {
+        let n: usize = *self.paths_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to slot indexing; tracked: #72
+        assert!(
+            n < MAX_DISCOVERED_FILES,
+            "DiscoveredFilePaths::push beyond MAX_DISCOVERED_FILES",
+        );
+        // SAFETY: caller-asserted invariants give single-writer access
+        // and `n < MAX_DISCOVERED_FILES` is checked above; the write is
+        // sound under the four caller-asserted conditions.
+        unsafe {
+            let paths = &mut *self.paths.get();
+            paths[n] = path;
+        }
+        self.paths_len.set(arvo::USize(n + 1)); // lint:allow(no-bare-numeric) reason: counter increment; tracked: #72
+        arvo::Cap(arvo::USize(n))
+    }
+
+    /// Current count of populated slots.
+    pub fn paths_len(&self) -> arvo::Cap {
+        arvo::Cap(self.paths_len.get())
+    }
+
+    /// Read the path handle at slot `idx`. Returns `Maybe::Isnt` when
+    /// `idx` is past `paths_len`.
+    pub fn path_at(&self, idx: arvo::Cap) -> notko::Maybe<hilavitkutin_str::Str> {
+        let i: usize = *idx.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        let n: usize = *self.paths_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to bound comparison; tracked: #72
+        if i >= n {
+            return notko::Maybe::Isnt;
+        }
+        // SAFETY: `i < paths_len` ensures the slot was populated by a
+        // prior `push` call. Read-only access via immutable reborrow of
+        // the UnsafeCell is sound because no Write declaration on this
+        // Resource exists in any WU's AccessSet.
+        let path = unsafe {
+            let paths = &*self.paths.get();
+            paths[i]
+        };
+        notko::Maybe::Is(path)
+    }
+}
+
+impl Default for DiscoveredFilePaths {
+    fn default() -> Self {
+        Self::new()
+    }
+}
