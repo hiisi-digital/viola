@@ -1,0 +1,81 @@
+# viola-deno-runtime: Design
+
+`cdylib` that bridges TypeScript / Deno lint projects into the viola plugin ABI. The crate exports a single `ExtensionDescriptor` whose providers wrap calls to a Deno worker subprocess that runs the TS lint logic. From the viola host's perspective this is one plugin; from the Deno side it is a worker that loads the consumer's TS module.
+
+## Provider implementations
+
+The crate ships one provider for each of the three viola roles, so a single Deno-backed plugin can act as runner, grammar, and lint.
+
+### `RunnerProvider`
+
+Wraps the Deno worker for `viola.runner.execute_scope.v1`. Marshals `RunScope` across the subprocess boundary, receives the produced `NamPayload` back.
+
+### `GrammarProvider`
+
+Wraps the Deno worker for `viola.grammar.extract.v1`. Forwards source bytes; receives a contribution `NamPayload`.
+
+### `LintEvalProvider`
+
+Wraps the Deno worker for `viola.lint.evaluate.v1`. Forwards `NamPayload` + lint config; receives `DiagnosticBatch`.
+
+## Lifecycle
+
+### `InitImpl`
+
+`InitHandler` impl that spawns the Deno worker subprocess and establishes the request channel.
+
+### `ShutdownImpl`
+
+`ShutdownHandler` impl that closes the channel and waits for the worker to exit cleanly.
+
+## Extension entry point
+
+### `DenoRuntimeExtension`
+
+The descriptor-shaped marker. The `#[export_extension]` macro on this struct emits the `__hilavitkutin_extension_descriptor` exported function plus the per-provider trampolines.
+
+## IPC layer
+
+The bridge spawns `deno` via `std::process::Command` and does not embed `deno_core`. Cross-process payloads marshal across the subprocess boundary through a set of crate-private carriers plus a small per-call arena that stages payloads before the channel write. The carriers are not part of the consumer surface; they live as internal scaffolding the bridge uses to encode and decode IPC frames.
+
+### `BridgeMessage`
+
+Wire envelope the worker emits on stdout. Carries an optional diagnostic, an optional done flag, an optional error string. Read frame-by-frame on the host side.
+
+### `BridgeDiag`
+
+Diagnostic record as the worker emits it. Carries plugin id, rule id, severity, message, path, line, column. Converted to `viola_plugin_abi::Diagnostic` before host-side return.
+
+### `LintRequest`
+
+Request payload sent to the worker for one lint invocation. Carries the op tag plus the scope payload.
+
+### `ScopePayload`
+
+Run-scope info forwarded to the worker. Carries the workspace root and the file list.
+
+### `FilePayload`
+
+Per-file metadata inside `ScopePayload`. Carries the path and the language tag.
+
+### `ShutdownRequest`
+
+Terminate signal sent on shutdown.
+
+### `Arena`
+
+Plugin-side arena holding the owned bytes that a `Diagnostic` references via `BytesRef`. Rebuilt on each lint invocation so each call's pointers stay valid only until the next one, matching the v1 contract that "host copies before next invocation".
+
+### `WorkerState`
+
+Live worker handle. Holds the subprocess child, the stdin pipe, the stdout reader, the bridge script path, and the per-call `Arena`. Owned by the extension across the loaded library's lifetime; the `Drop` impl ensures the worker exits cleanly when the host unloads.
+
+## Stack discipline
+
+Per workspace primitive-vocabulary discipline, the IPC layer is moving off `serde` and `serde_json` toward hand-rolled stack-buffer encoding. The locked direction: drop `serde`, drop `serde_json`, drop `alloc`-backed `Vec`, encode IPC frames into fixed-size buffers in the per-call arena, and use `// lint:allow` markers only where the subprocess boundary genuinely cannot avoid the stack-discipline lint (the documented exemptions live with the markers).
+
+The subprocess route avoids the much larger dependency surface that embedding `deno_core` would have required; the cost is the IPC encoding work the bridge now owns.
+
+## Dependencies
+
+Depends on `viola-plugin-abi` for the ABI surface, on `hilavitkutin-extensions` for the loader contract, on `hilavitkutin-extensions-macros` for `#[export_extension]`. Depends on `notko` and `arvo` for fallibility and numeric primitives.

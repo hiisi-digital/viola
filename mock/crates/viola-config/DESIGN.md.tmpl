@@ -1,0 +1,91 @@
+# viola-config: Design
+
+TOML configuration parser for `viola.toml`. `#![no_std]`, no alloc. Parses the lint-host config that a viola consumer authors to declare gates, severity rules, and per-issue pattern overrides.
+
+The TOML surface is documented in `docs/VIOLA-TOML-V2-SCHEMA.md`; this document summarises the parsed in-memory shape.
+
+## Config root
+
+### `ViolaConfig`
+
+The parsed top-level config. Carries gate thresholds, lint config blocks, and severity rule overrides. The crate's primary value type; every consumer call site receives one of these.
+
+### `parse`
+
+Entry point for the parser. Takes input bytes and returns `Result<ViolaConfig, ConfigError>`. Zero-copy slicing into the input; the resulting `ViolaConfig` borrows from the input via lifetimes the caller manages.
+
+### `parse_default`
+
+Convenience wrapper around `parse` that fills in default values where the input is silent. Used by callers that want to materialise a `ViolaConfig` even when the consumer has not supplied an explicit `viola.toml`.
+
+### `ConfigError`
+
+Enum of the parser's error variants. Each variant names the kind of malformedness encountered (unknown key, type mismatch, schema violation, etc.).
+
+## Gate config
+
+### `GateThresholds`
+
+Numeric thresholds for the compound and file-count gates. Applied to the diagnostic batch after a run to decide whether the run succeeded or failed by gate.
+
+### `GateOverride`
+
+Per-issue override carrier that shadows the default thresholds for a specific issue pattern. Used when a consumer wants to relax or tighten a gate for one category without changing the global defaults.
+
+### `SEVERITY_FILES_CAP`
+
+Default cap for the files-affected gate. Applied when no override matches the diagnostic.
+
+### `SEVERITY_COMPOUND_CAP`
+
+Default cap for the compound-condition gate.
+
+### `SEVERITY_PARTIAL_FILES_CAP`
+
+Default cap for the partial-severity files-affected gate (a narrower scoping than the full cap).
+
+## Lint config
+
+### `LintConfigBlock`
+
+Per-lint config payload that gets passed to the lint cdylib as the `lint_config_bytes` arg in `LintEvaluateVtable.evaluate`. The block's contents are opaque to viola-core; only the target lint interprets them.
+
+## Severity rules
+
+### `SeverityRule`
+
+Full-severity rule. Carries an issue-pattern match plus an impact override. Applied to diagnostics post-evaluation to adjust their effective severity.
+
+### `PartialSeverityRule`
+
+Partial-severity rule for narrower scoping. Lets a consumer adjust severity for a subset of an issue category without rewriting the full rule.
+
+### `CompoundOp`
+
+Enum naming the compound-condition operators. Variants: `And`, `Or`. Used inside `IssuePattern` for boolean composition.
+
+## Issue patterns
+
+### `IssuePattern`
+
+Parsed issue-match pattern. Used by severity rules to select which issues a rule applies to. Carries category match, impact match, and optional compound conditions composed via `CompoundOp`.
+
+### `parse_issue_pattern`
+
+Parser entry point for one pattern string. Returns `Result<IssuePattern, IssuePatternError>`.
+
+### `IssuePatternError`
+
+Enum of the issue-pattern parser's error variants.
+
+### `Category`
+
+Enum naming the high-level issue categories (correctness, style, performance, etc.).
+
+### `Impact`
+
+Enum naming the impact levels (low, medium, high, etc.) used as severity overrides in rules.
+
+## Design notes
+
+`#![no_std]` with no alloc to match viola-cli's `#![no_main]` constraint. Parser uses zero-copy slicing into the input bytes; `ViolaConfig` borrows from the input bytes through lifetimes the caller manages. No internal allocation; all storage is the caller's buffer.

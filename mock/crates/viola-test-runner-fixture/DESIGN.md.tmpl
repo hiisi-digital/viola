@@ -1,0 +1,39 @@
+# viola-test-runner-fixture: Design
+
+Internal `cdylib` that ships a deterministic runner-role plugin for viola's integration tests. Companion to `viola-test-plugin-fixture`; together they let host-side tests exercise the runner-then-lints sequence without depending on a real grammar or runner.
+
+`publish = false`. Not a consumer-facing surface.
+
+## Lifecycle
+
+### `InitImpl`
+
+`InitHandler` impl. Fixture state setup.
+
+### `ShutdownImpl`
+
+`ShutdownHandler` impl. Teardown.
+
+## Provider
+
+### `RunnerProvider`
+
+Implements `viola.runner.execute_scope.v1` via `RunnerExecuteScopeVtable`. Produces a fixed `NamPayload` on every call so tests can assert exact runner output and downstream lint behaviour.
+
+## Extension entry point
+
+### `RunnerFixture`
+
+Descriptor marker. The `#[export_extension]` macro emits descriptor plus trampolines.
+
+## Determinism contract
+
+Same deterministic-output contract as the lint fixture. The NAM payload shape is whatever the v1 schema allows; the fixture picks a representative subset and pins it for tests.
+
+## Shared test helpers
+
+`InitImpl`, `ShutdownImpl`, and the `rust_eh_personality` shim are duplicated between this crate and `viola-test-plugin-fixture`. The locked direction moves both into a `viola-test-fixtures` helper crate that both fixtures depend on. Op's AskUserQuestion answer authorised the helper-crate split; the consolidation lands in a follow-up PR.
+
+## Dependencies
+
+`viola-plugin-abi`, `hilavitkutin-extensions`, and the macro crate.

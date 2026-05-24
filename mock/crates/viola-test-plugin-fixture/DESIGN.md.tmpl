@@ -1,0 +1,39 @@
+# viola-test-plugin-fixture: Design
+
+Internal `cdylib` that ships a deterministic lint-evaluation plugin for viola's integration tests. Loaded by viola-core's host-loader test suite to exercise the full plugin lifecycle without depending on a real lint implementation.
+
+`publish = false`. Not a consumer-facing surface.
+
+## Lifecycle
+
+### `InitImpl`
+
+`InitHandler` impl that sets up the fixture's deterministic state.
+
+### `ShutdownImpl`
+
+`ShutdownHandler` impl that tears it down cleanly.
+
+## Provider
+
+### `LintEvalProvider`
+
+Implements the `viola.lint.evaluate.v1` contract via `LintEvaluateVtable`. Emits a fixed diagnostic batch on every call so tests can assert exact output.
+
+## Extension entry point
+
+### `FixturePlugin`
+
+Descriptor marker. The `#[export_extension]` macro emits the descriptor plus trampolines.
+
+## Determinism contract
+
+The fixture's deterministic behaviour is the contract: tests rely on knowing exactly what diagnostics get emitted for a given input. Any change to the fixture's output requires updating the test goldens.
+
+## Shared test helpers
+
+The lifecycle handlers and the `rust_eh_personality` shim are duplicated between this crate and `viola-test-runner-fixture`. The locked direction is to move both into a `viola-test-fixtures` helper crate that both fixtures depend on, eliminating the duplication. Op's AskUserQuestion answer authorised the helper-crate split; the work lands in a follow-up PR once the DESIGN.md.tmpl rewrites merge.
+
+## Dependencies
+
+Same shape as `viola-deno-runtime` but with no `serde` and no Deno bridge: just `viola-plugin-abi`, `hilavitkutin-extensions`, and the macro crate.

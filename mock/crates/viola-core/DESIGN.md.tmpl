@@ -1,0 +1,91 @@
+# viola-core: Design
+
+In-process host runtime that loads plugin cdylibs and drives the lint pipeline. The current shape is a hand-rolled host runtime; the locked target shape under viola task #254 restructures this crate into a set of `WorkUnit` declarations dispatched by `hilavitkutin::Scheduler`. See `docs/internal/HILAVITKUTIN-APP-SHAPE.md` for the canonical target design and `mock/research/202605240700_topic.scoping-254-viola-as-hilavitkutin-app.md` for the implementation scope map.
+
+## Plugin runtime
+
+### `Session`
+
+Bounded plugin-handle store with LIFO drop ordering. `Session<const N: usize>` carries up to N loaded plugins; the const generic caps the slot count at compile time. Each `push` loads a plugin via the `hilavitkutin-extensions` loader and stores its handle; drop runs in LIFO order so plugin shutdown handlers see a consistent teardown sequence.
+
+The locked target state dissolves this type into `Resource<ExtensionHost>` (re-exported from `hilavitkutin-extensions`). The scheduler owns plugin lifetime; `Session` becomes a viola-only artefact of the pre-restructure era.
+
+## Vtable dispatch helpers
+
+### `runner_vtable`
+
+Extracts the `RunnerExecuteScopeVtable` pointer from a loaded plugin's descriptor by looking up `PROVIDER_RUNNER_EXECUTE_SCOPE` in the provider table.
+
+### `grammar_vtable`
+
+Extracts the `GrammarExtractVtable` pointer by looking up `PROVIDER_GRAMMAR_EXTRACT`.
+
+### `lint_vtable`
+
+Extracts the `LintEvaluateVtable` pointer by looking up `PROVIDER_LINT_EVALUATE`.
+
+## Pipeline
+
+### `run`
+
+Orchestrates the runner-then-lints sequence for the current viola run. Loads NAM via the runner provider, walks the loaded lint plugins invoking each via the lint provider, sorts the resulting diagnostics, and emits them. The locked target dissolves this function into `Scheduler::run()` over the registered `WorkUnit` graph; `run` becomes pure scheduler invocation.
+
+### `PipelineReport`
+
+Pipeline-level outcome. Carries the overall success flag, per-plugin failure count, and the list of failure records.
+
+### `FailureRecord`
+
+Single failure entry inside `PipelineReport`. Carries the plugin name, the provider id whose call failed, and the structured error returned by the plugin.
+
+## Diagnostic aggregation
+
+### `cmp_diag`
+
+Total ordering for sorting `Diagnostic` records per the v1 spec §10. Orders by `(path, start_line, start_col, plugin_id, rule_id)` so that runs producing identical diagnostic sets emit them in identical order.
+
+### `sort_diagnostics`
+
+Applies `cmp_diag` to a slice of diagnostics. Stable sort, in-place where the caller's buffer permits.
+
+## Plugin roles
+
+### `Role`
+
+Enum naming the three viola plugin roles. Variants: `Runner`, `Grammar`, `Lint`.
+
+### `RoleSet`
+
+Bitset for declaring which roles a plugin provides. Backed by the `arvo-bitmask::Mask` shape per the workspace primitive-vocabulary discipline. Compact: a single u32 captures the full role set.
+
+### `roles_of`
+
+Walks a plugin's `ExtensionDescriptor` provider table and returns the `RoleSet` it advertises.
+
+### `is_runner`
+
+Predicate: does this descriptor's `RoleSet` include the runner role.
+
+### `is_grammar`
+
+Predicate: does this descriptor's `RoleSet` include the grammar role.
+
+### `is_lint`
+
+Predicate: does this descriptor's `RoleSet` include the lint role.
+
+## Config carrier
+
+### `LintConfig`
+
+Type alias for the bytes carrier the host hands a lint via the `evaluate` vtable's `(lint_config_bytes, lint_config_len)` args. Aliases `BytesRef` today. The design memo flags this as a candidate for unification with `BytesRef` directly once #254 implementation starts.
+
+## Locked target state
+
+Per `docs/internal/HILAVITKUTIN-APP-SHAPE.md`, viola is the canonical hilavitkutin app at the lint-host layer. The entire `viola run` invocation reduces to one `scheduler.run()` call dispatching a graph of WorkUnits over scheduler-owned Resources and Columns. The WorkUnit table in HILAVITKUTIN-APP-SHAPE.md is authoritative; the high-level shape this crate ships under #254 is `LoadConfig`, `LoadPlugins`, `DiscoverFiles`, `RunRunner`, `RunLint<const L: usize>`, and `EmitDiagnostics` as `impl WorkUnit` blocks.
+
+The interim scaffolding (`Session`, `PipelineReport`, `run`, `cmp_diag`, `sort_diagnostics`, the vtable extractors) dissolves as each implementation slice lands. The scoping memo for #254 maps the slices.
+
+## Dependencies
+
+Depends on `viola-plugin-abi` for the vtable plus provider-id contract, on `hilavitkutin-extensions` for the loader, on `notko` for `Maybe` / `Outcome` / `Just`, on `arvo` for numeric primitives.

@@ -1,0 +1,111 @@
+# viola-plugin-abi: Design
+
+Stable C-ABI contract surface for viola plugins. `#![no_std]`, zero allocations across the FFI boundary. All variable-length data crosses as `(ptr, len)` carriers into plugin-owned static memory whose lifetime equals the loaded library.
+
+This crate is the foundation every viola plugin compiles against. The vtable shapes are append-only within an ABI major; adding a new function pointer registers a fresh `ProviderId` rather than mutating an existing vtable. The normative ABI spec lives at `docs/PLUGIN-ABI-V1-DESIGN.md`; this document summarises what the crate ships.
+
+## Provider IDs
+
+Three v1 provider IDs that viola plugins implement against. Each maps to one vtable shape and one viola role.
+
+### `PROVIDER_RUNNER_EXECUTE_SCOPE`
+
+`viola.runner.execute_scope.v1`. The runner-role provider id. Points at a `RunnerExecuteScopeVtable`. Plugins declaring this provider take a `RunScope` and produce a `NamPayload`.
+
+### `PROVIDER_GRAMMAR_EXTRACT`
+
+`viola.grammar.extract.v1`. The grammar-role provider id. Points at a `GrammarExtractVtable`. Plugins declaring this provider take a file plus source bytes and produce a `NamPayload` contribution.
+
+### `PROVIDER_LINT_EVALUATE`
+
+`viola.lint.evaluate.v1`. The lint-role provider id. Points at a `LintEvaluateVtable`. Plugins declaring this provider take a `NamPayload` plus lint config bytes and produce a `DiagnosticBatch`.
+
+## Vtable shapes
+
+Each vtable is a `#[repr(C)]` struct of concrete `extern "C"` function pointers. Append-only within an ABI major per `docs/PLUGIN-ABI-V1-DESIGN.md` §7.3.
+
+### `RunnerExecuteScopeVtable`
+
+Single function pointer `execute_scope(host_ctx, scope, out_nam)`. The runner role gets a `RunScope` wrapper because the spec names "configured run scope" as a domain concept that travels together.
+
+### `GrammarExtractVtable`
+
+Single function pointer `extract(host_ctx, file, source_bytes, source_len, out_contribution)`. Direct args (no wrapper struct) because the four inputs are independent values with no shared spec-named identity.
+
+### `LintEvaluateVtable`
+
+Single function pointer `evaluate(host_ctx, nam, lint_config_bytes, lint_config_len, out_batch) -> AbiStatus`. Direct args (no wrapper struct). The 2026-05-23 three-specialist convergence settled the wrapper-vs-direct-args design Q in favour of direct args.
+
+## Runner-role carriers
+
+### `RunScope`
+
+`#[repr(C)]` bundle the host hands the runner: workspace root, files slice, surface tag, ci flag. Stable wire shape across the FFI boundary; the host constructs it from its in-process Resources at the call site.
+
+### `FileEntry`
+
+`#[repr(C)]` per-file carrier inside the `RunScope.files` slice. Carries path, language, content hash, and size in bytes.
+
+### `RunSurface`
+
+`#[repr(u32)]` enum mirrored into NAM `run_context.surface`. Variants: `Cli`, `Hook`, `Ci`, `Lsp`, `Test`, `Other`.
+
+## NAM carriers
+
+The normalised analysis model the runner produces and the lints read.
+
+### `NamPayload`
+
+`#[repr(C)]` snapshot the host passes to lints. Carries pointers into NAM-formatted bytes that the runner produced.
+
+### `NamVersion`
+
+Version tag carried on the payload. Lets the host validate that runner and lint agree on the NAM schema version before invoking the lint.
+
+## Diagnostic wire shape
+
+The output a lint emits; the host sorts and renders.
+
+### `DiagnosticBatch`
+
+`#[repr(C)]` collection the lint fills with one or more `Diagnostic` records during the `evaluate` call.
+
+### `Diagnostic`
+
+Single diagnostic record: severity, source location, message text, optional metadata.
+
+### `DiagnosticSeverity`
+
+Enum naming the severity levels.
+
+### `SourceLocation` and `SourceRange`
+
+Position carriers. `SourceLocation` is a single point (file, line, column). `SourceRange` is a pair of locations bounding an extent.
+
+## Boundary helpers
+
+### `BytesRef`
+
+Two-word `(ptr, len)` carrier for byte slices crossing the FFI boundary. Identical pattern to hilavitkutin's name slice convention. References plugin-owned static memory stable for the loaded library's lifetime.
+
+### `AbiStatus`
+
+Historical alias for `hilavitkutin_extensions::ExtensionAbiStatus`. Preserves callsites that imported `AbiStatus` from this crate before the substrate rebase. New code should prefer the canonical `ExtensionAbiStatus`.
+
+## Error envelope
+
+### `PluginError`
+
+`#[repr(u32)]` enum of viola-domain error categories. Variants: `RoleProviderMissing`, `ModelVersionMismatch`, `InvocationFailed`, `ConfigInvalid`. Distinct from `hilavitkutin_extensions::ExtensionError` which covers descriptor-level failures rather than viola-domain ones.
+
+### `StructuredError`
+
+`#[repr(C)]` envelope per `docs/PLUGIN-ABI-V1-DESIGN.md` §11. Carries code, message, schema id, details pointer, retryable flag.
+
+## ABI versioning
+
+The `ProviderId` is the version anchor. Adding a new optional hook or alternative dispatch shape registers as `viola.lint.evaluate.v2` rather than mutating v1. The `vtable_ptr` shape from `ProviderEntry` supports forward extension without breaking existing plugins.
+
+## Re-exports
+
+This crate re-exports the descriptor and lifecycle types from `hilavitkutin-extensions` so plugin authors compile against a single dependency surface. The re-exported set includes `ProviderEntry`, `ProviderExport`, `ProviderId`, `DESCRIPTOR_SYMBOL`, `ExtensionAbiStatus`, `ExtensionDescriptor`, `ExtensionMeta`, `ExtensionVersion`, `HOST_ABI_VERSION`, `InitHandler`, `ShutdownHandler`.
