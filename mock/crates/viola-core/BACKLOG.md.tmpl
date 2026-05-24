@@ -45,3 +45,31 @@ Slice 4 narrows the AccessSet to consume only `Resource<DiscoveredFilePaths>`; `
 ## Runtime test-Ctx fixture for DiscoverFiles
 
 Slice 4 ships a compile-time AccessSet-shape witness test for DiscoverFiles. Runtime projection tests defer to a follow-up that shares fixture infrastructure with the Slice 2b LoadConfig and Slice 3 LoadPlugins runtime fixtures. The DiscoverFiles fixture needs concrete storage for `Resource<DiscoveredFilePaths>` and `Column<FileInfo>` at minimum; refinement extensions add more Resources/Columns as their AccessSet extensions land.
+
+## RunRunner body and FFI invocation
+
+Slice 5a ships the `Nam` ZST flip but the `RunRunner::execute` body stays `unimplemented!()`. Slice 5b lands the body proper: resolves the runner plugin from `Resource<ExtensionHost>` plus `Column<PluginEntry>` (find the entry with the runner-role bit set, resolve its `&Library`, extract the runner vtable from the descriptor), marshals `RunScope` from Resources at the FFI boundary, calls `execute_scope`, writes the returned `NamPayload` into `Column<Nam>` at slot zero. On failure (descriptor missing, vtable absent, AbiStatus != Ok), writes `WuDiagnostic { source: WuDiagnosticSource::RunRunner }` to `Column<WuDiagnostic>`. AccessSet extends accordingly.
+
+## FileEntryBuffer Resource for RunRunner
+
+The FFI `RunScope.files: *const FileEntry` and `RunScope.files_len: arvo::USize` need a stable backing array for the call duration. Slice 5b adds a host-shim-populated `Resource<FileEntryBuffer>` paralleling `DiscoveredFilePaths`: `UnsafeCell<[FileEntry; MAX_DISCOVERED_FILES]>` plus `Cell<arvo::USize>` length. The host shim populates both at scheduler-builder time (the host shim is the only place with filesystem access; walking once produces both the Str-handle view in DiscoveredFilePaths and the FFI-shape view in FileEntryBuffer).
+
+## FileEntry enrichment for RunScope
+
+`viola_plugin_abi::FileEntry` carries `path: BytesRef`, `language: BytesRef`, `hash: BytesRef`, `size_bytes: u64` beyond the path the host shim discovers. Slice 5b initial ship sends empties for language and hash, zero for size_bytes; subsequent refinement adds extension-driven language detection, SHA-256 hash computation at scheduler-builder time, and stat-based size_bytes population. Each enrichment lands as a host-shim-side change; the viola-core Resource shape stays stable.
+
+## runner_vtable_from_library helper for viola-core invoke
+
+The existing `viola_core::invoke::runner_vtable` takes a pre-#254 `Extension` type. Slice 5b adds `runner_vtable_from_library(&hilavitkutin_linking::Library) -> Maybe<&'static RunnerExecuteScopeVtable>` that walks the descriptor's provider table directly per the Slice 3 `resolve_descriptor` pattern. The new helper plus a sibling `lint_vtable_from_library` for Slice 6 consolidate the cross-Library vtable resolution in one module.
+
+## host_ctx model for FFI plugin callbacks
+
+The FFI signature passes `host_ctx: *mut c_void` opaquely; the plugin uses it to call back into the host (logging, IPC, diagnostic emission per cdylib boundary memo Shape D). Slice 5b passes `core::ptr::null_mut()`; plugins must tolerate null per the ABI documentation. Concrete trigger for the real model: Slice 8 host-shim wire-up exposes the natural call site for callback registration; the follow-up adds `Resource<HostCallbackTable>` carrying the callback vtable and threads its pointer through the WU body. Until then null is the documented contract.
+
+## Resource<RunSurface> and CiState surface field
+
+`RunScope.surface: RunSurface` enum (Cli, Lsp, etc.) needs a host-shim-picked value. `Resource<CiState>` carries `is_ci` but not `surface`. Slice 5b either hardcodes `RunSurface::Cli` or introduces a new `Resource<RunSurface>` populated by the host shim at scheduler-builder time. The choice waits on viola-cli host-shim shape; recommended path is the new Resource because future LSP integration (Slice 7+) will also need surface awareness.
+
+## Workspace path Str-to-bytes resolution for FFI
+
+`RunScope.workspace_root: BytesRef` is a raw bytes pointer. `Resource<Workspace>.path: Str` is an interned handle. Resolving the handle back to raw bytes requires the host-shim long-lived interner (already tracked in the Slice 2b "Host-shim long-lived interner wiring" BACKLOG entry). Slice 5b ships `BytesRef::EMPTY` for workspace_root until the interner lands; downstream plugins tolerate empty workspace_root per the ABI.

@@ -218,3 +218,19 @@ The Slice 1 stub declared a forward-looking AccessSet (`Read = Cons<Resource<Wor
 Future slices extend the AccessSet at the point of consumption: the include/exclude filtering refinement adds `Resource<ViolaCfg>` to Read and `Column<WuDiagnostic>` to Write; the workspace-relative diagnostic context refinement adds `Resource<Workspace>` to Read. Each extension lands in the slice that consumes it; the BACKLOG entries explicitly name these triggers.
 
 Body reads `Resource<DiscoveredFilePaths>`, iterates from slot zero to `paths_len()`, projects each `Str` handle into a `FileInfo { path: handle, kind: FileKind::Regular }` record, writes the record to `Column<FileInfo>` at a local-counter slot. The local-counter (`written_count: usize`) tracks column length by construction because `Column::len` on the writer side does not exist yet (see BACKLOG entry on `viola-core`). The `Maybe::Isnt` arm from `path_at` is unreachable by construction (the loop guard is `paths_len()` and `path_at` only returns `Isnt` past `paths_len`); the body asserts that contract with `unreachable!()` to surface a logic bug if the invariant ever fires.
+
+## Slice 5a NAM carrier
+
+Slice 5a flips `Nam` from the Slice 1 ZST placeholder to a fields-bearing carrier. The Slice 5b body lands the RunRunner FFI invocation; this section documents the carrier shape ahead of the body.
+
+### `Nam`
+
+Column record carried by `Column<Nam>`. One `Copy` field:
+
+| Field | Type | Role |
+|---|---|---|
+| `payload` | `viola_plugin_abi::NamPayload` | The FFI carrier from the runner's `execute_scope` return path. Plugin-owned memory immutable for the scheduler-run duration; the host reads only. |
+
+Derives `Copy, Clone`. `Debug` is intentionally omitted because `NamPayload` carries `data: *const c_void` and does not derive `Debug` upstream. The `viola-core/SHAME.md.tmpl` `## Nam` entry tracks the discipline gap.
+
+The singleton-row convention on `Column<Nam>`: the runner's `execute_scope` is scope-shaped (one call per scheduler run, returning one NAM covering every file). Slice 5b's body writes ONE row to slot zero. Future per-file incremental runners can extend the column-row count without an AccessSet change. The Slice 1 declaration `Write = Cons<Column<Nam>, Empty>` is preserved on this basis.
