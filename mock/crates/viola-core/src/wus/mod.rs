@@ -46,9 +46,39 @@ pub struct FileInfo;
 #[derive(Copy, Clone, Debug)]
 pub struct Nam;
 
-/// Placeholder for the per-finding record. Slice 6 wires real fields.
-#[derive(Copy, Clone, Debug)]
-pub struct Diagnostic;
+/// Per-finding record carried by `Column<WuDiagnostic>`. The host-side
+/// element type for the diagnostic fan-in. Distinct from
+/// `viola_plugin_abi::Diagnostic` (the FFI plugin-owned carrier);
+/// `EmitDiagnostics` (Slice 7) projects host-side to ABI shape at egress.
+///
+/// Slice 2b ships the fields the parse-error path needs; future producer
+/// slices may extend with additional context.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct WuDiagnostic {
+    pub severity: viola_plugin_abi::DiagnosticSeverity,
+    pub source: WuDiagnosticSource,
+    pub message: hilavitkutin_str::Str,
+    pub range: notko::Maybe<viola_plugin_abi::SourceRange>,
+}
+
+/// Closed-vocabulary enum classifying the WU that produced a `WuDiagnostic`.
+/// All six known producers ship in Slice 2b per `vocabulary.md`'s closed-enum-as-spec
+/// pattern (`Phase` precedent). Each producer slice constructs only its own variant.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum WuDiagnosticSource {
+    /// Parse failure on `Resource<ConfigBytes>` (Slice 2b producer).
+    ConfigParse,
+    /// Plugin dlopen, descriptor verification, or ABI gate failure (Slice 3).
+    PluginLoad,
+    /// Filesystem walk error or include/exclude mismatch (Slice 4).
+    FileWalk,
+    /// Runner WU body failure (Slice 5).
+    RunRunner,
+    /// Lint WU body failure (Slice 6).
+    RunLint,
+    /// `EmitDiagnostics` sink-side egress failure (Slice 7).
+    Emit,
+}
 
 /// Placeholder for the diagnostic egress sink. Slice 7 wires real fields.
 #[derive(Copy, Clone, Debug)]

@@ -3,9 +3,9 @@
 //!
 //! Slice 2a updates the AccessSet to the post-DOC-CL shape: three
 //! Reads (`Workspace`, `RunSurface`, `ConfigBytes`) and two Writes
-//! (`ViolaCfg`, `Column<Diagnostic>`). Slice 2b implements the body
+//! (`ViolaCfg`, `Column<WuDiagnostic>`). Slice 2b implements the body
 //! that parses `Resource<ConfigBytes>` into `Resource<ViolaCfg>` and
-//! writes a `Diagnostic` to `Column<Diagnostic>` on parse failure.
+//! writes a `Diagnostic` to `Column<WuDiagnostic>` on parse failure.
 
 use hilavitkutin_api::access::{Cons, Empty};
 use hilavitkutin_api::builder_input::{BuilderInput, UnitDispatch};
@@ -16,7 +16,7 @@ use viola_config::{ConfigBytes, ViolaCfg};
 use viola_plugin_abi::RunSurface;
 
 use super::stub::WuCtxStub;
-use super::Diagnostic;
+use super::WuDiagnostic;
 use crate::resources::Workspace;
 
 /// Reads run context plus raw config bytes, writes the parsed owned config.
@@ -32,7 +32,7 @@ impl WorkUnit for LoadConfig {
                 Cons<Resource<RunSurface>,
                 Cons<Resource<ConfigBytes>, Empty>>>;
     type Write = Cons<Resource<ViolaCfg>,
-                 Cons<Column<Diagnostic>, Empty>>;
+                 Cons<Column<WuDiagnostic>, Empty>>;
     type Hint = (Immediate, Atomic, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 
