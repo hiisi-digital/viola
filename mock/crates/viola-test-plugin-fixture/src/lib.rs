@@ -19,7 +19,7 @@ fn panic(_info: &PanicInfo) -> ! {
 // fn through the link table; provide an empty stub so the linker resolves.
 #[cfg(not(test))]
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_eh_personality() {}
+pub extern "C" fn rust_eh_personality() {}                          // lint:allow(no-duplicate-fn) -- linker contract; rust_eh_personality must exist in every no_std cdylib that does not unwind; reason: the symbol name is fixed by the Rust ABI; tracked: #197
 
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicU32, Ordering};
@@ -96,26 +96,26 @@ unsafe extern "C" fn evaluate(
 
 static LINT_EVAL_VTABLE: LintEvaluateVtable = LintEvaluateVtable { evaluate };
 
-pub struct LintEvalProvider;
+pub struct TestPluginLintEvalProvider;
 
-impl ProviderExport for LintEvalProvider {
+impl ProviderExport for TestPluginLintEvalProvider {
     const ID: ProviderId = PROVIDER_LINT_EVALUATE;
     const VTABLE_PTR: *const c_void =
         &LINT_EVAL_VTABLE as *const _ as *const c_void;
 }
 
-pub struct InitImpl;
+pub struct TestPluginInitImpl;
 
-impl InitHandler for InitImpl {
+impl InitHandler for TestPluginInitImpl {
     unsafe fn init(_host_ctx: *mut c_void) -> ExtensionAbiStatus {
         INIT_CALLS.fetch_add(1, Ordering::SeqCst);
         ExtensionAbiStatus::Ok
     }
 }
 
-pub struct ShutdownImpl;
+pub struct TestPluginShutdownImpl;
 
-impl ShutdownHandler for ShutdownImpl {
+impl ShutdownHandler for TestPluginShutdownImpl {
     unsafe fn shutdown(
         _host_ctx: *mut c_void,
     ) -> ExtensionAbiStatus {
@@ -127,9 +127,9 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.lint.fixture",
     version = "0.1.0",
-    providers = [LintEvalProvider],
-    init = InitImpl,
-    shutdown = ShutdownImpl,
+    providers = [TestPluginLintEvalProvider],
+    init = TestPluginInitImpl,
+    shutdown = TestPluginShutdownImpl,
 )]
 #[allow(dead_code)]
 pub struct FixturePlugin;

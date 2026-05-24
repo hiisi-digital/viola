@@ -1,0 +1,15 @@
+# viola-test-runner-fixture: SHAME
+
+Gaps discovered during implementation that did not exist when the round's DOC CL locked. Each entry names a type the source ships under a name the design doc still calls by its old name. Resolution lands in the next DOC-phase round that updates the design doc; until then, this file is the audit trail.
+
+## TestRunnerProvider
+
+Renamed from `RunnerProvider`. The cross-crate `no-duplicate-fn` lint surfaces when two sibling cdylibs export types with identical names. The `viola-test-plugin-fixture` and `viola-test-runner-fixture` crates each declared their own `InitImpl`/`ShutdownImpl` plus a provider type, and the lint forced unique names across the pair. The provider's behaviour (emit a fixed `NamPayload` on every call) is unchanged; only the name moves. The next DOC-phase round for this fixture will rewrite the provider section under the new name and drop this entry.
+
+## TestRunnerInitImpl
+
+Renamed from `InitImpl` for the same cross-crate name-uniqueness reason that the provider rename above carries. The handler body still does the same `INIT_CALLS.fetch_add(1, Ordering::SeqCst)` it always did and returns `ExtensionAbiStatus::Ok` unchanged. The prefix is purely a naming concession to satisfy `no-duplicate-fn`. The follow-up DOC round will rename the handler's section in `DESIGN.md.tmpl` under the new identifier and remove this entry from the SHAME file.
+
+## TestRunnerShutdownImpl
+
+Renamed from `ShutdownImpl`, parallel to the init handler above. Same `SHUTDOWN_CALLS.fetch_add(1, Ordering::SeqCst)` body, same `ExtensionAbiStatus::Ok` return, same cross-crate uniqueness rationale forcing the `TestRunner` prefix in the source. The handler's role in the lifecycle is unchanged; only its name moved. The follow-up DOC round folds the section update into `DESIGN.md.tmpl` and drops this entry.

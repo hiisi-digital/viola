@@ -267,4 +267,4 @@ severity = "advisory"
 # ---------------------------------------------------------------------------
 
 [lint-crates]
-mockspace-hilavitkutin-stack-lints = { git = "ssh://git@github.com/hiisi-digital/mockspace-hilavitkutin-stack-lints.git", branch = "main" }
+mockspace-hilavitkutin-stack-lints = { git = "ssh://git@github.com/orgrinrt/mockspace-hilavitkutin-stack-lints.git", branch = "dev" }
