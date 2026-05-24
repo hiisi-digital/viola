@@ -146,4 +146,24 @@ Maximum number of distinct interned entries one `ConfigArena<N>` can carry. Work
 
 The existing `ViolaConfig` section above remains the source-of-truth for the borrowed-form parser output. `ViolaConfigOwned` is the bridge for the `Resource` boundary; the two coexist.
 
-`ViolaConfigOwned` ships a `populate_from_borrowed(&self, _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>)` method. Takes `&self` because the bundled `arena` carries interior mutability (`Cell` cursor plus `UnsafeCell` byte buffer plus offsets table). `LoadConfig::execute` calls this through the `&T` borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`. `Resource<ViolaCfg>` is in `LoadConfig::Write`; the scheduler's AccessSet contract serialises that producer slot, so the `&self` receiver is sound. Slice 2b ships a no-op body. The owned-record fields (`PluginEntryOwned`, `GateOwned`, `RuleOwned`, `PartialRuleOwned`) are zero-sized placeholders; nothing to project until each producer body slice (Slice 3 for plugins, validator slices for gates / rules) flips its owned-record type to fields-bearing and fills the projection.
+`ViolaConfigOwned` ships a `populate_from_borrowed(&self, _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>)` method. Takes `&self` because the bundled `arena` carries interior mutability (`Cell` cursor plus `UnsafeCell` byte buffer plus offsets table). `LoadConfig::execute` calls this through the `&T` borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`. `Resource<ViolaCfg>` is in `LoadConfig::Write`; the scheduler's AccessSet contract serialises that producer slot, so the `&self` receiver is sound. Slice 2b ships a no-op body. The owned-record fields (`GateOwned`, `RuleOwned`, `PartialRuleOwned`) remain zero-sized placeholders; nothing to project for those arms until each producer body slice (validator slices for gates / rules) flips its owned-record type to fields-bearing and fills the projection. Slice 3 ships the plugins arm; the section below covers the shape.
+
+## Slice 3 plugins-arm fill-in
+
+### `PluginEntryOwned`
+
+Owned-form per-plugin record carried inside `ViolaConfigOwned.plugins`. Two `Copy` fields: `name: hilavitkutin_str::Str` (the manifest's display name, interned through the bundled `ConfigArena`) and `path: hilavitkutin_str::Str` (the manifest's filesystem path, also arena-interned). Both are 4-byte `Str` handles; the record stays `Copy`.
+
+Slice 3a flipped the type from the Slice 2a ZST placeholder to this fields-bearing shape. The `plugin_path(&self, i: arvo::Cap) -> notko::Maybe<&str>` accessor on `ViolaConfigOwned` resolves the path handle back through the arena and returns `Maybe::Is(s)` on a valid slot, `Maybe::Isnt` when the index is past `plugins_len` or the handle is the empty-string sentinel.
+
+The interior-mutability wrap on the plugins arm: `plugins: UnsafeCell<[PluginEntryOwned; MAX_PLUGINS_CAP]>` and `plugins_len: Cell<arvo::Cap>`. Same shape as the `ConfigArena` bytes / cursor / entries pattern; the same four-invariant `unsafe impl Sync for ViolaConfigOwned` SAFETY note covers both arms (the arena and the plugins array) by enumerating each `UnsafeCell` / `Cell` field. The disjointness contract for the plugins-arm write path (`&mut *self.plugins.get()` mutable borrow concurrent with the `self.arena.arena_intern(s)` reborrow that fills each `Str` handle) follows the standard field-projection rule: the plugins array and the arena are disjoint sibling fields, so a `&mut` to one is not aliased by a borrow to the other.
+
+`populate_from_borrowed`'s plugins arm walks the borrowed `&ViolaConfig` plugin entries, interns each name and path through the arena via `arena_intern`, writes the resulting `Str` pair into the next slot of `plugins`, and advances `plugins_len`. Failures (arena overflow on either dimension) fail closed before mutating any state; the borrowed entry is silently dropped from the owned form, on the assumption that downstream LoadPlugins will surface the diagnostic. UTF-8 validation on the borrowed `&[u8]` name and path slices runs via `core::str::from_utf8` checked conversion; invalid UTF-8 also drops the entry from the owned form. The earlier `from_utf8_unchecked` variant was latent UB and is forbidden.
+
+### `plugin_at`
+
+Indexed access into the plugins arm. Returns the `PluginEntryOwned` at the given `arvo::Cap` index. Bounds-checks against `plugins_len`; out-of-range returns `Maybe::Isnt`. Hides the `UnsafeCell` from consumers; the read path goes through `&*self.plugins.get()` (immutable reborrow), which is sound because the AccessSet contract guarantees no concurrent writer.
+
+### `plugin_path`
+
+Convenience accessor that combines `plugin_at` and `arena_resolve` to return the path string for one slot. Returns `Maybe<&str>` keyed to the slot index. Used by `LoadPlugins::execute` to convert each plugin's manifest path into a null-terminated stack buffer for the dlopen call.
