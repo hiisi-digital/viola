@@ -303,3 +303,63 @@ The const lives in `viola-core/src/resources.rs` for cap-constant locality with 
 The disjoint-slot-range write strategy is the structural guarantee that makes the writes commute: each `RunLint<L>` writes to a per-L row range of `Column<WuDiagnostic>` (`[L * MAX_DIAGS_PER_LINT, L * MAX_DIAGS_PER_LINT + MAX_DIAGS_PER_LINT)`); the ranges are disjoint by construction, so parallel writes across L touch disjoint memory and commute trivially. Slice 6b ships `MAX_DIAGS_PER_LINT` alongside the body. The singleton-row convention RunRunner uses does not compose with parallel fan-out and is rejected for RunLint.
 
 Slice 9 audits whether the landed hilavitkutin dispatch codegen actually honours the COMMUTATIVE flag with reduce-style parallel fan-out. If it serialises, the design needs revisiting per the cdylib memo's first remaining deferral. Slice 6a's COMMUTATIVE flag set is the precondition for that audit.
+
+## Slice 6b RunLint body shapes
+
+Slice 6b lands the `RunLint<L>::execute` body announced in the Slice 6a commutative shape section. Adds `Resource<LintSlots>`, `Resource<LintConfigBuffer>`, `MAX_DIAGS_PER_LINT`, `lint_vtable_from_library`, and the body proper.
+
+### `MAX_DIAGS_PER_LINT`
+
+Const cap for per-slot lint output. Workspace-default `64`. Each `RunLint<L>` writes up to that many `WuDiagnostic` records into the disjoint row range `[L * MAX_DIAGS_PER_LINT, (L + 1) * MAX_DIAGS_PER_LINT)` of `Column<WuDiagnostic>`. Ranges are disjoint by construction across L; the COMMUTATIVE flag's parallel-write claim holds without atomics.
+
+Consumers of `Column<WuDiagnostic>` MUST size it to at least `MAX_LINTS * MAX_DIAGS_PER_LINT` slots (currently `32 * 64 = 2048`). A misprovisioned column corrupts neighbouring slots on parallel-fan-out writes; the WU's body documents this contract in its module docstring and asserts it via `debug_assert!` at the writer boundary inside the projection loop.
+
+### `LintSlots`
+
+Host-shim-populated slot-to-plugin mapping Resource. `UnsafeCell<[arvo::Cap; MAX_LINTS]>` plus `Cell<arvo::USize>` populated count. Slot L holds the `host_idx` of the lint plugin at that slot when populated; the sentinel `arvo::Cap(arvo::USize(usize::MAX))` marks "no plugin at this slot" for slots inside `MAX_LINTS` but past the populated count or for explicitly-skipped slots.
+
+`unsafe impl Sync for LintSlots` carries the same four-invariant SAFETY contract as `DiscoveredFilePaths` and `FileEntryBuffer`: host shim is sole producer at scheduler-builder time, every WU declares the Resource in `Read` only with no `Write` declaration anywhere, single-threaded build phase, cap-bounded push.
+
+Public API:
+
+- `pub fn new() -> Self`. Empty store; every slot is the sentinel.
+- `pub unsafe fn push(&self, host_idx: arvo::Cap) -> arvo::Cap`. Host-shim seam with `# Safety` clause naming the four caller-asserted invariants. Appends to the next populated slot.
+- `pub fn slots_len(&self) -> arvo::USize`. Populated-slot count.
+- `pub fn slot_at(&self, idx: arvo::Cap) -> notko::Maybe<arvo::Cap>`. Returns `Maybe::Is(host_idx)` for populated slots, `Maybe::Isnt` for sentinel slots and slots past the populated count.
+
+### `LintConfigBuffer`
+
+Host-shim-populated per-slot config bytes Resource. `UnsafeCell<[viola_plugin_abi::BytesRef; MAX_LINTS]>` plus `Cell<arvo::USize>` populated count. Slot L holds the `BytesRef` pointing into the ViolaCfg arena's bytes for that lint's config block; `BytesRef::EMPTY` is the "absent config" sentinel.
+
+Same four-invariant `unsafe impl Sync` contract as LintSlots. Public API mirrors:
+
+- `pub fn new() -> Self`. Every slot is `BytesRef::EMPTY`.
+- `pub unsafe fn push(&self, bytes: BytesRef) -> arvo::Cap`. Host-shim seam.
+- `pub fn configs_len(&self) -> arvo::USize`. Populated count.
+- `pub fn config_at(&self, idx: arvo::Cap) -> BytesRef`. Returns `BytesRef::EMPTY` for indices past the populated count, matching the ABI "empty config = absent" convention.
+
+### `lint_vtable_from_library`
+
+New helper in `viola_core::invoke` paralleling Slice 5b's `runner_vtable_from_library`. Takes `&hilavitkutin_linking::Library`, walks the descriptor's provider table looking for `PROVIDER_LINT_EVALUATE`, returns `Maybe<&'static LintEvaluateVtable>`. Returns `Maybe::Isnt` on descriptor missing, descriptor invalid (via `validate_descriptor`), lint provider not present, vtable pointer null.
+
+### RunLint Slice 6b body
+
+The Slice 1 stub declared `Read = Cons<Column<Nam>, Empty>`, `Write = Cons<Column<WuDiagnostic>, Empty>`. Slice 6b extends Read to include the Resources the body consumes:
+
+```
+Read = Cons<Resource<ExtensionHost>,
+       Cons<Resource<LintSlots>,
+       Cons<Resource<LintConfigBuffer>,
+       Cons<Column<Nam>, Empty>>>>
+Write = Cons<Column<WuDiagnostic>, Empty>
+```
+
+Body reads `LintSlots::slot_at(arvo::Cap(USize(L)))`. If `Maybe::Isnt`, returns silently (no plugin at this slot is not a failure). Otherwise gets `&Library` via `ExtensionHost::library_at(host_idx)`, calls `lint_vtable_from_library`. On vtable resolution failure, writes one `WuDiagnostic { source: WuDiagnosticSource::RunLint }` at slot `L * MAX_DIAGS_PER_LINT` and returns.
+
+On vtable resolution success, reads the NAM payload from `Column<Nam>` slot zero (singleton-row convention per Slice 5b RunRunner), reads the per-slot config bytes from `LintConfigBuffer::config_at(arvo::Cap(USize(L)))`, builds a stack `DiagnosticBatch { entries: null, len: 0 }` for the FFI to fill, calls `evaluate` FFI with `host_ctx = null_mut()`. On `AbiStatus != Ok`, writes the failure diagnostic at slot `L * MAX_DIAGS_PER_LINT` and returns.
+
+On evaluate success, projects up to `MAX_DIAGS_PER_LINT` `Diagnostic` records from the returned `DiagnosticBatch` into the per-L row range of `Column<WuDiagnostic>`. The SAFETY note on the per-batch entry read names the plugin-side precondition explicitly: the plugin's evaluate contract asserts `entries` is valid for read of `len` Diagnostic records when AbiStatus::Ok is returned. Each WuDiagnostic carries `severity` projected from the FFI Diagnostic, `source = WuDiagnosticSource::RunLint`, `message = Str::default()` and `range = Maybe::Isnt` per the Slice 6a-deferred rich-field carrier.
+
+The column-capacity contract: callers MUST provision `Column<WuDiagnostic>` with at least `MAX_LINTS * MAX_DIAGS_PER_LINT` slots. The body's projection loop carries a `debug_assert!` at the writer boundary to catch a misprovisioned column at write time during development builds.
+
+`host_ctx = null_mut()` is the documented Slice 6a placeholder (same as Slice 5b RunRunner; plugins tolerate per ABI doc).

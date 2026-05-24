@@ -76,23 +76,23 @@ The FFI signature passes `host_ctx: *mut c_void` opaquely; the plugin uses it to
 
 ## RunLint body and FFI invocation
 
-Slice 6a sets the COMMUTATIVE flag and MAX_LINTS const; the `RunLint<L>::execute` body stays `unimplemented!()`. Slice 6b lands the body proper: reads the per-slot LintSlots entry, resolves the lint plugin via ExtensionHost + library_at + lint_vtable_from_library, reads NamPayload from Column<Nam> slot zero, reads the per-slot config bytes from LintConfigBuffer, calls evaluate FFI, projects the returned DiagnosticBatch into the per-L row range of Column<WuDiagnostic>. On failure (slot empty, vtable absent, AbiStatus != Ok), writes a single WuDiagnostic record at the L row range's start with source RunLint. AccessSet extends accordingly.
+Shipped in Slice 6b. Body reads `LintSlots::slot_at(L)` (returns silently on sentinel), resolves the lint vtable via `ExtensionHost::library_at` + `lint_vtable_from_library`, reads `NamPayload` from `Column<Nam>` slot zero plus per-slot config bytes from `LintConfigBuffer`, calls `evaluate` FFI with `host_ctx = null_mut`, projects up to `MAX_DIAGS_PER_LINT` returned Diagnostic records into the per-L row range of `Column<WuDiagnostic>`. Failure paths (vtable absent, AbiStatus != Ok) write one `WuDiagnostic { source: WuDiagnosticSource::RunLint }` at slot `L * MAX_DIAGS_PER_LINT`. AccessSet extended per the Slice 6b DOC CL.
 
 ## Resource<LintSlots> for RunLint slot-to-plugin mapping
 
-Slice 6b adds `Resource<LintSlots>`: a `[arvo::Cap; MAX_LINTS]` array mapping slot L to the ExtensionHost host_idx of the lint plugin at that slot, with a sentinel (e.g. `arvo::Cap` of `arvo::USize::MAX` or a parallel `Cell<[bool; MAX_LINTS]>` populated-bit array) for "no plugin at this slot". Populator either extends LoadPlugins to write `Resource<LintSlots>` as a parallel output, OR a new tiny IndexLints WU between LoadPlugins and the first RunLint takes `Column<PluginEntry>` in Read and `Resource<LintSlots>` in Write. Slice 6b ratifies which.
+Shipped in Slice 6b. The Resource shape lands in viola-core: `UnsafeCell<[arvo::Cap; MAX_LINTS]>` plus `Cell<arvo::USize>` populated count, four-invariant Sync contract mirroring DiscoveredFilePaths and FileEntryBuffer, `pub unsafe fn push` host-shim seam, safe `slot_at` returning `Maybe<arvo::Cap>` (sentinel becomes `Maybe::Isnt`). The host-shim implementation that actually populates the Resource lands in Slice 8 (viola-cli host-shim rewire); the Resource shape ships now so the WU can consume it.
 
 ## Resource<LintConfigBuffer> for per-slot lint config bytes
 
-Slice 6b adds a host-shim-built `Resource<LintConfigBuffer>` carrying `[BytesRef; MAX_LINTS]`, each pointing into the ViolaCfg arena's bytes. RunLint<L> body reads `buffer[L]` and passes its data + len to the FFI `evaluate` call's `lint_config_bytes` + `lint_config_len` args. The indirection lets each RunLint<L> read only its own slot without taking ViolaCfg in Read; shared Resource Reads across the parallel cohort would force the scheduler to serialise.
+Shipped in Slice 6b. The Resource shape lands in viola-core: `UnsafeCell<[BytesRef; MAX_LINTS]>` plus `Cell<arvo::USize>` populated count, four-invariant Sync contract, `pub unsafe fn push` host-shim seam, safe `config_at` returning `BytesRef` (`BytesRef::EMPTY` for unpopulated slots, matching the ABI "empty config = absent" convention). The host-shim implementation that builds the BytesRef entries from the ViolaCfg arena lands in Slice 8.
 
 ## lint_vtable_from_library helper for viola-core invoke
 
-Slice 6b adds `lint_vtable_from_library(&hilavitkutin_linking::Library) -> Maybe<&'static LintEvaluateVtable>` parallelling Slice 5b's `runner_vtable_from_library`. Walks the descriptor's provider table looking for `PROVIDER_LINT_EVALUATE`, returns the casted vtable on success.
+Shipped in Slice 6b. `viola_core::invoke::lint_vtable_from_library(&Library) -> Maybe<&'static LintEvaluateVtable>` walks the descriptor's provider table per the Slice 3 `resolve_descriptor` pattern. Parallels Slice 5b's `runner_vtable_from_library`. The pre-#254 `lint_vtable(&Extension)` stays until Slice 8 deletes the `Extension` type.
 
 ## MAX_DIAGS_PER_LINT const and per-L row-range projection
 
-Slice 6b adds `MAX_DIAGS_PER_LINT` const (workspace-default candidates: 64, 128, 256; depends on realistic per-lint output budgets). Each RunLint<L> writes to slots `[L * MAX_DIAGS_PER_LINT, L * MAX_DIAGS_PER_LINT + MAX_DIAGS_PER_LINT)` of `Column<WuDiagnostic>`. Slice 6b body's local counter tracks per-L writes; counter wraps to the per-L row-range cap.
+Shipped in Slice 6b. `MAX_DIAGS_PER_LINT: usize = 64` lands as a viola-core pub const. Each RunLint<L> writes to slots `[L * MAX_DIAGS_PER_LINT, (L + 1) * MAX_DIAGS_PER_LINT)` of `Column<WuDiagnostic>`. Slice 6b body's local counter caps at MAX_DIAGS_PER_LINT; extra diagnostics from the FFI batch are silently truncated. Consumers MUST size `Column<WuDiagnostic>` to at least `MAX_LINTS * MAX_DIAGS_PER_LINT` slots.
 
 ## Host-side LintFinding carrier richer than WuDiagnostic
 
