@@ -28,24 +28,243 @@ viola-deno-runtime = "#F2E6E6 | #7A2D2D"
 viola-test-plugin-fixture = "#EEEEEE | #555555"
 viola-test-runner-fixture = "#EEEEEE | #555555"
 
-# Lean initial lint set. Built-in quality lints only. Stack-discipline
-# lints (no-bare-numeric, no-alloc, no-std, primitive-vocabulary)
-# come in a follow-up PR once each crate's design coverage clarifies
-# which scopes can hold the stricter floors. viola-deno-runtime's
-# serde/serde_json dep is the obvious holdout that needs per-crate
-# scoping rather than a workspace-wide push.
+# ---------------------------------------------------------------------------
+# Lint configuration. Matches hilavitkutin's stack-discipline floor.
+# ---------------------------------------------------------------------------
+#
+# Op's per-diff approval (2026-05-24 AskUserQuestion answer): viola
+# matches hilavitkutin's strict discipline. The deno-runtime crate is
+# the only `cdylib` that has historically reached for `std` + `serde`
+# + `Vec`; the locked direction is to drop those via the subprocess
+# IPC route, using `lint:allow` only where the boundary genuinely
+# cannot avoid them. Until that refactor lands, the deno-runtime
+# gates surface the violations as push-blockers. That is the intended
+# pressure, not an oversight.
+
+# --- Built-in quality lints ------------------------------------------------
+
 [lints.no-empty-crate]
 commit = "warn"
 build = "warn"
+push = "warn"
 
 [lints.no-todo]
 commit = "warn"
 build = "warn"
+push = "error"
 
 [lints.no-fixme]
 commit = "warn"
 build = "warn"
+push = "error"
+
+[lints.file-size]
+commit = "error"
+build = "error"
+push = "error"
+max_lines = "500"
 
 [lints.em-dash]
 commit = "error"
 build = "error"
+push = "error"
+
+# --- Stack-discipline lints (hard error floors) ----------------------------
+# Structural invariants. Violations must be fixed, never suppressed
+# except per-line with `// lint:allow(<name>) -- <reason>`.
+
+[lints.no-std]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-alloc]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-dynamic-dispatch]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-runtime-spawn]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-runtime-registration]
+commit = "error"
+build = "error"
+push = "error"
+
+# Advisory: vocabulary terms are common English words; warn everywhere,
+# never block. Author suppresses with `// lint:allow(vocabulary-discipline)`.
+[lints.vocabulary-discipline]
+commit = "warn"
+build = "warn"
+push = "warn"
+
+# --- Config-driven forbidden-imports (layer / boundary discipline) ---------
+
+[lints.forbidden-imports]
+commit = "error"
+build = "error"
+push = "error"
+rules = [
+    # No `std` or `alloc` anywhere in viola (belt for the no_std / no_alloc
+    # token-level lints' suspenders). The deno-runtime crate uses lint:allow
+    # at the genuine boundary points; everywhere else, this lint catches
+    # accidental imports.
+    { scope = "viola*", forbidden = "std::*, alloc::*", reason = "viola is no_std + no_alloc in every crate; subprocess IPC and FFI carriers handle anything that needs heap" },
+
+    # ABI is the stable contract surface; cannot depend on anything else
+    # in viola.
+    { scope = "viola-plugin-abi", forbidden = "viola_core::*, viola_config::*, viola_cli::*, viola_deno_runtime::*", reason = "viola-plugin-abi is the stable C-ABI contract surface; nothing else in viola may flow into it" },
+
+    # Config has no upstream consumer; cannot depend on host runtime or CLI.
+    { scope = "viola-config", forbidden = "viola_core::*, viola_cli::*, viola_deno_runtime::*", reason = "viola-config is the TOML parser; depends only on the ABI surface and substrate" },
+
+    # CLI is the entry binary; nothing should depend on it.
+    { scope = "viola-cli", forbidden = "viola_deno_runtime::*", reason = "viola-cli does not embed the deno bridge directly; the deno-runtime cdylib is loaded as a plugin at runtime via the extension loader" },
+
+    # Bridge crate must not reach back into host code; it is a plugin cdylib.
+    { scope = "viola-deno-runtime", forbidden = "viola_cli::*, viola_core::*", reason = "viola-deno-runtime is a plugin cdylib loaded by the host; must not link back into the host" },
+
+    # Test fixtures are isolated plugin cdylibs.
+    { scope = "viola-test-plugin-fixture", forbidden = "viola_cli::*, viola_core::*, viola_deno_runtime::*", reason = "test fixture is an isolated cdylib loaded by the host's test suite" },
+    { scope = "viola-test-runner-fixture", forbidden = "viola_cli::*, viola_core::*, viola_deno_runtime::*", reason = "test fixture is an isolated cdylib loaded by the host's test suite" },
+]
+
+# --- Built-in mockspace lints that don't apply to viola --------------------
+# Disables the lint family carried over from loimu (the original home
+# of mockspace) that encodes loimu's plugin / registrable / visibility-
+# macro conventions. Viola does not use those conventions; the
+# stack-discipline lints above cover its invariants.
+
+[lints.no-bare-pub]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.registrable-completeness]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-bare-macro-types]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-manual-id]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-primitive-key]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-raw-error-outside-primitives]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-self-define]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-pool-access]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-adhoc-error-enum]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-adhoc-framework]
+commit = "off"
+build = "off"
+push = "off"
+
+[lints.no-entry-suffix]
+commit = "off"
+build = "off"
+push = "off"
+
+# --- Primitive-vocabulary drift lints --------------------------------------
+# Mirror hilavitkutin's settings. The strict floors (no-box, no-float,
+# no-bare-vec, no-bare-static-str, no-bare-result) are hard errors.
+# The softer drift lints (no-bare-numeric, no-bare-option, no-bare-string,
+# arvo-types-only, no-public-raw-field) ramp at warn pending the sweep
+# that lands once the source surface is stable.
+
+[lints.no-bare-result]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-bare-vec]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-bare-static-str]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-box]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-float]
+commit = "error"
+build = "error"
+push = "error"
+
+[lints.no-bare-string]
+commit = "off"
+build = "warn"
+push = "warn"
+
+[lints.no-bare-numeric]
+commit = "off"
+build = "warn"
+push = "warn"
+
+[lints.no-bare-option]
+commit = "off"
+build = "warn"
+push = "warn"
+
+[lints.arvo-types-only]
+commit = "off"
+build = "warn"
+push = "warn"
+
+[lints.no-public-raw-field]
+commit = "off"
+build = "warn"
+push = "warn"
+
+# Pack lints. Graceful ramp.
+[lints.lint-allow-requires-task-id]
+severity = "advisory"
+
+# Writing-style gate. Advisory until the doc-template sweep lands.
+[lints.writing-style]
+severity = "advisory"
+
+# ---------------------------------------------------------------------------
+# External lint packs (mockspace #94 feature)
+# ---------------------------------------------------------------------------
+
+[lint-crates]
+mockspace-hilavitkutin-stack-lints = { git = "ssh://git@github.com/hiisi-digital/mockspace-hilavitkutin-stack-lints.git", branch = "main" }
