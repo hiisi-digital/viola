@@ -12,7 +12,8 @@ use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
 
 use super::stub::WuCtxStub;
-use super::PluginEntry;
+use super::{PluginEntry, WuDiagnostic};
+use crate::resources::ExtensionHost;
 use viola_config::ViolaCfg;
 
 /// Reads config, writes the discovered plugin set.
@@ -25,11 +26,13 @@ impl BuilderInput for LoadPlugins {
 
 impl WorkUnit for LoadPlugins {
     type Read = Cons<Resource<ViolaCfg>, Empty>;
-    type Write = Cons<Column<PluginEntry>, Empty>;
+    type Write = Cons<Resource<ExtensionHost>,
+                 Cons<Column<PluginEntry>,
+                 Cons<Column<WuDiagnostic>, Empty>>>;
     type Hint = (Immediate, Atomic, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 
     fn execute<'frame>(&self, _ctx: &Self::Ctx<'frame>) {
-        unimplemented!("Slice 3 implements LoadPlugins")
+        unimplemented!("Slice 3 body implements LoadPlugins")
     }
 }

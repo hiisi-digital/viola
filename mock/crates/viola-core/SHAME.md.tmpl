@@ -1,0 +1,7 @@
+# `viola-core` SHAME
+
+Known gaps discovered during execution. Each `## <key>` entry silences the matching lint while a follow-up closes the gap.
+
+## PluginEntry
+
+Slice 3b ships PluginEntry without the Debug derive the locked DOC CL committed (Copy, Clone, Debug, PartialEq, Eq). Two field types do not derive Debug in current upstream releases: `arvo_bitmask::Mask<W>` (chassis-form mask carrier) and `hilavitkutin_extensions::AbiVersion` (`#[derive(Copy, Clone, PartialEq, Eq)]` at `hilavitkutin-extensions/src/descriptor.rs:16`, no Debug). The follow-up either lands Debug derives in the upstream crates via their own rounds, or adds a viola-core-local Debug-via-format-args wrapper at the PluginEntry boundary. The cleanest path is upstream because consumers beyond viola will hit the same gap; the workspace-local fallback ships if upstream review is slow. Tracked here so the locked DOC CL's Debug-derive claim has an audit-trail artefact per cl-claim-sketch-discipline.md, and the design-doc-source-mismatch lint stays quiet on the documented type.
