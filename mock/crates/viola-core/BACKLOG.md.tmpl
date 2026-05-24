@@ -48,11 +48,11 @@ Slice 4 ships a compile-time AccessSet-shape witness test for DiscoverFiles. Run
 
 ## RunRunner body and FFI invocation
 
-Slice 5a ships the `Nam` ZST flip but the `RunRunner::execute` body stays `unimplemented!()`. Slice 5b lands the body proper: resolves the runner plugin from `Resource<ExtensionHost>` plus `Column<PluginEntry>` (find the entry with the runner-role bit set, resolve its `&Library`, extract the runner vtable from the descriptor), marshals `RunScope` from Resources at the FFI boundary, calls `execute_scope`, writes the returned `NamPayload` into `Column<Nam>` at slot zero. On failure (descriptor missing, vtable absent, AbiStatus != Ok), writes `WuDiagnostic { source: WuDiagnosticSource::RunRunner }` to `Column<WuDiagnostic>`. AccessSet extends accordingly.
+Shipped in Slice 5b. The body resolves the runner plugin from `Resource<ExtensionHost>` plus `Column<PluginEntry>` (finds the entry with the runner-role bit set, resolves its `&Library`, extracts the runner vtable from the descriptor via `runner_vtable_from_library`), marshals `RunScope` from Resources at the FFI boundary, calls `execute_scope`, writes the returned `NamPayload` into `Column<Nam>` at slot zero. On failure (descriptor missing, vtable absent, AbiStatus != Ok), writes `WuDiagnostic { source: WuDiagnosticSource::RunRunner }` to `Column<WuDiagnostic>`. AccessSet extended per the Slice 5b DOC CL. Initial body ships with placeholders for workspace_root, surface, host_ctx, and FileEntry enrichment fields per the four still-deferred Slice 5a BACKLOG entries below.
 
 ## FileEntryBuffer Resource for RunRunner
 
-The FFI `RunScope.files: *const FileEntry` and `RunScope.files_len: arvo::USize` need a stable backing array for the call duration. Slice 5b adds a host-shim-populated `Resource<FileEntryBuffer>` paralleling `DiscoveredFilePaths`: `UnsafeCell<[FileEntry; MAX_DISCOVERED_FILES]>` plus `Cell<arvo::USize>` length. The host shim populates both at scheduler-builder time (the host shim is the only place with filesystem access; walking once produces both the Str-handle view in DiscoveredFilePaths and the FFI-shape view in FileEntryBuffer).
+Shipped in Slice 5b. The Resource shape lands in viola-core: `UnsafeCell<[FileEntry; MAX_DISCOVERED_FILES]>` plus `Cell<arvo::USize>` length, four-invariant Sync contract mirroring DiscoveredFilePaths, `pub unsafe fn push` host-shim seam, safe `entries_len` and `entries_ptr` read accessors. The host-shim implementation that actually populates the Resource lands in Slice 8 (viola-cli host-shim rewire); the Resource shape ships now so the WU can consume it.
 
 ## FileEntry enrichment for RunScope
 
@@ -60,7 +60,7 @@ The FFI `RunScope.files: *const FileEntry` and `RunScope.files_len: arvo::USize`
 
 ## runner_vtable_from_library helper for viola-core invoke
 
-The existing `viola_core::invoke::runner_vtable` takes a pre-#254 `Extension` type. Slice 5b adds `runner_vtable_from_library(&hilavitkutin_linking::Library) -> Maybe<&'static RunnerExecuteScopeVtable>` that walks the descriptor's provider table directly per the Slice 3 `resolve_descriptor` pattern. The new helper plus a sibling `lint_vtable_from_library` for Slice 6 consolidate the cross-Library vtable resolution in one module.
+The helper shipped in Slice 5b: `runner_vtable_from_library(&hilavitkutin_linking::Library) -> Maybe<&'static RunnerExecuteScopeVtable>` walks the descriptor's provider table per the Slice 3 `resolve_descriptor` pattern. The pre-#254 `runner_vtable(&Extension)` stays until Slice 8 deletes the `Extension` type. The sibling `lint_vtable_from_library` for Slice 6 stays a forward-looking note and lands in that round.
 
 ## host_ctx model for FFI plugin callbacks
 

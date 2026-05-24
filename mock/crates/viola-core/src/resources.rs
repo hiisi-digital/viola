@@ -96,6 +96,12 @@ impl ExtensionHost {
         }
     }
 
+    /// Current count of loaded library slots. Used by downstream WUs
+    /// to bound iteration over the matching `Column<PluginEntry>` rows.
+    pub fn loaded_count(&self) -> arvo::USize {
+        self.loaded_len.get()
+    }
+
     /// Read the library handle at slot `idx`.
     ///
     /// The bounds check is mandatory inside this body: reading an
@@ -273,6 +279,120 @@ impl DiscoveredFilePaths {
 }
 
 impl Default for DiscoveredFilePaths {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Empty `FileEntry` constant for const-init of the `FileEntryBuffer`
+/// slot array. Mirrors the `Str::default()` zero-init pattern used by
+/// `DiscoveredFilePaths`.
+const EMPTY_FILE_ENTRY: viola_plugin_abi::FileEntry = viola_plugin_abi::FileEntry {
+    path: viola_plugin_abi::BytesRef::EMPTY,
+    language: viola_plugin_abi::BytesRef::EMPTY,
+    hash: viola_plugin_abi::BytesRef::EMPTY,
+    size_bytes: 0, // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: FFI-shape ABI field; tracked: #207
+};
+
+/// Singleton store of host-shim-built FFI-shape `FileEntry` records.
+///
+/// The host shim walks the workspace filesystem at scheduler-builder
+/// time and pushes each file's FFI-shape view here, paralleling the
+/// `Str`-handle view in `DiscoveredFilePaths`. `RunRunner` (Slice 5b)
+/// reads this Resource and points `RunScope.files` at the entries
+/// array.
+///
+/// Unlike `ExtensionHost` the slot type (`FileEntry`) is `Copy` with a
+/// well-defined zero value (`EMPTY_FILE_ENTRY`), so no `MaybeUninit` is
+/// needed. The store initialises every slot to the empty value;
+/// populated slots carry the host-shim-built FFI entries up to
+/// `entries_len`.
+pub struct FileEntryBuffer {
+    entries: core::cell::UnsafeCell<
+        [viola_plugin_abi::FileEntry; MAX_DISCOVERED_FILES],
+    >,
+    entries_len: core::cell::Cell<arvo::USize>,
+}
+
+// SAFETY: Four-invariant contract pinning the `unsafe impl Sync`. First,
+// the host shim is the sole producer; every `push` call happens between
+// `Scheduler::builder()` and `Scheduler::build()` on the main host
+// thread. Second, every WU declares `Resource<FileEntryBuffer>` in its
+// `Read` set only; no WU declares it in `Write`, so the scheduler's
+// AccessSet contract gives every consumer immutable access at dispatch
+// time. Third, the interior mutability through `&self` during the
+// build phase is single-threaded by construction (the host shim runs
+// before scheduler dispatch begins; no parallel WU executes at that
+// point). Fourth, post-build the Resource is effectively read-only
+// because no WU's Write set names it; the `Cell` and `UnsafeCell`
+// never see a second writer. Same contract as DiscoveredFilePaths.
+unsafe impl Sync for FileEntryBuffer {}
+
+impl FileEntryBuffer {
+    /// Construct an empty store. Every slot is `EMPTY_FILE_ENTRY`;
+    /// `entries_len` is zero.
+    pub fn new() -> Self {
+        Self {
+            entries: core::cell::UnsafeCell::new(
+                [EMPTY_FILE_ENTRY; MAX_DISCOVERED_FILES],
+            ),
+            entries_len: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: zero literal for the empty-store counter; tracked: #72
+        }
+    }
+
+    /// Append one FFI-shape file entry and return its slot index.
+    ///
+    /// # Safety
+    ///
+    /// Caller asserts four invariants that pin the `unsafe impl Sync`
+    /// contract:
+    ///
+    /// 1. This call happens between `Scheduler::builder()` and
+    ///    `Scheduler::build()`. No WU has begun dispatching.
+    /// 2. The caller is the sole writer for this Resource for the
+    ///    duration of the scheduler-builder phase. No other thread or
+    ///    code path calls `push` concurrently.
+    /// 3. No WU declares `Resource<FileEntryBuffer>` in its `Write`
+    ///    set anywhere in the scheduler. Read-only-after-builder is the
+    ///    Sync contract; a Write declaration would invalidate it.
+    /// 4. `entries_len < MAX_DISCOVERED_FILES`. The body defensively
+    ///    asserts this before mutation.
+    pub unsafe fn push(&self, entry: viola_plugin_abi::FileEntry) -> arvo::Cap {
+        let n: usize = *self.entries_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to slot indexing; tracked: #72
+        assert!(
+            n < MAX_DISCOVERED_FILES,
+            "FileEntryBuffer::push beyond MAX_DISCOVERED_FILES",
+        );
+        // SAFETY: caller-asserted invariants give single-writer access
+        // and `n < MAX_DISCOVERED_FILES` is checked above.
+        unsafe {
+            let entries = &mut *self.entries.get();
+            entries[n] = entry;
+        }
+        self.entries_len.set(arvo::USize(n + 1)); // lint:allow(no-bare-numeric) reason: counter increment; tracked: #72
+        arvo::Cap(arvo::USize(n))
+    }
+
+    /// Current count of populated slots.
+    pub fn entries_len(&self) -> arvo::USize {
+        self.entries_len.get()
+    }
+
+    /// Raw pointer to the first slot. Suitable for `RunScope.files`.
+    /// Read-only-after-builder: the pointer addresses memory inside the
+    /// `UnsafeCell`; the Sync contract guarantees no concurrent writer
+    /// post-build, so the pointer is valid for the duration of the
+    /// scheduler run.
+    pub fn entries_ptr(&self) -> *const viola_plugin_abi::FileEntry {
+        // SAFETY: same invariants as the `unsafe impl Sync` contract.
+        // The exposed pointer is read-only by every WU consumer per the
+        // AccessSet contract; no Write declaration means no concurrent
+        // mutation can happen.
+        unsafe { (*self.entries.get()).as_ptr() }
+    }
+}
+
+impl Default for FileEntryBuffer {
     fn default() -> Self {
         Self::new()
     }
