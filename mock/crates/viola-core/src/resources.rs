@@ -184,6 +184,172 @@ pub const MAX_DISCOVERED_FILES: usize = 4096; // lint:allow(no-bare-numeric) lin
 /// over `[0, MAX_LINTS)`.
 pub const MAX_LINTS: usize = 32; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: ConstParamTy positions require bare usize; sibling MAX_PLUGINS pattern; tracked: #72
 
+/// Workspace-default cap for per-`RunLint<L>` diagnostic output. Each
+/// `RunLint<L>` writes to `[L * MAX_DIAGS_PER_LINT, (L + 1) *
+/// MAX_DIAGS_PER_LINT)` of `Column<WuDiagnostic>`. Disjoint per-L row
+/// ranges; parallel writes commute by construction under the
+/// COMMUTATIVE flag. Consumers of `Column<WuDiagnostic>` MUST size
+/// it to at least `MAX_LINTS * MAX_DIAGS_PER_LINT` slots. Pre-1.0;
+/// revisable.
+pub const MAX_DIAGS_PER_LINT: usize = 64; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: per-slot diagnostic cap; sibling MAX_PLUGINS pattern; tracked: #72
+
+/// Sentinel for `LintSlots`: marks an unpopulated or explicitly-skipped
+/// slot. `slot_at` returns `Maybe::Isnt` on this value.
+const LINT_SLOT_SENTINEL: arvo::Cap = arvo::Cap(arvo::USize(usize::MAX)); // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: sentinel-value zero; tracked: #72
+
+/// Singleton store of host-shim-populated lint-slot host_idx values.
+///
+/// The host shim or an IndexLints WU populates this Resource at
+/// scheduler-builder time. Slot `L` holds the `host_idx` of the lint
+/// plugin at that slot when populated; the sentinel
+/// `LINT_SLOT_SENTINEL` marks "no plugin at this slot". `RunLint<L>`
+/// reads slot `L` via `slot_at(L)`.
+pub struct LintSlots {
+    slots: core::cell::UnsafeCell<[arvo::Cap; MAX_LINTS]>,
+    slots_len: core::cell::Cell<arvo::USize>,
+}
+
+// SAFETY: Same four-invariant contract as DiscoveredFilePaths /
+// FileEntryBuffer. Host shim sole producer at scheduler-builder time;
+// every WU declares Read only with no Write anywhere; interior
+// mutability during build is single-threaded; cap-bounded push.
+unsafe impl Sync for LintSlots {}
+
+impl LintSlots {
+    /// Construct an empty store. Every slot is `LINT_SLOT_SENTINEL`.
+    pub fn new() -> Self {
+        Self {
+            slots: core::cell::UnsafeCell::new([LINT_SLOT_SENTINEL; MAX_LINTS]),
+            slots_len: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: zero literal for empty-store counter; tracked: #72
+        }
+    }
+
+    /// Append one lint-slot host_idx and return the slot index.
+    ///
+    /// # Safety
+    ///
+    /// Caller asserts four invariants per the `unsafe impl Sync`
+    /// contract: builder-time call only, sole writer, no WU declares
+    /// `Resource<LintSlots>` in Write, `slots_len < MAX_LINTS`.
+    pub unsafe fn push(&self, host_idx: arvo::Cap) -> arvo::Cap {
+        let n: usize = *self.slots_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to slot indexing; tracked: #72
+        assert!(n < MAX_LINTS, "LintSlots::push beyond MAX_LINTS");
+        // SAFETY: caller-asserted invariants; cap-bound checked.
+        unsafe {
+            let slots = &mut *self.slots.get();
+            slots[n] = host_idx;
+        }
+        self.slots_len.set(arvo::USize(n + 1)); // lint:allow(no-bare-numeric) reason: counter increment; tracked: #72
+        arvo::Cap(arvo::USize(n))
+    }
+
+    /// Populated-slot count.
+    pub fn slots_len(&self) -> arvo::USize {
+        self.slots_len.get()
+    }
+
+    /// Read the host_idx at slot `idx`. Returns `Maybe::Isnt` for the
+    /// sentinel or for indices past `slots_len`.
+    pub fn slot_at(&self, idx: arvo::Cap) -> notko::Maybe<arvo::Cap> {
+        let i: usize = *idx.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        if i >= MAX_LINTS {
+            return notko::Maybe::Isnt;
+        }
+        // SAFETY: Sync contract gives immutable access after build.
+        let host_idx = unsafe {
+            let slots = &*self.slots.get();
+            slots[i]
+        };
+        if *host_idx.0 == usize::MAX { // lint:allow(no-bare-numeric) reason: sentinel comparison; tracked: #72
+            notko::Maybe::Isnt
+        } else {
+            notko::Maybe::Is(host_idx)
+        }
+    }
+}
+
+impl Default for LintSlots {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Singleton store of host-shim-built per-slot lint config bytes.
+///
+/// Slot `L` holds a `BytesRef` pointing into the ViolaCfg arena's
+/// bytes for that lint's config block. `BytesRef::EMPTY` marks
+/// "absent config" per the ABI "empty = absent" convention.
+pub struct LintConfigBuffer {
+    configs: core::cell::UnsafeCell<[viola_plugin_abi::BytesRef; MAX_LINTS]>,
+    configs_len: core::cell::Cell<arvo::USize>,
+}
+
+// SAFETY: Same four-invariant contract as DiscoveredFilePaths /
+// FileEntryBuffer / LintSlots.
+unsafe impl Sync for LintConfigBuffer {}
+
+impl LintConfigBuffer {
+    /// Construct an empty store. Every slot is `BytesRef::EMPTY`.
+    pub fn new() -> Self {
+        Self {
+            configs: core::cell::UnsafeCell::new(
+                [viola_plugin_abi::BytesRef::EMPTY; MAX_LINTS],
+            ),
+            configs_len: core::cell::Cell::new(arvo::USize(0)), // lint:allow(no-bare-numeric) reason: zero literal for empty-store counter; tracked: #72
+        }
+    }
+
+    /// Append one lint-config BytesRef and return the slot index.
+    ///
+    /// # Safety
+    ///
+    /// Caller asserts four invariants per the `unsafe impl Sync`
+    /// contract: builder-time call only, sole writer, no WU declares
+    /// `Resource<LintConfigBuffer>` in Write, `configs_len <
+    /// MAX_LINTS`.
+    pub unsafe fn push(&self, bytes: viola_plugin_abi::BytesRef) -> arvo::Cap {
+        let n: usize = *self.configs_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to slot indexing; tracked: #72
+        assert!(n < MAX_LINTS, "LintConfigBuffer::push beyond MAX_LINTS");
+        // SAFETY: caller-asserted invariants; cap-bound checked.
+        unsafe {
+            let configs = &mut *self.configs.get();
+            configs[n] = bytes;
+        }
+        self.configs_len.set(arvo::USize(n + 1)); // lint:allow(no-bare-numeric) reason: counter increment; tracked: #72
+        arvo::Cap(arvo::USize(n))
+    }
+
+    /// Populated-slot count.
+    pub fn configs_len(&self) -> arvo::USize {
+        self.configs_len.get()
+    }
+
+    /// Read the BytesRef at slot `idx`. Returns `BytesRef::EMPTY` for
+    /// indices past `configs_len` or for indices beyond `MAX_LINTS`.
+    /// The empty-bytes value is the ABI "absent config" sentinel.
+    pub fn config_at(&self, idx: arvo::Cap) -> viola_plugin_abi::BytesRef {
+        let i: usize = *idx.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        if i >= MAX_LINTS {
+            return viola_plugin_abi::BytesRef::EMPTY;
+        }
+        let n: usize = *self.configs_len.get(); // lint:allow(no-bare-numeric) reason: bridges arvo::USize to bound comparison; tracked: #72
+        if i >= n {
+            return viola_plugin_abi::BytesRef::EMPTY;
+        }
+        // SAFETY: Sync contract gives immutable access after build.
+        unsafe {
+            let configs = &*self.configs.get();
+            configs[i]
+        }
+    }
+}
+
+impl Default for LintConfigBuffer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Singleton store of host-shim-discovered file paths.
 ///
 /// The host shim walks the workspace filesystem at scheduler-builder
