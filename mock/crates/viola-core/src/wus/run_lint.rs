@@ -15,7 +15,7 @@ use hilavitkutin_api::store::Column;
 use hilavitkutin_api::work_unit::WorkUnit;
 
 use super::stub::WuCtxStub;
-use super::{Diagnostic, Nam};
+use super::{Nam, WuDiagnostic};
 
 /// Reads NAM snapshots, writes findings. `L` indexes the lint plugin.
 pub struct RunLint<const L: usize>;
@@ -27,7 +27,7 @@ impl<const L: usize> BuilderInput for RunLint<L> {
 
 impl<const L: usize> WorkUnit for RunLint<L> {
     type Read = Cons<Column<Nam>, Empty>;
-    type Write = Cons<Column<Diagnostic>, Empty>;
+    type Write = Cons<Column<WuDiagnostic>, Empty>;
     type Hint = (Steady, Adaptive, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 

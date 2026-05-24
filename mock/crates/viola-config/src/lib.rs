@@ -454,6 +454,10 @@ pub const MAX_PARTIAL_RULES: usize = 16; // lint:allow(no-bare-numeric) lint:all
 /// handle interned during parse.
 pub const ARENA_BYTES: usize = 8192; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
 
+/// Maximum number of distinct interned entries one `ConfigArena<N>` can carry.
+/// Sizes the arena's offsets table at the type level.
+pub const ARENA_MAX_ENTRIES: usize = 256; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
+
 /// Maximum byte length of the raw viola.toml buffer the host shim hands
 /// to `LoadConfig`. The buffer lives in `Resource<ConfigBytes>`.
 pub const CONFIG_MAX_BYTES: usize = 16384; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: const-generic cap; tracked: #72
@@ -469,36 +473,101 @@ pub struct ConfigBytes {
 }
 
 /// Crate-private fixed-cap arena backing every `Str` handle inside one
-/// `ViolaConfigOwned`. Slice 2a ships the type with `unimplemented!()`
-/// `ArenaInterner` methods; Slice 2b wires the real intern path.
-///
-/// Slice 2a callers must not invoke `arena_intern` or `arena_resolve`.
-/// `ViolaCfg::new()` constructs an empty arena (no interning happens
-/// at construction); the panicking methods only fire if a caller
-/// reaches them through `StringInterner<ConfigArena<N>>::intern`. No
-/// Slice 2a code path does.
+/// `ViolaConfigOwned`. Cursor-based byte arena with a separate
+/// offsets table indexed by 28-bit id. `&self` mutation is gated by
+/// `Cell` / `UnsafeCell` interior mutability per the Slice 2b DOC CL.
 struct ConfigArena<const N: usize> {
-    _bytes: [u8; N], // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: raw arena buffer; the arena IS the irreducible byte-storage primitive; tracked: #72
+    bytes: core::cell::UnsafeCell<[u8; N]>, // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: raw arena buffer; tracked: #72
+    cursor: core::cell::Cell<arvo::USize>,
+    entries: core::cell::UnsafeCell<[(arvo::USize, arvo::USize); ARENA_MAX_ENTRIES]>,
+    entries_len: core::cell::Cell<arvo::USize>,
 }
 
 impl<const N: usize> ConfigArena<N> {
-    /// Empty arena. Slice 2b replaces the body with real allocator
-    /// state; until then this is `[0u8; N]`-init only.
+    /// Empty arena.
     #[doc(hidden)]
     #[allow(dead_code)]
     const fn new() -> Self {
         Self {
-            _bytes: [0u8; N], // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: zero-init of the raw arena buffer; tracked: #72
+            bytes: core::cell::UnsafeCell::new([0u8; N]), // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: zero-init of the raw arena buffer; tracked: #72
+            cursor: core::cell::Cell::new(arvo::USize::ZERO),
+            entries: core::cell::UnsafeCell::new([(arvo::USize::ZERO, arvo::USize::ZERO); ARENA_MAX_ENTRIES]),
+            entries_len: core::cell::Cell::new(arvo::USize::ZERO),
         }
     }
 }
 
+// SAFETY: `LoadConfig` is the sole producer (declared in its `Write` set; the
+// scheduler's AccessSet contract serialises writes on a Resource); subsequent
+// WUs hold `Read` access only and do not call `arena_intern`. The interior
+// mutability through `&self` is single-threaded per the scheduler's per-WU
+// dispatch model. Slice 2b DOC CL ratifies this contract; see decision 3.
+unsafe impl<const N: usize> Sync for ConfigArena<N> {}
+
+// Aliasing contract for `arena_intern` / `arena_resolve`: the trait impl is
+// append-only on `bytes` and `entries`, so a `&str` returned by `arena_resolve`
+// stays valid across subsequent `arena_intern` calls (no prior bytes move). The
+// `unsafe impl Sync` above pins cross-WU serialisation via AccessSet. Within
+// one `execute` call, the caller MUST NOT hold an `&mut *self.bytes.get()` or
+// `&mut *self.entries.get()` while calling either method on the same arena;
+// the body shape (single-threaded, intern-then-use) satisfies this trivially.
 impl<const N: usize> hilavitkutin_str::ArenaInterner for ConfigArena<N> {
-    fn arena_intern(&self, _s: &str) -> u32 { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
-        unimplemented!("ConfigArena::arena_intern not implemented until Slice 2b. Slice 2a Resource<ViolaCfg> must not be read or written by any WU body.")
+    fn arena_intern(&self, s: &str) -> u32 { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
+        let bytes = s.as_bytes();
+        let len = bytes.len(); // lint:allow(no-bare-numeric) reason: slice len projects to usize at the std boundary; tracked: #72
+        let offset = self.cursor.get().0; // lint:allow(no-bare-numeric) reason: USize.0 projects to usize for arithmetic; tracked: #72
+        let new_offset = offset + len; // lint:allow(no-bare-numeric) reason: cursor arithmetic in usize; tracked: #72
+        let id_internal = self.entries_len.get().0; // lint:allow(no-bare-numeric) reason: USize.0 projects to usize; tracked: #72
+        // Fail-closed on EITHER overflow dimension; no state mutation. The
+        // sentinel returned is 0 (resolves to ""); valid ids are 1-based so
+        // id 0 never collides with a real entry.
+        if new_offset > N || id_internal >= ARENA_MAX_ENTRIES {
+            return 0u32; // lint:allow(no-bare-numeric) reason: sentinel id for arena overflow; tracked: #72
+        }
+        // SAFETY: cursor `offset..new_offset` is within [0, N) by the bounds
+        // check above. The buffer is `UnsafeCell<[u8; N]>` and `&self`
+        // serialisation holds per the `unsafe impl Sync` SAFETY note.
+        unsafe {
+            let buf = &mut *self.bytes.get();
+            buf[offset..new_offset].copy_from_slice(bytes);
+        }
+        // SAFETY: same `&self` serialisation; the entries table is
+        // `UnsafeCell<[(USize, USize); ARENA_MAX_ENTRIES]>`. `id_internal` is
+        // in [0, ARENA_MAX_ENTRIES) by the bounds check above.
+        unsafe {
+            let entries = &mut *self.entries.get();
+            entries[id_internal] = (arvo::USize(offset), arvo::USize(len));
+        }
+        self.cursor.set(arvo::USize(new_offset));
+        self.entries_len.set(arvo::USize(id_internal + 1)); // lint:allow(no-bare-numeric) reason: entries-table cursor advance; tracked: #72
+        // External id = internal index + 1 so id 0 is reserved as the
+        // never-interned / overflow sentinel.
+        (id_internal + 1) as u32 // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: ArenaInterner returns the 28-bit id as u32; tracked: #72
     }
-    fn arena_resolve(&self, _id: u32) -> &str { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
-        unimplemented!("ConfigArena::arena_resolve not implemented until Slice 2b. Slice 2a Resource<ViolaCfg> must not be read or written by any WU body.")
+
+    fn arena_resolve(&self, id: u32) -> &str { // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) lint:allow(no-bare-string) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
+        if id == 0 { // lint:allow(no-bare-numeric) reason: 0 is the reserved overflow / never-interned sentinel; tracked: #72
+            return "";
+        }
+        let idx = (id - 1) as usize; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: 1-based id projected back to 0-based table index; tracked: #72
+        let len = self.entries_len.get().0; // lint:allow(no-bare-numeric) reason: USize.0 projects to usize for bounds check; tracked: #72
+        if idx >= len || idx >= ARENA_MAX_ENTRIES {
+            return "";
+        }
+        // SAFETY: `entries[idx]` is within bounds by the check above; the
+        // entries table is initialised at construction; `arena_intern` writes
+        // monotonically up to `entries_len`. The returned `&str` borrows from
+        // `self.bytes` with `&self`-lifetime, which is the trait contract.
+        let (offset, byte_len) = unsafe {
+            let entries = &*self.entries.get();
+            entries[idx]
+        };
+        unsafe {
+            let buf = &*self.bytes.get();
+            // Slice is valid UTF-8 because `arena_intern` only writes valid
+            // `&str` bytes; the boundaries were the original `&str` boundaries.
+            core::str::from_utf8_unchecked(&buf[offset.0..offset.0 + byte_len.0]) // lint:allow(no-bare-numeric) reason: USize.0 projects for slice range arithmetic; tracked: #72
+        }
     }
 }
 
@@ -511,21 +580,21 @@ impl<const N: usize> hilavitkutin_str::ArenaInterner for ConfigArena<N> {
 /// (`PluginEntryOwned`, etc.) inside the fixed-cap arrays. Body slices
 /// land real field shapes when they first need each.
 pub struct ViolaConfigOwned<
-    const MAX_PLUGINS: usize,
-    const MAX_GATES: usize,
-    const MAX_RULES: usize,
-    const MAX_PARTIAL_RULES: usize,
-    const ARENA_BYTES: usize,
+    const MAX_PLUGINS_CAP: usize,
+    const MAX_GATES_CAP: usize,
+    const MAX_RULES_CAP: usize,
+    const MAX_PARTIAL_RULES_CAP: usize,
+    const ARENA_BYTES_CAP: usize,
 > {
-    pub plugins: [PluginEntryOwned; MAX_PLUGINS],
+    pub plugins: [PluginEntryOwned; MAX_PLUGINS_CAP],
     pub plugins_len: arvo::Cap,
-    pub gates: [GateOwned; MAX_GATES],
+    pub gates: [GateOwned; MAX_GATES_CAP],
     pub gates_len: arvo::Cap,
-    pub rules: [RuleOwned; MAX_RULES],
+    pub rules: [RuleOwned; MAX_RULES_CAP],
     pub rules_len: arvo::Cap,
-    pub partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES],
+    pub partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES_CAP],
     pub partial_rules_len: arvo::Cap,
-    arena: ConfigArena<ARENA_BYTES>,
+    arena: ConfigArena<ARENA_BYTES_CAP>,
 }
 
 /// Placeholder for one plugin entry in `ViolaConfigOwned`. Slice 3
@@ -550,28 +619,28 @@ pub struct RuleOwned;
 pub struct PartialRuleOwned;
 
 impl<
-    const MAX_PLUGINS: usize,
-    const MAX_GATES: usize,
-    const MAX_RULES: usize,
-    const MAX_PARTIAL_RULES: usize,
-    const ARENA_BYTES: usize,
-> ViolaConfigOwned<MAX_PLUGINS, MAX_GATES, MAX_RULES, MAX_PARTIAL_RULES, ARENA_BYTES>
+    const MAX_PLUGINS_CAP: usize,
+    const MAX_GATES_CAP: usize,
+    const MAX_RULES_CAP: usize,
+    const MAX_PARTIAL_RULES_CAP: usize,
+    const ARENA_BYTES_CAP: usize,
+> ViolaConfigOwned<MAX_PLUGINS_CAP, MAX_GATES_CAP, MAX_RULES_CAP, MAX_PARTIAL_RULES_CAP, ARENA_BYTES_CAP>
 {
-    /// Construct an empty owned config. Slice 2b's `ViolaConfigOwned::from_borrowed`
-    /// will project a `ViolaConfig<'_, N>` into this shape; for Slice 2a
-    /// the constructor exists so the type can be instantiated in tests
-    /// once they land.
+    /// Construct an empty owned config. `LoadConfig::execute` (Slice 2b body)
+    /// will populate fields through a `populate_from_borrowed(&self, _)`
+    /// method that takes `&self` because the bundled arena carries interior
+    /// mutability.
     pub const fn new() -> Self {
         Self {
-            plugins: [PluginEntryOwned; MAX_PLUGINS],
+            plugins: [PluginEntryOwned; MAX_PLUGINS_CAP],
             plugins_len: arvo::Cap(arvo::USize::ZERO),
-            gates: [GateOwned; MAX_GATES],
+            gates: [GateOwned; MAX_GATES_CAP],
             gates_len: arvo::Cap(arvo::USize::ZERO),
-            rules: [RuleOwned; MAX_RULES],
+            rules: [RuleOwned; MAX_RULES_CAP],
             rules_len: arvo::Cap(arvo::USize::ZERO),
-            partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES],
+            partial_rules: [PartialRuleOwned; MAX_PARTIAL_RULES_CAP],
             partial_rules_len: arvo::Cap(arvo::USize::ZERO),
-            arena: ConfigArena::<ARENA_BYTES>::new(),
+            arena: ConfigArena::<ARENA_BYTES_CAP>::new(),
         }
     }
 }

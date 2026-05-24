@@ -1,7 +1,7 @@
 //! `EmitDiagnostics` reads findings, writes them to the egress sink.
 //!
 //! Slice 1 ships the stub. Slice 7 implements the body: sorts the
-//! `Column<Diagnostic>` deterministically per the aggregate comparator
+//! `Column<WuDiagnostic>` deterministically per the aggregate comparator
 //! and writes each finding through the sink to stderr / JSON / LSP.
 //! Per `hilavitkutin-workunit-mental-model`, services accessed for
 //! mutation live in the Write set, not as side effects.
@@ -13,7 +13,7 @@ use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
 
 use super::stub::WuCtxStub;
-use super::{Diagnostic, DiagnosticSink};
+use super::{DiagnosticSink, WuDiagnostic};
 
 /// Reads findings, writes them to the egress sink.
 pub struct EmitDiagnostics;
@@ -24,7 +24,7 @@ impl BuilderInput for EmitDiagnostics {
 }
 
 impl WorkUnit for EmitDiagnostics {
-    type Read = Cons<Column<Diagnostic>, Empty>;
+    type Read = Cons<Column<WuDiagnostic>, Empty>;
     type Write = Cons<Resource<DiagnosticSink>, Empty>;
     type Hint = (Relaxed, Atomic, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;

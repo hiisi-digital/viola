@@ -10,6 +10,10 @@
 /// time; not exposed as a scheduler Resource per the Slice 2 DOC CL).
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub struct Workspace {
+    /// Absolute workspace root, interned by the host shim's long-lived
+    /// string interner. The interner is registered at scheduler-builder
+    /// time (not as a scheduler-side `Resource`); the `Str` handle is
+    /// valid for the duration of the scheduler run.
     pub path: hilavitkutin_str::Str,
 }
 
