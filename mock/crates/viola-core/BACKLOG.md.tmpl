@@ -101,3 +101,34 @@ Slice 6b reuses the existing WuDiagnostic with `Str::default()` for plugin_id, r
 ## Slice 9 parallel fan-out verification
 
 Audit pass against landed hilavitkutin dispatch codegen confirming `COMMUTATIVE = Bool::TRUE` on RunLint<L> yields reduce-style parallel fan-out across `RunLint<0>..RunLint<MAX_LINTS - 1>`. Per the scoping memo Slice 9 entry: if the codegen serialises, the design needs revisiting per the cdylib boundary memo's first remaining deferral. Slice 6a's COMMUTATIVE flag set is the precondition for this audit; Slice 9 is the verification.
+
+## EmitDiagnostics body and emit loop
+
+Slice 7a flips DiagnosticSink from the Slice 1 ZST to a non-ZST placeholder. The body stays `unimplemented!()`. Slice 7b lands the body proper: reads `Column<WuDiagnostic>` bounded by `Resource<DiagnosticCounts>` per-L counts, sorts the populated records via the host-side approximation comparator (with original-slot-index tiebreaker for stability), walks the sorted records and emits each through the `EmitWriter` impl held inside `Resource<DiagnosticSink<W>>`. AccessSet extends accordingly.
+
+## EmitWriter trait surface for viola-core
+
+Slice 7b adds a minimal `EmitWriter` trait (`write_str`, `write_bytes`, `flush`) in viola-core. **Open question for Slice 7b's CL to settle**: return type. Two paths:
+
+- **Unit return**. `fn write_str(&mut self, s: &str)`. Simpler. viola-cli's impl handles syscall failures internally per its discretion (panic, log, silent drop).
+- **`notko::Outcome<()>` return**. Surfaces I/O failure to the caller. EmitDiagnostics decides whether to abort or continue on a failed write.
+
+The trade is observability-vs-simplicity; Slice 7b's topic+DOC CL picks a path with rationale. The design call is not collapsed to unit-return in 7a.
+
+## DiagnosticSink generic carrier flip
+
+Slice 7a ships the non-ZST placeholder. Slice 7b flips to `pub struct DiagnosticSink<W: EmitWriter> { writer: UnsafeCell<W> }` with private fields. The generic parameter is monomorphised at scheduler-builder time when viola-cli registers the Resource with its concrete EmitWriter impl. Same four-invariant `unsafe impl Sync` pattern as host-shim Resources, but EmitDiagnostics is the sole writer (declared in its Write set) rather than the host shim.
+
+## Resource<DiagnosticCounts> for per-L populated counts
+
+Slice 7b adds `Resource<DiagnosticCounts>`: `[arvo::USize; MAX_LINTS]` mapping slot L to the count of populated `WuDiagnostic` records in the per-L row range of `Column<WuDiagnostic>`. Avoids sentinel detection at emit time. **RunLint's Write set extends to include this Resource** (a load-bearing AccessSet change to the already-closed Slice 6b RunLint WU body); the RunLint body's projection loop adds a trailing `DiagnosticCounts[L] = count` write. EmitDiagnostics reads to iterate only the populated slots.
+
+**Slice 9 audit precondition**: the parallel fan-out verification audit (existing Slice 6a BACKLOG entry) re-checks COMMUTATIVE-flag commutativity against the extended Write set. Per-L writes to `DiagnosticCounts[L]` for distinct L touch disjoint slot indexes by construction, so the audit is expected to confirm commutativity; tracked explicitly so the assumption is not silent when Slice 9 walks the cohort.
+
+## Host-side WuDiagnostic sort approximation
+
+Slice 7b sorts by `(source, severity, range.start_line, range.start_col, original_slot_index)`. The trailing `original_slot_index` tiebreaker is load-bearing for stability: WuDiagnostic records carry `Str::default()` placeholders for path / plugin_id / message until the LintFinding carrier upgrade lands, so the leading sort keys can collide on duplicate diagnostics that differ only by interned-field content. The slot-index tiebreaker pins the canonical order until the carrier upgrade restores ABI §10's canonical sort. Documented deviation; trigger for canonical restoration is the Slice 2b host-shim long-lived interner BACKLOG entry shipping.
+
+## EmitDiagnostics surface choice hardcoded
+
+Slice 7b hardcodes the human-readable emit format: one line per diagnostic in a fixed format ("[severity] source/range: message"). JSON / LSP emit formats defer to a future slice that introduces `Resource<RunSurface>` (already on the Slice 6a BACKLOG) and branches the emit on the surface variant.
