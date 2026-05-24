@@ -105,14 +105,14 @@ The scheduler fires four meta-virtual markers at schedule boundaries: `Virtual<P
 
 `MAX_LINTS` is a compile-time constant on the viola-cli binary. Unused slots silently no-op.
 
-The full Shape D design is at `~/Dev/clause-dev/hilavitkutin/mock/research/202605232100_workunit-cdylib-boundary.md`. Note: that memo uses working names `ViolaLinterVtable` / `PROVIDER_VIOLA_LINTER` for what the actual ABI calls `LintEvaluateVtable` / `PROVIDER_LINT_EVALUATE`. It also proposes a `LintCallCtx` wrapper struct, whereas the actual `evaluate` signature takes `(nam, config, out_batch)` directly. Reconciliation of those names and the execute-body shape is part of viola task #254.
+The full Shape D design is at `~/Dev/clause-dev/hilavitkutin/mock/research/202605232100_workunit-cdylib-boundary.md`. As of 2026-05-24 that memo is aligned with the landed ABI: canonical names `LintEvaluateVtable` / `PROVIDER_LINT_EVALUATE`, direct-args `evaluate(host_ctx, nam, config_bytes, config_len, out_batch)` signature, and `ExtensionHost` re-exported from `hilavitkutin-extensions` rather than viola-defined. The two original "deferred but load-bearing" #254 design questions are both resolved.
 
 ## Deferred but load-bearing
 
-Two design questions open until viola task #254 lands:
+Both #254 design questions are now closed (resolved 2026-05-24 via three-parallel-specialist convergence). Captured here for the implementation record.
 
-- **`LintCallCtx` wrapper vs. direct-args**: the cdylib boundary memo proposes a `#[repr(C)]` `LintCallCtx` wrapper bundling the call context; the landed `LintEvaluateVtable.evaluate` signature takes `(nam, config, out_batch)` directly. The `RunLint<L>::execute()` body uses the actual landed signature. Whether the ABI gets a `LintCallCtx` wrapper added (and the cdylib memo's design realised) or whether the direct-args shape is the final form is a #254 design call.
-- **Meta-virtual registration contract**: whether viola-cli must explicitly register `.with(Virtual::<ScheduleEnd>::new())` (and the other three meta-virtuals) or whether the engine fires them automatically without registration is unconfirmed pending the `Scheduler::run()` body landing in Pass 7 + 8 of the hilavitkutin megaround follow-up rounds. The stores table marks `Virtual<ScheduleEnd>` as "(meta-virtual, engine-fired)" as a conservative guess.
+- **`LintCallCtx` wrapper vs. direct-args.** CLOSED 2026-05-23 via Option A: drop the wrapper, align with the landed direct-args ABI. The `LintEvaluateVtable.evaluate` signature takes `(host_ctx, nam, config_bytes, config_len, out_batch)` directly. `RunLint<L>::execute()` reads its Context accessors and unpacks them inline at the FFI call site; no aggregation type holds the args between read and call. See the cdylib boundary memo for the full reasoning.
+- **Meta-virtual registration contract.** CLOSED 2026-05-24 via Option C, already landed. The mechanism: `WorkUnit` carries a `Schedule = Always` generic parameter; lifecycle-bound WUs implement `WorkUnit<On<Marker>>` where Marker is one of `PlanStage` / `ScheduleReady` / `PassStart` / `ScheduleEnd`. Registration follows the standard `.with(WuStruct::default())` path; the engine reads the `Schedule` type at plan-build time to route. Landed precedent: `impl WorkUnit<On<ScheduleEnd>> for AdaptWu` at `hilavitkutin-providers/src/adapt_wu.rs:63`. For viola: `LoadPlugins` implements `WorkUnit<On<PlanStage>>`, `SortAndEmitDiagnostics` (or equivalent) implements `WorkUnit<On<ScheduleEnd>>`, `RunLint<L>` WUs stay on default `Always`. The stores table's `Virtual<ScheduleEnd>` row should be re-read as "engine fires at this lifecycle boundary; WUs bound via `On<ScheduleEnd>` execute here."
 
 ## What dissolves (eventual state, not current source state)
 
