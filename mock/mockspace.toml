@@ -1,0 +1,51 @@
+project_name = "viola"
+crate_prefix = "viola"
+abi_version = 1
+
+proc_macro_crates = []
+module_crates = []
+
+# Layer labels by depth index. Reflects viola's current architecture:
+# plugin-abi (stable C-ABI contract), config (TOML parser), core (host
+# runtime), cli (entry point), deno-runtime (TS bridge), plus two
+# internal test fixtures.
+layers = [
+    "ABI",       # viola-plugin-abi (stable C-ABI surface)
+    "Config",    # viola-config (TOML schema, no_std no_alloc)
+    "Core",      # viola-core (in-process host runtime)
+    "CLI",       # viola-cli (entry binary)
+    "Bridge",    # viola-deno-runtime (cdylib bridge to Deno)
+    "Fixture",   # viola-test-plugin-fixture, viola-test-runner-fixture
+]
+
+# Crate header colors for dependency graph (bg | fg).
+[crate_colors]
+viola-plugin-abi = "#E8EEF7 | #3A6EA5"
+viola-config = "#E6F2E6 | #2D6A2D"
+viola-core = "#EDE6F3 | #5C2D82"
+viola-cli = "#FDF0E0 | #C05C00"
+viola-deno-runtime = "#F2E6E6 | #7A2D2D"
+viola-test-plugin-fixture = "#EEEEEE | #555555"
+viola-test-runner-fixture = "#EEEEEE | #555555"
+
+# Lean initial lint set. Built-in quality lints only. Stack-discipline
+# lints (no-bare-numeric, no-alloc, no-std, primitive-vocabulary)
+# come in a follow-up PR once each crate's design coverage clarifies
+# which scopes can hold the stricter floors. viola-deno-runtime's
+# serde/serde_json dep is the obvious holdout that needs per-crate
+# scoping rather than a workspace-wide push.
+[lints.no-empty-crate]
+commit = "warn"
+build = "warn"
+
+[lints.no-todo]
+commit = "warn"
+build = "warn"
+
+[lints.no-fixme]
+commit = "warn"
+build = "warn"
+
+[lints.em-dash]
+commit = "error"
+build = "error"

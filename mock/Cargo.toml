@@ -34,7 +34,11 @@ panic = "abort"
 panic = "abort"
 
 [workspace.dependencies]
-# Hilavitkutin substrate. Canonical refs are git; local iteration uses
+# Mockspace bootstrap (build-only). Used by each crate's build.rs to
+# regenerate .claude/, .github/, and docs/ artifacts on cargo check.
+mockspace = { git = "ssh://git@github.com/hiisi-digital/mockspace.git", branch = "main" }
+
+# Hilavitkutin foundations. Canonical refs are git; local iteration uses
 # the path-overrides in the [patch."..."] section below.
 hilavitkutin-linking = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
@@ -46,20 +50,20 @@ arvo = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default
 arvo-bits = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 arvo-bitmask = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 
-# Local iteration overrides. Hilavitkutin's mock workspace is the only
-# place these crates live until they graduate to crates.io. Sibling-
-# checkout layout (`~/Dev/clause-dev/{viola,hilavitkutin,arvo,notko}`)
-# is the assumed working environment.
+# Local iteration overrides. Sibling-checkout layout
+# (`~/Dev/clause-dev/{viola,hilavitkutin,arvo,notko}`) is the assumed
+# working environment. Paths now relative to viola/mock/Cargo.toml so
+# the leading `..` count is one greater than the prior root manifest.
 [patch."ssh://git@github.com/orgrinrt/hilavitkutin.git"]
-hilavitkutin-linking = { path = "../hilavitkutin/mock/crates/hilavitkutin-linking" }
-hilavitkutin-extensions = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions" }
-hilavitkutin-extensions-macros = { path = "../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }
-hilavitkutin-api = { path = "../hilavitkutin/mock/crates/hilavitkutin-api" }
+hilavitkutin-linking = { path = "../../hilavitkutin/mock/crates/hilavitkutin-linking" }
+hilavitkutin-extensions = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions" }
+hilavitkutin-extensions-macros = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }
+hilavitkutin-api = { path = "../../hilavitkutin/mock/crates/hilavitkutin-api" }
 
 [patch."ssh://git@github.com/orgrinrt/notko.git"]
-notko = { path = "../notko" }
+notko = { path = "../../notko" }
 
 [patch."ssh://git@github.com/orgrinrt/arvo.git"]
-arvo = { path = "../arvo/mock/crates/arvo" }
-arvo-bits = { path = "../arvo/mock/crates/arvo-bits" }
-arvo-bitmask = { path = "../arvo/mock/crates/arvo-bitmask" }
+arvo = { path = "../../arvo/mock/crates/arvo" }
+arvo-bits = { path = "../../arvo/mock/crates/arvo-bits" }
+arvo-bitmask = { path = "../../arvo/mock/crates/arvo-bitmask" }
