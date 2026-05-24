@@ -140,3 +140,34 @@ Closed-vocabulary enum classifying the WU that produced one `WuDiagnostic`. Six 
 | Emit | Slice 7 (`EmitDiagnostics`) | sink-side egress failure |
 
 Per `vocabulary.md`'s closed-enum-as-spec pattern (`Phase` precedent). Each producer slice constructs only its own variant. No `Default` impl by design; construction sites pick the variant explicitly to make the producer obvious in the source.
+
+## Slice 3 plugin-host shapes
+
+Slice 3 lands the `LoadPlugins` body. Two host-side shapes ship: a singleton plugin-handle store (`ExtensionHost`) and the per-plugin column record (`PluginEntry`). The pair satisfies the `hilavitkutin-workunit-mental-model.md` requirement that all consumer state lives in `Resource<T>` or `Column<T>`; the `Library` instances themselves carry `Drop` and so cannot be `ColumnValue` (the blanket bound is `Copy + 'static`), which is why the dynamic-library handles live in the Resource and the column carries a `host_idx: arvo::Cap` bridge.
+
+### `ExtensionHost`
+
+Singleton Resource carrying every loaded plugin's `hilavitkutin_linking::Library` instance for the duration of one scheduler run. The internal storage is `UnsafeCell<[MaybeUninit<Library>; MAX_PLUGINS]>` with a parallel `Cell<arvo::USize>` length counter; slot zero is the first push, slot one the second, and so on up to the const cap.
+
+`unsafe impl Sync for ExtensionHost` pins a four-invariant SAFETY contract: `LoadPlugins` is the sole producer (declared in its `Write` set; the scheduler's AccessSet contract serialises writes on a Resource); downstream WUs that need to call into a loaded library declare `Resource<ExtensionHost>` in their `Read` set, so phase-separation prevents concurrent dispatch with `LoadPlugins`; the interior mutability through `&self` is single-threaded per the scheduler's per-WU dispatch model; the cap is honoured by `push` (the only writer entry point) before any mutation.
+
+Per-run `Drop` walks the initialised prefix (slots zero through `loaded_len`) and `assume_init_drop`s each slot, releasing the dlopen handle. Slots past `loaded_len` are uninitialised by construction and never read or dropped.
+
+`library_at(&self, idx) -> &Library` reads the indexed slot. It carries an unconditional release-retained `assert!(i < loaded_len)` before the `assume_init_ref` call, because reading uninitialised `MaybeUninit` is undefined behaviour and the soundness of the body of every downstream WU depends on the bounds check actually running. The assert stays in release builds.
+
+`pub(crate) unsafe fn push(&self, lib: Library) -> arvo::Cap` is the LoadPlugins write side. Crate-private to keep the invariant chain (`loaded_count <= i < n <= MAX_PLUGINS` per the LoadPlugins loop) reasoning local to viola-core. The runtime assertion fires before the slot write.
+
+### `PluginEntry`
+
+Column record carried by `Column<PluginEntry>`. Four `Copy` fields:
+
+| Field | Type | Role |
+|---|---|---|
+| `name` | `hilavitkutin_str::Str` | Interned display name. Slice 3 ships `Str::default()` because the host-shim long-lived interner is deferred (see BACKLOG); future slices fill the real handle. |
+| `roles` | `crate::role::Mask64` | Bitset of provider roles the loaded plugin advertises. Derived from the descriptor's provider table by `resolve_descriptor`. |
+| `abi_version` | `hilavitkutin_extensions::AbiVersion` | The descriptor's stated ABI version, used by downstream WUs for compatibility decisions. |
+| `host_idx` | `arvo::Cap` | Index into `ExtensionHost.library_at`. The bridge that lets a Column record refer to its matching `Library` instance without violating `ColumnValue: Copy + 'static` (`Library` has `Drop` and is not `Copy`). |
+
+Derives `Copy, Clone, PartialEq, Eq`. `Debug` is intentionally omitted: `arvo_bitmask::Mask<W>` and `hilavitkutin_extensions::AbiVersion` do not derive `Debug` in their current upstream releases. The `viola-core/SHAME.md.tmpl` entry under `## PluginEntry` tracks the discipline gap; future upstream PRs adding `Debug` lift the omission. A workspace-local Debug-newtype wrapping that adds the derive is rejected on its own merit: the wrap would shadow the upstream type in every downstream signature for one synthetic format trait, which costs more readability than the missing `Debug` does. The SHAME entry is the right tracking shape.
+
+Why the split between `ExtensionHost` (Resource) and `PluginEntry` (Column record) rather than a single Column carrying the `Library` directly: `Column<T>` constrains `T: ColumnValue = Copy + 'static`. `Library` has a `Drop` impl for RAII dlopen cleanup, so it cannot satisfy `Copy`. The pre-Slice-3 design memo enumerated two paths: Path A had `PluginEntry` carrying `Library` by value (infeasible per the Copy constraint); Path B splits the loaded handle into the Resource and keeps the column carrying small Copy descriptors with the `host_idx` bridge. Slice 3 ships Path B.
