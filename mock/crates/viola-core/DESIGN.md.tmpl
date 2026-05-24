@@ -285,3 +285,21 @@ Failure paths emit `WuDiagnostic { source: WuDiagnosticSource::RunRunner }`:
 - FFI call returns `AbiStatus != Ok`.
 
 The local-counter pattern (`written_count`, `failure_count`) tracks column lengths by construction per the Slice 3 LoadPlugins precedent. Slice 5b body needs `Column<PluginEntry>` reader access; uses the same `<Stub as ColumnReaderApi<R>>::read` pattern Slice 3 LoadPlugins used for `Column<PluginEntry>` writes (here as reads).
+
+## Slice 6a RunLint commutative shape
+
+Slice 6a sets `MAX_LINTS` and flips `RunLint<L>` to `const COMMUTATIVE: Bool = Bool::TRUE` ahead of the Slice 6b body. The COMMUTATIVE flag is the load-bearing claim for parallel fan-out per the scoping memo at `mock/research/202605240700_topic.scoping-254-viola-as-hilavitkutin-app.md` and the cdylib boundary memo's first remaining deferral.
+
+### `MAX_LINTS`
+
+Const cap for the lint-plugin slot count. Workspace-default `32`. Pre-1.0; revisable. Sits alongside MAX_PLUGINS (16) and MAX_DISCOVERED_FILES (4096) as the third workspace-cap constant viola-core exposes.
+
+The const lives in `viola-core/src/resources.rs` for cap-constant locality with `MAX_PLUGINS` (re-exported from viola-config) and `MAX_DISCOVERED_FILES`.
+
+### `RunLint` commutative dispatch
+
+`RunLint<const L: usize>` is monomorphised per L by the scheduler at plan time. Slice 6a sets `const COMMUTATIVE: Bool = arvo::Bool::TRUE` on the `WorkUnit` impl. The scheduler dispatches `RunLint<0>..RunLint<MAX_LINTS - 1>` in parallel where AccessSet permits because their `Column<WuDiagnostic>` writes commute under the COMMUTATIVE flag.
+
+The disjoint-slot-range write strategy is the structural guarantee that makes the writes commute: each `RunLint<L>` writes to a per-L row range of `Column<WuDiagnostic>` (`[L * MAX_DIAGS_PER_LINT, L * MAX_DIAGS_PER_LINT + MAX_DIAGS_PER_LINT)`); the ranges are disjoint by construction, so parallel writes across L touch disjoint memory and commute trivially. Slice 6b ships `MAX_DIAGS_PER_LINT` alongside the body. The singleton-row convention RunRunner uses does not compose with parallel fan-out and is rejected for RunLint.
+
+Slice 9 audits whether the landed hilavitkutin dispatch codegen actually honours the COMMUTATIVE flag with reduce-style parallel fan-out. If it serialises, the design needs revisiting per the cdylib memo's first remaining deferral. Slice 6a's COMMUTATIVE flag set is the precondition for that audit.

@@ -31,7 +31,14 @@ impl<const L: usize> WorkUnit for RunLint<L> {
     type Hint = (Steady, Adaptive, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 
+    /// Parallel fan-out claim per Slice 6a: `RunLint<0>..RunLint<MAX_LINTS - 1>`
+    /// write to disjoint per-L row ranges of `Column<WuDiagnostic>`, so the
+    /// scheduler can dispatch them concurrently under the COMMUTATIVE flag.
+    /// Slice 9 audits the landed hilavitkutin dispatch codegen to confirm
+    /// the flag yields reduce-style parallel fan-out (vs serialising).
+    const COMMUTATIVE: arvo::Bool = arvo::Bool::TRUE;
+
     fn execute<'frame>(&self, _ctx: &Self::Ctx<'frame>) {
-        unimplemented!("Slice 6 implements RunLint")
+        unimplemented!("Slice 6b implements RunLint")
     }
 }

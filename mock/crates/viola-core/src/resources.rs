@@ -177,6 +177,13 @@ impl Drop for ExtensionHost {
 /// revisable once realistic viola runs surface average-case file counts.
 pub const MAX_DISCOVERED_FILES: usize = 4096; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: ConstParamTy positions require bare usize; sibling MAX_PLUGINS pattern; tracked: #72
 
+/// Workspace-default cap for the lint-plugin slot count. Pre-1.0;
+/// revisable. Sits alongside `MAX_PLUGINS` (16) and
+/// `MAX_DISCOVERED_FILES` (4096) as the third workspace-cap constant
+/// viola-core exposes. The Slice 6 `RunLint<L>` const generic ranges
+/// over `[0, MAX_LINTS)`.
+pub const MAX_LINTS: usize = 32; // lint:allow(no-bare-numeric) lint:allow(arvo-types-only) reason: ConstParamTy positions require bare usize; sibling MAX_PLUGINS pattern; tracked: #72
+
 /// Singleton store of host-shim-discovered file paths.
 ///
 /// The host shim walks the workspace filesystem at scheduler-builder
