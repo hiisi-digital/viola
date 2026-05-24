@@ -570,3 +570,117 @@ impl Default for FileEntryBuffer {
         Self::new()
     }
 }
+
+/// Singleton store of per-L populated-diagnostic counts.
+///
+/// `RunLint<L>` writes `counts[L]` after its projection loop with the
+/// number of WuDiagnostic records actually populated in its per-L row
+/// range of `Column<WuDiagnostic>`. `EmitDiagnostics` reads each
+/// `counts[L]` to bound iteration over the per-L row range, avoiding
+/// sentinel detection on each WuDiagnostic record.
+///
+/// **Single field**, no shared counter. A sibling shared scalar
+/// (e.g. `populated: Cell<USize>`) under the parallel RunLint cohort
+/// would be a non-atomic read-modify-write race regardless of
+/// end-state commutativity intent; the disjoint per-L slot writes are
+/// the only synchronisation. The `any_populated` accessor scans the
+/// 32-entry array on the read side where phase-separation guarantees
+/// no concurrent writer.
+///
+/// Distinct from the host-shim-populated Resources (DiscoveredFilePaths,
+/// FileEntryBuffer, LintSlots, LintConfigBuffer): writes happen at WU
+/// dispatch time, not at scheduler-builder time. The RunLint cohort is
+/// the multi-writer; each L writes its own slot index, which is
+/// disjoint across L by construction.
+pub struct DiagnosticCounts {
+    counts: core::cell::UnsafeCell<[arvo::USize; MAX_LINTS]>,
+}
+
+// SAFETY: Four-invariant contract pinning the `unsafe impl Sync`. First,
+// `RunLint<L>` is the writer cohort declared in its Write set. Second,
+// each L writes only `counts[L]`; per-L writes for distinct L touch
+// disjoint slot indexes by construction, so the parallel-fan-out
+// dispatch commutes under the COMMUTATIVE flag (Slice 9 audits this).
+// Third, `EmitDiagnostics` declares this Resource in its Read set; the
+// scheduler's phase-separation analysis proves no concurrent dispatch
+// between the RunLint cohort and EmitDiagnostics. Fourth, the interior
+// mutability through `&self` during RunLint dispatch is single-threaded
+// per-L by the disjoint-slot strategy. No shared scalar lives on this
+// type; there is no shared-counter race to reason about.
+unsafe impl Sync for DiagnosticCounts {}
+
+impl DiagnosticCounts {
+    /// Construct an empty store. Every slot is zero.
+    pub fn new() -> Self {
+        Self {
+            counts: core::cell::UnsafeCell::new([arvo::USize(0); MAX_LINTS]), // lint:allow(no-bare-numeric) reason: zero-init counter array; tracked: #72
+        }
+    }
+
+    /// Write the per-L populated count.
+    ///
+    /// # Safety
+    ///
+    /// Caller MUST hold a `Write` projection of this Resource through
+    /// the scheduler's AccessSet dispatch (i.e. the caller is
+    /// `RunLint<L>::execute`). The per-L write strategy disjoint-slot
+    /// invariant means concurrent writers for distinct L cannot race
+    /// the same slot. The `slot` parameter MUST equal the caller's
+    /// `L` (the AccessSet contract does not encode this; the caller
+    /// must respect it).
+    pub unsafe fn set_count(&self, slot: arvo::Cap, count: arvo::USize) {
+        let i: usize = *slot.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        assert!(
+            i < MAX_LINTS,
+            "DiagnosticCounts::set_count slot exceeds MAX_LINTS",
+        );
+        // SAFETY: caller asserts L = slot and disjoint-slot strategy;
+        // the write at index `i` does not race any other writer.
+        unsafe {
+            let counts = &mut *self.counts.get();
+            counts[i] = count;
+        }
+    }
+
+    /// Read the per-L populated count.
+    pub fn count_at(&self, slot: arvo::Cap) -> arvo::USize {
+        let i: usize = *slot.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        if i >= MAX_LINTS {
+            return arvo::USize(0); // lint:allow(no-bare-numeric) reason: out-of-range-as-empty sentinel; tracked: #72
+        }
+        // SAFETY: Sync contract guarantees no concurrent writer when
+        // EmitDiagnostics reads (phase-separation past the RunLint
+        // cohort). Read-only reborrow of the UnsafeCell is sound.
+        unsafe {
+            let counts = &*self.counts.get();
+            counts[i]
+        }
+    }
+
+    /// Scan-based check: any slot non-zero?
+    ///
+    /// Walks `counts[0..MAX_LINTS]` once (32 entries; cheap O(MAX_LINTS)).
+    /// Replaces a shared counter that would have been a Cell RMW race
+    /// under the parallel RunLint cohort. Lives entirely on the read
+    /// side; the Sync contract's phase-separation invariant guarantees
+    /// no concurrent writer at scan time.
+    pub fn any_populated(&self) -> arvo::Bool {
+        // SAFETY: same Sync contract as `count_at`; phase-separation
+        // past the RunLint cohort guarantees no concurrent writer.
+        let counts = unsafe { &*self.counts.get() };
+        let mut i: usize = 0; // lint:allow(no-bare-numeric) reason: scan counter; tracked: #72
+        while i < MAX_LINTS {
+            if *counts[i] != 0 { // lint:allow(no-bare-numeric) reason: zero-slot check; tracked: #72
+                return arvo::Bool::TRUE;
+            }
+            i += 1; // lint:allow(no-bare-numeric) reason: scan counter increment; tracked: #72
+        }
+        arvo::Bool::FALSE
+    }
+}
+
+impl Default for DiagnosticCounts {
+    fn default() -> Self {
+        Self::new()
+    }
+}

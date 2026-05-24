@@ -41,7 +41,7 @@ use super::stub::WuCtxStub;
 use super::{Nam, WuDiagnostic, WuDiagnosticSource};
 use crate::invoke::lint_vtable_from_library;
 use crate::resources::{
-    ExtensionHost, LintConfigBuffer, LintSlots, MAX_DIAGS_PER_LINT, MAX_LINTS,
+    DiagnosticCounts, ExtensionHost, LintConfigBuffer, LintSlots, MAX_DIAGS_PER_LINT, MAX_LINTS,
 };
 
 /// Reads NAM snapshots and per-slot config, writes findings. `L`
@@ -61,7 +61,7 @@ impl<const L: usize> WorkUnit for RunLint<L> {
             Cons<Resource<LintConfigBuffer>, Cons<Column<Nam>, Empty>>,
         >,
     >;
-    type Write = Cons<Column<WuDiagnostic>, Empty>;
+    type Write = Cons<Column<WuDiagnostic>, Cons<Resource<DiagnosticCounts>, Empty>>;
     type Hint = (Steady, Adaptive, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 
@@ -77,6 +77,8 @@ impl<const L: usize> WorkUnit for RunLint<L> {
         type W<const LL: usize> = <RunLint<LL> as WorkUnit>::Write;
         type Stub<const LL: usize> =
             <WuCtxStub<'static> as HasResourceProvider<R<LL>>>::Provider;
+        type StubW<const LL: usize> =
+            <WuCtxStub<'static> as HasResourceProvider<W<LL>>>::Provider;
 
         // Compile-time guard: L must be within MAX_LINTS so the per-L
         // row range fits in the disjoint write strategy. The const-eval
@@ -99,11 +101,17 @@ impl<const L: usize> WorkUnit for RunLint<L> {
             );
         let reader = <WuCtxStub<'frame> as HasColumnReader<R<L>>>::reader(ctx);
         let writer = <WuCtxStub<'frame> as HasColumnWriter<W<L>>>::writer(ctx);
+        let diag_counts: &DiagnosticCounts =
+            <StubW<L> as ResourceProviderApi<W<L>>>::resource::<DiagnosticCounts>(
+                <WuCtxStub<'frame> as HasResourceProvider<W<L>>>::resources(ctx),
+            );
 
         let host_idx = match lint_slots.slot_at(arvo::Cap(USize(L))) {
             Maybe::Is(idx) => idx,
             Maybe::Isnt => {
                 // No plugin at this slot. Silent return (not a failure).
+                // Per-L count stays at zero; EmitDiagnostics skips this L.
+                write_count::<L>(diag_counts, USize(0)); // lint:allow(no-bare-numeric) reason: empty-count marker; tracked: #72
                 return;
             }
         };
@@ -113,6 +121,7 @@ impl<const L: usize> WorkUnit for RunLint<L> {
             Maybe::Is(vt) => vt,
             Maybe::Isnt => {
                 emit_failure::<L>(writer);
+                write_count::<L>(diag_counts, USize(1)); // lint:allow(no-bare-numeric) reason: one-failure-record count; tracked: #72
                 return;
             }
         };
@@ -150,6 +159,7 @@ impl<const L: usize> WorkUnit for RunLint<L> {
 
         if status != AbiStatus::Ok {
             emit_failure::<L>(writer);
+            write_count::<L>(diag_counts, USize(1)); // lint:allow(no-bare-numeric) reason: one-failure-record count; tracked: #72
             return;
         }
 
@@ -204,6 +214,26 @@ impl<const L: usize> WorkUnit for RunLint<L> {
             }
             i += 1; // lint:allow(no-bare-numeric) reason: loop counter increment; tracked: #72
         }
+        // Record the per-L populated count so EmitDiagnostics bounds
+        // its iteration over this L's row range without sentinel
+        // detection. The DiagnosticCounts write commutes with parallel
+        // RunLint<L'> writes (distinct slot indexes) per the
+        // COMMUTATIVE-flag contract.
+        write_count::<L>(diag_counts, USize(count));
+    }
+}
+
+/// Write the per-L populated count to `DiagnosticCounts`. The slot
+/// index is `L`; concurrent RunLint<L'> writes for distinct L touch
+/// disjoint slots, so the write commutes under the COMMUTATIVE flag.
+fn write_count<const L: usize>(diag_counts: &DiagnosticCounts, count: arvo::USize) {
+    // SAFETY: caller (this WU's execute body) holds a Write projection
+    // of Resource<DiagnosticCounts>; the slot index L is unique to
+    // this WU instance under the disjoint-slot strategy; no concurrent
+    // writer touches slot L. The const-eval guard inside execute
+    // ensures L < MAX_LINTS, satisfying the inner bounds check.
+    unsafe {
+        diag_counts.set_count(arvo::Cap(USize(L)), count);
     }
 }
 

@@ -9,7 +9,7 @@
 use hilavitkutin_api::access::{Cons, Empty};
 use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
-use viola_core::resources::{ExtensionHost, LintConfigBuffer, LintSlots};
+use viola_core::resources::{DiagnosticCounts, ExtensionHost, LintConfigBuffer, LintSlots};
 use viola_core::wus::{Nam, RunLint, WuDiagnostic};
 
 trait IsSame<X: ?Sized> {}
@@ -30,7 +30,7 @@ fn access_set_shape_compiles() {
             Cons<Resource<LintConfigBuffer>, Cons<Column<Nam>, Empty>>,
         >,
     >;
-    type ExpectedWrite = Cons<Column<WuDiagnostic>, Empty>;
+    type ExpectedWrite = Cons<Column<WuDiagnostic>, Cons<Resource<DiagnosticCounts>, Empty>>;
 
     _assert_eq::<<RunLint<0> as WorkUnit>::Read, ExpectedRead>();
     _assert_eq::<<RunLint<0> as WorkUnit>::Write, ExpectedWrite>();
