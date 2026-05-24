@@ -28,8 +28,10 @@
 pub mod aggregate;
 pub mod invoke;
 pub mod pipeline;
+pub mod resources;
 pub mod role;
 pub mod session;
+pub mod wus;
 
 pub use session::Session;
 

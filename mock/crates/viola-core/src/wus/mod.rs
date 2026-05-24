@@ -1,0 +1,66 @@
+//! Slice 1 WorkUnit stubs for the viola pipeline.
+//!
+//! Six WUs cover the static pipeline shape per the scoping memo at
+//! `mock/research/202605240700_topic.scoping-254-viola-as-hilavitkutin-app.md`.
+//! Each stub declares the AccessSet shape, scheduling hint, and Ctx
+//! bound; bodies are `unimplemented!()` and ship per their body slice.
+//!
+//! The placeholder column-record types (`PluginEntry`, `FileInfo`,
+//! `Nam`, `Diagnostic`, `DiagnosticSink`, `ViolaConfigOpaque`) are
+//! zero-sized for Slice 1. Each gains real fields when its body slice
+//! first needs them. `ViolaConfigOpaque` exists because
+//! `viola_config::ViolaConfig<'a, N>` carries a lifetime and a const
+//! generic, which is incompatible with the `Resource<T: 'static>`
+//! bound; Slice 2 wires the real owned-form bridge.
+
+mod stub;
+
+mod discover_files;
+mod emit_diagnostics;
+mod load_config;
+mod load_plugins;
+mod run_lint;
+mod run_runner;
+
+pub use discover_files::DiscoverFiles;
+pub use emit_diagnostics::EmitDiagnostics;
+pub use load_config::LoadConfig;
+pub use load_plugins::LoadPlugins;
+pub use run_lint::RunLint;
+pub use run_runner::RunRunner;
+
+pub use stub::WuCtxStub;
+
+/// Placeholder for the per-plugin record. Slice 3 wires real fields.
+///
+/// `Copy + Clone + Debug` so `Column<PluginEntry>` body slices can call
+/// `ColumnReaderApi::read::<PluginEntry>` (which requires `ColumnValue`,
+/// `= Copy + 'static`) without revisiting this declaration.
+#[derive(Copy, Clone, Debug)]
+pub struct PluginEntry;
+
+/// Placeholder for the per-file record. Slice 4 wires real fields.
+#[derive(Copy, Clone, Debug)]
+pub struct FileInfo;
+
+/// Placeholder for the per-file parser snapshot. Slice 5 wires real fields.
+#[derive(Copy, Clone, Debug)]
+pub struct Nam;
+
+/// Placeholder for the per-finding record. Slice 6 wires real fields.
+#[derive(Copy, Clone, Debug)]
+pub struct Diagnostic;
+
+/// Placeholder for the diagnostic egress sink. Slice 7 wires real fields.
+#[derive(Copy, Clone, Debug)]
+pub struct DiagnosticSink;
+
+/// Owned Slice-1 placeholder for the parsed viola config.
+///
+/// `viola_config::ViolaConfig<'a, const N: usize>` carries a borrow
+/// lifetime, which conflicts with `Resource<T>`'s `T: 'static` bound.
+/// Slice 2 (LoadConfig body) introduces an owned bridge that elides
+/// the lifetime; Slice 1 references this placeholder so the WU stubs
+/// type-check.
+#[derive(Copy, Clone, Debug)]
+pub struct ViolaConfigOpaque;
