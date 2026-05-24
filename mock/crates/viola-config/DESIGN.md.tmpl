@@ -104,7 +104,13 @@ Workspace-default alias for `ViolaConfigOwned`. Instantiates with the workspace 
 
 ### `ConfigArena`
 
-Crate-private fixed-cap byte arena. Implements `hilavitkutin_str::ArenaInterner`. Slice 2a ships the type with `unimplemented!()` `arena_intern` and `arena_resolve` bodies; Slice 2b wires the real intern path. The constructor is `#[doc(hidden)]` so Slice 2a callers do not accidentally trigger the trap.
+Crate-private fixed-cap byte arena. Implements `hilavitkutin_str::ArenaInterner`. Cursor-plus-offsets-table layout: `bytes: UnsafeCell<[u8; N]>` for the raw byte buffer, `cursor: Cell<arvo::USize>` tracking the next free offset, `entries: UnsafeCell<[(arvo::USize, arvo::USize); ARENA_MAX_ENTRIES]>` mapping entry index to `(offset, length)` pair, `entries_len: Cell<arvo::USize>` tracking how many entries are in use.
+
+The arena ships an `unsafe impl<const N: usize> Sync for ConfigArena<N>` with SAFETY note pinning the AccessSet single-writer contract: `LoadConfig` is the sole producer (declared in its `Write` set; the scheduler's AccessSet contract serialises writes on a Resource); subsequent WUs hold `Read` access only and do not call `arena_intern`. The interior mutability through `&self` is single-threaded per the scheduler's per-WU dispatch model.
+
+`arena_intern` returns a 1-based external id (internal index plus 1); id 0 is reserved as the overflow / never-interned sentinel. Both overflow dimensions (bytes-buffer-full and entries-table-full) fail closed before any state mutation. `arena_resolve(0)` returns the empty string.
+
+Aliasing contract: bytes and entries are append-only across intern calls, so a `&str` returned by `arena_resolve` stays valid across subsequent `arena_intern` calls (no prior bytes move). The caller must not interleave with a held `&mut` to the same `UnsafeCell` on the same arena within one execute call; the body shape (single-threaded, intern-then-use) satisfies this trivially.
 
 ### `ConfigBytes`
 
@@ -134,4 +140,10 @@ Maximum number of `[[severity.partial]]` rules in one `ViolaConfigOwned`. Worksp
 
 Arena byte capacity for one `ViolaConfigOwned`. Workspace-default `8192` (8KB). Backs every `Str` handle interned during parse. Pre-1.0; sized for typical plugin-name plus rule-string totals with 2x headroom past observed configs.
 
+### `ARENA_MAX_ENTRIES`
+
+Maximum number of distinct interned entries one `ConfigArena<N>` can carry. Workspace-default `256`. Sizes the arena's offsets table at the type level. Sibling MAX_PLUGINS pattern; ConstParamTy requires bare usize. Pre-1.0; observed configs intern well under 64 entries.
+
 The existing `ViolaConfig` section above remains the source-of-truth for the borrowed-form parser output. `ViolaConfigOwned` is the bridge for the `Resource` boundary; the two coexist.
+
+`ViolaConfigOwned` ships a `populate_from_borrowed(&self, _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>)` method. Takes `&self` because the bundled `arena` carries interior mutability (`Cell` cursor plus `UnsafeCell` byte buffer plus offsets table). `LoadConfig::execute` calls this through the `&T` borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`. `Resource<ViolaCfg>` is in `LoadConfig::Write`; the scheduler's AccessSet contract serialises that producer slot, so the `&self` receiver is sound. Slice 2b ships a no-op body. The owned-record fields (`PluginEntryOwned`, `GateOwned`, `RuleOwned`, `PartialRuleOwned`) are zero-sized placeholders; nothing to project until each producer body slice (Slice 3 for plugins, validator slices for gates / rules) flips its owned-record type to fields-bearing and fills the projection.

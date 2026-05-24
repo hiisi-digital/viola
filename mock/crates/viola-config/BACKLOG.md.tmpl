@@ -1,0 +1,7 @@
+# `viola-config` BACKLOG
+
+Designed-but-deferred entries for `viola-config`. Items here are decisions made; they ship in the slice that first needs them.
+
+## populate_from_borrowed owned-record fill-in
+
+The `populate_from_borrowed(&self, _borrowed)` method on `ViolaConfigOwned` ships as a no-op body in Slice 2b. The owned-record fields PluginEntryOwned, GateOwned, RuleOwned, PartialRuleOwned are zero-sized placeholders in Slice 2a; nothing to project until each producer slice flips its owned-record to fields-bearing. Slice 3 (LoadPlugins) revisits to fill the plugins projection (intern each borrowed `&[u8]` name through the bundled arena, write the resulting Str handle into each PluginEntryOwned slot, advance plugins_len). Validator slices revisit for gates, rules, and partial rules in the same shape.

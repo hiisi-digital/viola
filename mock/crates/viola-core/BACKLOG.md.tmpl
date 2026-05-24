@@ -5,3 +5,11 @@ Designed-but-deferred entries for `viola-core`. Items here are decisions made; t
 ## InvocationSurface
 
 Restore as a new `Resource<InvocationSurface>` when a real use case surfaces. The Slice 1 SRC CL hinted at an Lsp-initiated run egressing through a Hook, but no current code path needs the distinction. Re-introducing the distinction is a public-layout change to `Workspace`; pre-1.0 absorbs the churn, but consumers that pin Workspace by-field will need an update.
+
+## Runtime test-Ctx fixture for LoadConfig
+
+Slice 2b shipped a compile-time AccessSet-shape witness test for `LoadConfig` but deferred the runtime parse-success and parse-failure tests. The Slice 1 WuCtxStub Stub provider calls unimplemented on every API method; runtime tests need a real test-Ctx fixture backing each Resource and Column with concrete storage. The fixture lives at viola-core/tests/load_config.rs and is itself non-trivial: it implements every Has accessor trait on a holder type that owns `ConfigBytes`, `ViolaCfg`, and a `Column<WuDiagnostic>` buffer. Lands per a separate body-and-fixture PR before Slice 3 opens to keep the test posture honest.
+
+## Host-shim long-lived interner wiring
+
+The public hilavitkutin-str Str surface ships only `__make` and `__runtime` constructors keyed by `Bits<28, Hot>` ids. Slice 2b's parse-failure path in LoadConfig uses `Str::default()` as a placeholder until the host shim registers a long-lived interner at scheduler-builder time. The interner outlives the scheduler run; the host shim's contract is that resource fields holding `Str` reference interned bytes valid for the duration of the run. Wiring lands per a follow-up DESIGN section that names the host-shim interner contract concretely (storage lifetime, capacity caps, the registration mechanism on Scheduler::builder).

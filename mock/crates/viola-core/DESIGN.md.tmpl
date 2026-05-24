@@ -115,3 +115,28 @@ Read swap: `Resource<ViolaConfigOpaque>` becomes `Resource<ViolaCfg>`. Write unc
 ### `DiscoverFiles` Slice 2a revision
 
 Read swap: `Resource<Workspace>` plus `Resource<ViolaCfg>` (previously `ViolaConfigOpaque`). Write unchanged at `Column<FileInfo>`. Slice 4 body walks the workspace filesystem honouring the config's include/exclude patterns.
+
+## Slice 2b column-record family
+
+The Slice 1 stub declared `Column<Diagnostic>` with `Diagnostic` as a zero-sized placeholder. Slice 2b renames `Diagnostic` to `WuDiagnostic` (to avoid collision with `viola_plugin_abi::Diagnostic`, the FFI plugin-owned `#[repr(C)]` carrier) and flips the record from ZST to fields-bearing.
+
+### `WuDiagnostic`
+
+Host-side per-finding record carried by `Column<WuDiagnostic>`. Four fields: `severity: viola_plugin_abi::DiagnosticSeverity`, `source: WuDiagnosticSource`, `message: hilavitkutin_str::Str`, `range: notko::Maybe<viola_plugin_abi::SourceRange>`. Derives `Copy, Clone, Debug, PartialEq, Eq` to satisfy the `ColumnValue` blanket (`Copy + 'static`).
+
+Distinct from `viola_plugin_abi::Diagnostic`, which is the FFI plugin-owned carrier shipping `BytesRef` strings. `WuDiagnostic` interns through `hilavitkutin_str::Str`, matching the rest of the host surface (`Workspace.path`, `ViolaCfg`'s strings). `EmitDiagnostics` (Slice 7) projects host-side to ABI shape at egress. The two types coexist by design: the host-side type is the `Column<T>` element used by every producer WU within the scheduler; the ABI type is the FFI shape that crosses into and out of plugin cdylibs.
+
+### `WuDiagnosticSource`
+
+Closed-vocabulary enum classifying the WU that produced one `WuDiagnostic`. Six variants, one per producer slice.
+
+| Variant | Producer slice | Failure surface |
+|---|---|---|
+| ConfigParse | Slice 2b (`LoadConfig`) | parse failure on `Resource<ConfigBytes>` |
+| PluginLoad | Slice 3 (`LoadPlugins`) | plugin dlopen, descriptor verification, or ABI gate failure |
+| FileWalk | Slice 4 (`DiscoverFiles`) | filesystem walk error or include / exclude mismatch |
+| RunRunner | Slice 5 (`RunRunner`) | runner WU body failure |
+| RunLint | Slice 6 (`RunLint`) | lint WU body failure |
+| Emit | Slice 7 (`EmitDiagnostics`) | sink-side egress failure |
+
+Per `vocabulary.md`'s closed-enum-as-spec pattern (`Phase` precedent). Each producer slice constructs only its own variant. No `Default` impl by design; construction sites pick the variant explicitly to make the producer obvious in the source.
