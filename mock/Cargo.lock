@@ -503,6 +503,7 @@ dependencies = [
  "arvo-bits",
  "hilavitkutin-api",
  "hilavitkutin-extensions",
+ "hilavitkutin-linking",
  "hilavitkutin-str",
  "notko",
  "viola-config",

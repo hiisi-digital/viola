@@ -587,8 +587,8 @@ pub struct ViolaConfigOwned<
     const MAX_PARTIAL_RULES_CAP: usize,
     const ARENA_BYTES_CAP: usize,
 > {
-    pub plugins: [PluginEntryOwned; MAX_PLUGINS_CAP],
-    pub plugins_len: arvo::Cap,
+    plugins: core::cell::UnsafeCell<[PluginEntryOwned; MAX_PLUGINS_CAP]>,
+    plugins_len: core::cell::Cell<arvo::Cap>,
     pub gates: [GateOwned; MAX_GATES_CAP],
     pub gates_len: arvo::Cap,
     pub rules: [RuleOwned; MAX_RULES_CAP],
@@ -597,6 +597,23 @@ pub struct ViolaConfigOwned<
     pub partial_rules_len: arvo::Cap,
     arena: ConfigArena<ARENA_BYTES_CAP>,
 }
+
+// SAFETY: Mirrors the `unsafe impl Sync for ConfigArena<N>` contract.
+// `LoadConfig` is the sole producer that calls `populate_from_borrowed`
+// (declared in its `Write` set via `Resource<ViolaCfg>`); the scheduler's
+// AccessSet contract serialises that producer slot. Downstream WUs that
+// read `Resource<ViolaCfg>` (`LoadPlugins`, `DiscoverFiles`, runner /
+// lint bodies) hold `Read` access only and use the `&self`-receiver
+// accessors (`plugin_path`, `plugin_at`) which do not mutate. The
+// interior mutability through `&self` is single-threaded per the
+// scheduler's per-WU dispatch model.
+unsafe impl<
+    const MAX_PLUGINS_CAP: usize,
+    const MAX_GATES_CAP: usize,
+    const MAX_RULES_CAP: usize,
+    const MAX_PARTIAL_RULES_CAP: usize,
+    const ARENA_BYTES_CAP: usize,
+> Sync for ViolaConfigOwned<MAX_PLUGINS_CAP, MAX_GATES_CAP, MAX_RULES_CAP, MAX_PARTIAL_RULES_CAP, ARENA_BYTES_CAP> {}
 
 /// One plugin entry in `ViolaConfigOwned`. Parser-side owned shape:
 /// the host-side post-load `viola_core::wus::PluginEntry` is distinct
@@ -634,31 +651,88 @@ impl<
 {
     /// Populate this owned config from a borrowed parser result.
     ///
-    /// Slice 2b shipped this as a no-op stub. Slice 3a flips
-    /// `PluginEntryOwned` from ZST to fields-bearing but defers the
-    /// plugins-arm write to a follow-up that resolves the
-    /// interior-mutability shape. The bundled `arena` carries `Cell`
-    /// cursor plus `UnsafeCell` byte buffer (was designed for `&self`
-    /// from the start); the `self.plugins` array is plain
-    /// `[PluginEntryOwned; N]`, NOT wrapped in `UnsafeCell` / `Cell`.
-    /// Writing through `&self` triggers rustc's `&T`-to-`&mut T`-cast-
-    /// is-UB error.
+    /// Slice 3c fills the plugins arm. Walks `borrowed.plugins[..plugin_len]`,
+    /// interns each `&[u8]` path through the bundled arena, wraps the
+    /// returned id as a runtime-origin `Str`, and writes
+    /// `PluginEntryOwned { name: Str::default(), path: <interned> }`
+    /// into each owned-array slot. Gates / rules / partial_rules arms stay
+    /// no-op until their producer body slices flip the corresponding
+    /// owned-record types and wrap their arrays in `UnsafeCell` / `Cell`
+    /// (mirroring the plugins arm pattern).
     ///
-    /// `LoadConfig::execute` (Slice 2b body) calls this through the
-    /// `&T` borrow returned by `ResourceProviderApi::resource::<ViolaCfg>()`.
-    /// `Resource<ViolaCfg>` is declared in `LoadConfig::Write`; the
-    /// scheduler's AccessSet contract serialises that producer slot,
-    /// so the `&self` receiver is sound for the arena interior-mutability
-    /// path. The follow-up either wraps `self.plugins` plus
-    /// `self.plugins_len` in `UnsafeCell` / `Cell` mirroring the arena's
-    /// pattern, or introduces a hilavitkutin-api Resource-write surface
-    /// so this method can take `&mut self`. Both options are non-trivial;
-    /// tracked in BACKLOG.
+    /// Takes `&self`. `Resource<ViolaCfg>` is in `LoadConfig::Write`;
+    /// the scheduler's AccessSet contract serialises that producer slot.
+    /// The plugins array and plugins_len counter use `UnsafeCell` and
+    /// `Cell` respectively, mirroring the bundled `ConfigArena`'s
+    /// interior-mutability pattern. The `unsafe impl Sync` on
+    /// `ViolaConfigOwned` pins the single-writer invariant.
     pub fn populate_from_borrowed(
         &self,
-        _borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>,
+        borrowed: &ViolaConfig<'_, MAX_PLUGINS_CAP>,
     ) {
-        let _ = self;
+        let n: usize = *borrowed.plugin_len; // lint:allow(no-bare-numeric) reason: bridges arvo::USize to std slice-index API; tracked: #72
+        // SAFETY: single-writer per AccessSet (see ViolaConfigOwned Sync
+        // SAFETY note). LoadConfig is the only WU calling this method;
+        // downstream readers use &self accessors that go through
+        // `&*self.plugins.get()` (shared-ref read of the same UnsafeCell)
+        // and are phase-separated from this write by the scheduler.
+        //
+        // Aliasing with the arena reborrow below: `arena` is a sibling
+        // field of `plugins`, so `&mut *self.plugins.get()` and the
+        // `&self.arena` reborrow inside `arena_intern` operate on
+        // disjoint memory per field-projection rules. If a future
+        // refactor folds the arena into the same UnsafeCell, this
+        // SAFETY argument needs revisiting.
+        let plugins_mut: &mut [PluginEntryOwned; MAX_PLUGINS_CAP] = unsafe {
+            &mut *self.plugins.get()
+        };
+        let mut i: usize = 0; // lint:allow(no-bare-numeric) reason: loop counter; tracked: #72
+        while i < n && i < MAX_PLUGINS_CAP {
+            let bytes: &[u8] = borrowed.plugins[i];
+            // The parser's `plugins[i]: &[u8]` does not pin utf-8 at the
+            // type level. Skip non-utf-8 entries rather than risk silent
+            // UB through `from_utf8_unchecked`. Tracked: a future
+            // parser-side typed `PathBytes` wrapper would pin the
+            // invariant and remove this branch.
+            let s: &str = match core::str::from_utf8(bytes) {
+                Ok(s) => s,
+                Err(_) => {
+                    i += 1; // lint:allow(no-bare-numeric) reason: loop counter increment; tracked: #72
+                    continue;
+                }
+            };
+            let id: u32 = self.arena.arena_intern(s); // lint:allow(no-bare-numeric) reason: ArenaInterner trait signature is fixed by hilavitkutin-str; tracked: #72
+            let path_handle: hilavitkutin_str::Str = hilavitkutin_str::Str::__runtime(
+                arvo::Bits::<28, arvo::Hot>::from_raw(id), // lint:allow(no-bare-numeric) reason: arena id is u32 by trait contract; tracked: #72
+            );
+            plugins_mut[i] = PluginEntryOwned {
+                name: hilavitkutin_str::Str::default(),
+                path: path_handle,
+            };
+            i += 1; // lint:allow(no-bare-numeric) reason: loop counter increment; tracked: #72
+        }
+        self.plugins_len.set(arvo::Cap(arvo::USize(i)));
+    }
+
+    /// Currently populated plugin count.
+    pub fn plugins_len(&self) -> arvo::Cap {
+        self.plugins_len.get()
+    }
+
+    /// Plugin entry at slot `i`, or `Maybe::Isnt` past the populated
+    /// prefix. The returned `&PluginEntryOwned` lives for `&self`.
+    pub fn plugin_at(&self, i: arvo::Cap) -> notko::Maybe<&PluginEntryOwned> {
+        let idx: usize = *i.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to slot indexing; tracked: #72
+        let len: usize = *self.plugins_len.get().0; // lint:allow(no-bare-numeric) reason: same; tracked: #72
+        if idx >= len || idx >= MAX_PLUGINS_CAP {
+            return notko::Maybe::Isnt;
+        }
+        // SAFETY: shared-ref read through UnsafeCell. The single-writer
+        // AccessSet invariant ensures no concurrent `populate_from_borrowed`
+        // call is mid-write. The returned `&PluginEntryOwned` borrows
+        // for `&self`.
+        let plugins: &[PluginEntryOwned; MAX_PLUGINS_CAP] = unsafe { &*self.plugins.get() };
+        notko::Maybe::Is(&plugins[idx])
     }
 
     /// Plugin filesystem path resolved back from the arena. Returns
@@ -667,13 +741,13 @@ impl<
     /// `Maybe::Isnt` as an empty string; an empty path fed to
     /// `Library::load` is a real crash vector.
     pub fn plugin_path(&self, i: arvo::Cap) -> notko::Maybe<&str> {
-        let idx: usize = *i.0; // lint:allow(no-bare-numeric) reason: bridges arvo::Cap to std slice-index API; tracked: #72
-        let len: usize = *self.plugins_len.0; // lint:allow(no-bare-numeric) reason: same; tracked: #72
-        if idx >= len || idx >= MAX_PLUGINS_CAP {
-            return notko::Maybe::Isnt;
+        match self.plugin_at(i) {
+            notko::Maybe::Is(entry) => {
+                let id: u32 = entry.path.id().to_raw(); // lint:allow(no-bare-numeric) reason: Str id projection; tracked: #72
+                notko::Maybe::Is(self.arena.arena_resolve(id))
+            }
+            notko::Maybe::Isnt => notko::Maybe::Isnt,
         }
-        let id: u32 = self.plugins[idx].path.id().to_raw(); // lint:allow(no-bare-numeric) reason: Str id projection; tracked: #72
-        notko::Maybe::Is(self.arena.arena_resolve(id))
     }
 
     /// Construct an empty owned config.
@@ -685,8 +759,10 @@ impl<
     /// const-ness loss has no runtime cost.
     pub fn new() -> Self {
         Self {
-            plugins: [PluginEntryOwned::default(); MAX_PLUGINS_CAP],
-            plugins_len: arvo::Cap(arvo::USize::ZERO),
+            plugins: core::cell::UnsafeCell::new(
+                [PluginEntryOwned::default(); MAX_PLUGINS_CAP],
+            ),
+            plugins_len: core::cell::Cell::new(arvo::Cap(arvo::USize::ZERO)),
             gates: [GateOwned; MAX_GATES_CAP],
             gates_len: arvo::Cap(arvo::USize::ZERO),
             rules: [RuleOwned; MAX_RULES_CAP],
