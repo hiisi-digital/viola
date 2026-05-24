@@ -11,7 +11,8 @@ use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
 
 use super::stub::WuCtxStub;
-use super::{FileInfo, ViolaConfigOpaque};
+use super::FileInfo;
+use viola_config::ViolaCfg;
 use crate::resources::Workspace;
 
 /// Reads workspace + config, writes the per-file set.
@@ -23,7 +24,7 @@ impl BuilderInput for DiscoverFiles {
 }
 
 impl WorkUnit for DiscoverFiles {
-    type Read = Cons<Resource<Workspace>, Cons<Resource<ViolaConfigOpaque>, Empty>>;
+    type Read = Cons<Resource<Workspace>, Cons<Resource<ViolaCfg>, Empty>>;
     type Write = Cons<Column<FileInfo>, Empty>;
     type Hint = (Immediate, Adaptive, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;

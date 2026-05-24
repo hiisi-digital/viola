@@ -9,3 +9,4 @@ repository.workspace = true
 [dependencies]
 notko.workspace = true
 arvo.workspace = true
+hilavitkutin-str.workspace = true

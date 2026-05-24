@@ -1,4 +1,4 @@
-//! Slice 1 WorkUnit stubs for the viola pipeline.
+//! WorkUnit stubs for the viola pipeline.
 //!
 //! Six WUs cover the static pipeline shape per the scoping memo at
 //! `mock/research/202605240700_topic.scoping-254-viola-as-hilavitkutin-app.md`.
@@ -6,12 +6,11 @@
 //! bound; bodies are `unimplemented!()` and ship per their body slice.
 //!
 //! The placeholder column-record types (`PluginEntry`, `FileInfo`,
-//! `Nam`, `Diagnostic`, `DiagnosticSink`, `ViolaConfigOpaque`) are
-//! zero-sized for Slice 1. Each gains real fields when its body slice
-//! first needs them. `ViolaConfigOpaque` exists because
-//! `viola_config::ViolaConfig<'a, N>` carries a lifetime and a const
-//! generic, which is incompatible with the `Resource<T: 'static>`
-//! bound; Slice 2 wires the real owned-form bridge.
+//! `Nam`, `Diagnostic`, `DiagnosticSink`) are zero-sized for Slice 2a.
+//! Each gains real fields when its body slice first needs them. The
+//! owned-form `viola_config::ViolaCfg` replaces the Slice 1
+//! `ViolaConfigOpaque` placeholder as the carrier in `Resource<...>`
+//! sets across the three WUs that read or write the parsed config.
 
 mod stub;
 
@@ -55,12 +54,3 @@ pub struct Diagnostic;
 #[derive(Copy, Clone, Debug)]
 pub struct DiagnosticSink;
 
-/// Owned Slice-1 placeholder for the parsed viola config.
-///
-/// `viola_config::ViolaConfig<'a, const N: usize>` carries a borrow
-/// lifetime, which conflicts with `Resource<T>`'s `T: 'static` bound.
-/// Slice 2 (LoadConfig body) introduces an owned bridge that elides
-/// the lifetime; Slice 1 references this placeholder so the WU stubs
-/// type-check.
-#[derive(Copy, Clone, Debug)]
-pub struct ViolaConfigOpaque;

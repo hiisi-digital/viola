@@ -1,21 +1,25 @@
-//! `LoadConfig` reads run context, writes parsed viola config.
+//! `LoadConfig` reads run context plus raw config bytes, writes the
+//! parsed owned config.
 //!
-//! Slice 1 ships the stub. Slice 2 implements the body: parses the
-//! TOML config under the workspace path, projects the surface-relevant
-//! section, and writes the result into `Resource<ViolaConfigOpaque>`.
+//! Slice 2a updates the AccessSet to the post-DOC-CL shape: three
+//! Reads (`Workspace`, `RunSurface`, `ConfigBytes`) and two Writes
+//! (`ViolaCfg`, `Column<Diagnostic>`). Slice 2b implements the body
+//! that parses `Resource<ConfigBytes>` into `Resource<ViolaCfg>` and
+//! writes a `Diagnostic` to `Column<Diagnostic>` on parse failure.
 
 use hilavitkutin_api::access::{Cons, Empty};
 use hilavitkutin_api::builder_input::{BuilderInput, UnitDispatch};
 use hilavitkutin_api::hint::{Atomic, Immediate, Important};
-use hilavitkutin_api::store::Resource;
+use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_api::work_unit::WorkUnit;
+use viola_config::{ConfigBytes, ViolaCfg};
 use viola_plugin_abi::RunSurface;
 
 use super::stub::WuCtxStub;
-use super::ViolaConfigOpaque;
+use super::Diagnostic;
 use crate::resources::Workspace;
 
-/// Reads run context, writes parsed viola config.
+/// Reads run context plus raw config bytes, writes the parsed owned config.
 pub struct LoadConfig;
 
 impl BuilderInput for LoadConfig {
@@ -24,12 +28,15 @@ impl BuilderInput for LoadConfig {
 }
 
 impl WorkUnit for LoadConfig {
-    type Read = Cons<Resource<Workspace>, Cons<Resource<RunSurface>, Empty>>;
-    type Write = Cons<Resource<ViolaConfigOpaque>, Empty>;
+    type Read = Cons<Resource<Workspace>,
+                Cons<Resource<RunSurface>,
+                Cons<Resource<ConfigBytes>, Empty>>>;
+    type Write = Cons<Resource<ViolaCfg>,
+                 Cons<Column<Diagnostic>, Empty>>;
     type Hint = (Immediate, Atomic, Important);
     type Ctx<'frame> = WuCtxStub<'frame>;
 
     fn execute<'frame>(&self, _ctx: &Self::Ctx<'frame>) {
-        unimplemented!("Slice 2 implements LoadConfig")
+        unimplemented!("Slice 2b implements LoadConfig")
     }
 }

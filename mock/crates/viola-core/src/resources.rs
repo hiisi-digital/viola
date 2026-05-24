@@ -1,16 +1,46 @@
 //! Resource value types for viola's hilavitkutin pipeline.
 //!
-//! Slice 1 ships these as `Copy` zero-sized structs so the WU stubs
-//! that read or write them via `Resource<T>` type-check. Real fields
-//! land per the body slice that first needs each.
+//! Slice 2a ships the field-bearing shapes the body slices need.
+//! `Workspace` carries the workspace path as a `Str` handle interned
+//! in the host shim's long-lived interner. `CiState` carries CI flags
+//! and the invoking-agent classification.
 
-/// Workspace-context Resource. Slice 2 (LoadConfig body) adds the
-/// `path: hilavitkutin_str::Str` and `surface: viola_plugin_abi::RunSurface`
-/// fields once those deps enter the viola-core graph.
+/// Workspace-context Resource. The `path` is a `Str` handle into the
+/// host shim's long-lived interner (registered at scheduler-builder
+/// time; not exposed as a scheduler Resource per the Slice 2 DOC CL).
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct Workspace;
+pub struct Workspace {
+    pub path: hilavitkutin_str::Str,
+}
 
-/// CI-invocation-context Resource. Slice 2 adds the `is_ci: arvo::Bool`
-/// flag and `agent: AgentKind` enum once `AgentKind` is defined.
+/// CI-invocation-context Resource. The host shim sets these fields at
+/// scheduler-builder time based on environment detection.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct CiState {
+    pub is_ci: arvo::Bool,
+    pub agent: AgentKind,
+}
+
+impl Default for CiState {
+    fn default() -> Self {
+        Self {
+            is_ci: arvo::Bool::FALSE,
+            agent: AgentKind::Unknown,
+        }
+    }
+}
+
+/// Classifies the invoking actor behind a viola run. Detected from
+/// environment by the host shim; absence of signal stays as `Unknown`.
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
-pub struct CiState;
+pub enum AgentKind {
+    /// No detection signal yet (the safer default).
+    #[default]
+    Unknown,
+    /// Host shim positively determined no agent is involved.
+    None,
+    /// A human invoked viola directly.
+    Human,
+    /// A bot or automation invoked viola.
+    Bot,
+}
