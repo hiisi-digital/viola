@@ -30,7 +30,7 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[cfg(not(test))]
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_eh_personality() {}
+pub extern "C" fn rust_eh_personality() {}                          // lint:allow(no-duplicate-fn) -- linker contract; rust_eh_personality must exist in every no_std cdylib that does not unwind; reason: the symbol name is fixed by the Rust ABI; tracked: #197
 
 pub static INIT_CALLS: AtomicU32 = AtomicU32::new(0);
 pub static SHUTDOWN_CALLS: AtomicU32 = AtomicU32::new(0);
@@ -60,26 +60,26 @@ unsafe extern "C" fn execute_scope(
 static RUNNER_VTABLE: RunnerExecuteScopeVtable =
     RunnerExecuteScopeVtable { execute_scope };
 
-pub struct RunnerProvider;
+pub struct TestRunnerProvider;
 
-impl ProviderExport for RunnerProvider {
+impl ProviderExport for TestRunnerProvider {
     const ID: ProviderId = PROVIDER_RUNNER_EXECUTE_SCOPE;
     const VTABLE_PTR: *const c_void =
         &RUNNER_VTABLE as *const _ as *const c_void;
 }
 
-pub struct InitImpl;
+pub struct TestRunnerInitImpl;
 
-impl InitHandler for InitImpl {
+impl InitHandler for TestRunnerInitImpl {
     unsafe fn init(_host_ctx: *mut c_void) -> ExtensionAbiStatus {
         INIT_CALLS.fetch_add(1, Ordering::SeqCst);
         ExtensionAbiStatus::Ok
     }
 }
 
-pub struct ShutdownImpl;
+pub struct TestRunnerShutdownImpl;
 
-impl ShutdownHandler for ShutdownImpl {
+impl ShutdownHandler for TestRunnerShutdownImpl {
     unsafe fn shutdown(_host_ctx: *mut c_void) -> ExtensionAbiStatus {
         SHUTDOWN_CALLS.fetch_add(1, Ordering::SeqCst);
         ExtensionAbiStatus::Ok
@@ -89,9 +89,9 @@ impl ShutdownHandler for ShutdownImpl {
 #[export_extension(
     name = "org.viola.runner.fixture",
     version = "0.1.0",
-    providers = [RunnerProvider],
-    init = InitImpl,
-    shutdown = ShutdownImpl,
+    providers = [TestRunnerProvider],
+    init = TestRunnerInitImpl,
+    shutdown = TestRunnerShutdownImpl,
 )]
 #[allow(dead_code)]
 pub struct RunnerFixture;

@@ -1,0 +1,15 @@
+# viola-test-plugin-fixture: SHAME
+
+Gaps discovered during implementation that did not exist when the round's DOC CL locked. Each entry names a type the source ships under a name the design doc still calls by its old name. Resolution lands in the next DOC-phase round that updates the design doc; until then, this file is the audit trail.
+
+## TestPluginLintEvalProvider
+
+Renamed from `LintEvalProvider`. The cross-crate `no-duplicate-fn` lint surfaces when two sibling cdylibs export functions with identical names. Both `viola-test-plugin-fixture` and `viola-test-runner-fixture` declared an `InitImpl`/`ShutdownImpl` pair plus their respective provider types. Cross-crate name uniqueness pushes the prefix onto every type that the lint sees. The provider's behaviour is unchanged; only the name moves. The next DOC-phase round for this fixture will rewrite the provider section under the new name and drop this entry.
+
+## TestPluginInitImpl
+
+Renamed from `InitImpl` for the same cross-crate name-uniqueness reason that the provider rename above carries. The handler body still does the same `INIT_CALLS.fetch_add(1, Ordering::SeqCst)` it always did and returns `ExtensionAbiStatus::Ok` unchanged. The prefix is purely a naming concession to satisfy `no-duplicate-fn`. The follow-up DOC round will rename the handler's section in `DESIGN.md.tmpl` under the new identifier and remove this entry from the SHAME file.
+
+## TestPluginShutdownImpl
+
+Renamed from `ShutdownImpl`, parallel to the init handler above. Same `SHUTDOWN_CALLS.fetch_add(1, Ordering::SeqCst)` body, same `ExtensionAbiStatus::Ok` return, same cross-crate uniqueness rationale forcing the `TestPlugin` prefix in the source. The handler's role in the lifecycle is unchanged; only its name moved. The follow-up DOC round folds the section update into `DESIGN.md.tmpl` and drops this entry.
