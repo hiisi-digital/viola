@@ -17,6 +17,7 @@ viola-config = { path = "../viola-config" }
 notko.workspace = true
 arvo.workspace = true
 arvo-bits.workspace = true
+hilavitkutin = { workspace = true, features = ["platform-os"] }
 hilavitkutin-api.workspace = true
 hilavitkutin-extensions.workspace = true
 

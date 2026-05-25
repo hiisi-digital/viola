@@ -470,7 +470,7 @@ The first attempt at Slice 8b added `hilavitkutin` (the engine crate) to viola-c
 
 The Slice 8a-deferred disambiguation lands: `viola_core::lib.rs` no longer re-exports `ExtensionHost` from `hilavitkutin_extensions`. Consumers split:
 
-- viola-cli imports `hilavitkutin_extensions::ExtensionHost` directly when it needs the substrate type for plugin-loading via `host.load(...)`.
+- viola-cli imports `hilavitkutin_extensions::ExtensionHost` directly when it needs the foundations type for plugin-loading via `host.load(...)`.
 - Future Slice 8b.2 scheduler-builder code imports `viola_core::resources::ExtensionHost` for the `Resource::new(host)` call.
 
 Two distinct concepts, two distinct paths. The non-colliding sibling re-exports from `hilavitkutin_extensions` (`ProviderId`, `Extension`, `ExtensionMeta`, `ExtensionRequirement`, etc) stay because they are non-colliding plugin-loading surfaces.
@@ -484,3 +484,48 @@ Pre-1.0; the trait can switch to a buffered impl or a non-panicking impl later w
 ### Path forward for Slice 8b.2
 
 With the patch gap closed, Slice 8b.2 adds `hilavitkutin` to viola-cli's `Cargo.toml`, adds the `register_lints!` declarative macro that unrolls 32 `.with(RunLint::<N>)` calls, builds the full scheduler-build chain (nine `Resource::new(...)` calls including `Resource::new(DiagnosticSink::new(StderrEmitter))`, four `Column::<T>::new()` calls, five unit-WU calls, the `register_lints!` expansion, `EmitDiagnostics::<StderrEmitter>::new()`, `.build()`, `.run()`), drops the Slice 8a `#[allow(dead_code)]` annotations on `EXIT_OK` / `EXIT_PLUGIN` / `HOST_CAPS_EMPTY` / `_BYTES_REF_KEEPALIVE` / `load_plugin`, and replaces the `unimplemented!()` lint-path stub. The runtime continues to panic at `hilavitkutin::Scheduler::run`'s own `unimplemented!()` until Pass 7+8 of the runtime megaround lands; the AccessSet contracts compile, which is the load-bearing test for task #254 at the type level.
+
+## Slice 8b.2 scheduler build chain
+
+Slice 8b.2 ships the full scheduler-build chain in viola-cli's unix-main: every Resource and Column that any of the six WUs declares in its `Read`/`Write` AccessSet, plus the six WUs and 32 `RunLint<N>` instances.
+
+### Twelve Resources, four Columns, six WUs
+
+Walking every `wus/*.rs` file's AccessSet declarations and accumulating the union yields twelve Resources, not the nine the Slice 8a-deferred BACKLOG entry pre-estimated. The first attempt at Slice 8b.2 registered only nine and the build failed with `Empty: Contains<...>` errors for three Resources whose presence the BACKLOG entry did not foreshadow: `Resource<ConfigBytes>` (read by `LoadConfig`), `Resource<RunSurface>` (read by `LoadConfig`), and `Resource<ViolaCfg>` (written by `LoadConfig`, read by `LoadPlugins`). The complete Resource list is:
+
+- `Resource<DiscoveredFilePaths>` (DiscoverFiles Read)
+- `Resource<DiagnosticCounts>` (EmitDiagnostics Read, RunLint Write)
+- `Resource<DiagnosticSink<StderrEmitter>>` (EmitDiagnostics Write)
+- `Resource<Workspace>` (LoadConfig Read)
+- `Resource<RunSurface>` (LoadConfig Read)
+- `Resource<ConfigBytes>` (LoadConfig Read)
+- `Resource<ViolaCfg>` (LoadConfig Write, LoadPlugins Read)
+- `Resource<ExtensionHost>` (LoadPlugins Write, RunLint Read, RunRunner Read; this is `viola_core::resources::ExtensionHost`, the Resource shape, not the foundations type `hilavitkutin_extensions::ExtensionHost`)
+- `Resource<LintSlots>` (RunLint Read)
+- `Resource<LintConfigBuffer>` (RunLint Read)
+- `Resource<CiState>` (RunRunner Read)
+- `Resource<FileEntryBuffer>` (RunRunner Read)
+
+Four Columns: `Column<FileInfo>`, `Column<WuDiagnostic>`, `Column<PluginEntry>`, `Column<Nam>`.
+
+Six WUs: `LoadConfig`, `LoadPlugins`, `DiscoverFiles`, `RunRunner`, `EmitDiagnostics::<StderrEmitter>::new()` registered directly; the 32 `RunLint::<N>` instances (N = 0..31) registered via a local `register_lints!` declarative macro that unrolls the chain (Rust declarative macros do not support count-driven loops natively).
+
+### `EmitWriter: Send + Sync` supertrait promotion
+
+The scheduler-build typestate proves `Resource<DiagnosticSink<W>>` is Sync via the `unsafe impl<W: EmitWriter> Sync for DiagnosticSink<W>` in `viola_core::wus::mod`. That `Sync` proof needs `W: Send + Sync` so the contents can be witnessed safe across threads. Slice 8b.2 promotes the bound from `pub trait EmitWriter` to `pub trait EmitWriter: Send + Sync`, then simplifies the redundant `impl<W: EmitWriter + Send + Sync + 'static>` bound on `EmitDiagnostics<W>` to `impl<W: EmitWriter + 'static>`. The supertrait change is forward-compatible: every concrete `EmitWriter` impl (`StderrEmitter` ZST, the `EmitFlat` no-op, future LSP buffered emitter) trivially satisfies `Send + Sync`.
+
+### `#![recursion_limit = "1024"]`
+
+The deep cons-list `ContainsAll<L>` typestate proofs that the scheduler `.build()` call relies on overflow the default `recursion_limit = 128` once the chain crosses around 25 registered builder-inputs. Slice 8b.2 raises the limit to 1024 in viola-cli's `main.rs`. The constant is conservative: the actual chain registers around 50 builder-inputs (12 Resources + 4 Columns + 5 WUs + 32 RunLint) and the typestate proofs are bounded by the longest AccessSet length, not the chain length, so the worst-case recursion depth is at most a few hundred. The 1024 ceiling leaves headroom for future scheduler-build growth without recurrent revisits.
+
+### `ConfigBytes::default()`
+
+The `viola_config::ConfigBytes` struct (the host-shim-populated raw config-byte carrier) had no `Default` impl in viola-config before Slice 8b.2. The scheduler-builder call needs `Resource::new(ConfigBytes::default())` to register an empty buffer at startup; the host shim populates the real bytes once filesystem access lands in a future slice. Slice 8b.2 adds `impl Default for ConfigBytes` returning the empty buffer (`bytes: [0u8; CONFIG_MAX_BYTES]`, `len: arvo::Cap(arvo::USize::ZERO)`). The `0u8` initialiser carries a `lint:allow(no-bare-numeric)` directive consistent with the existing field-level annotations on `ConfigBytes::bytes`.
+
+### `RunSurface::Cli`
+
+The `viola_plugin_abi::RunSurface` enum (`Cli`/`Hook`/`Ci`/`Lsp`/`Test`/`Other`) does not derive `Default`. The viola-cli scheduler-builder hardcodes `Resource::new(RunSurface::Cli)` because the value is semantically known at the cli-entry-point: the host is the CLI binary. Future host shims (LSP server, CI orchestrator) hardcode their own surface tag at their respective entry points.
+
+### Lock criterion
+
+Slice 8b.2's load-bearing test is the AccessSet contracts compiling at `.build()` time. The chain is correct iff every Resource and Column that any WU declares in its `Read`/`Write` AccessSet appears registered on the scheduler builder; the typestate proof completes iff and only iff the cover is complete. Runtime executability waits on `hilavitkutin::Scheduler::run`'s body landing (currently `unimplemented!()` per the Pass 6 signature commit; the body ships at Pass 7+8 of the runtime megaround). Slice 8b.2 ships the compile-time proof and parks runtime testing for the engine-side body slices.

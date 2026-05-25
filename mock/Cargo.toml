@@ -40,6 +40,7 @@ mockspace = { git = "ssh://git@github.com/hiisi-digital/mockspace.git", branch =
 
 # Hilavitkutin foundations. Canonical refs are git; local iteration uses
 # the path-overrides in the [patch."..."] section below.
+hilavitkutin = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-linking = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
 hilavitkutin-extensions-macros = { git = "ssh://git@github.com/orgrinrt/hilavitkutin.git", branch = "dev", default-features = false }
@@ -69,6 +70,7 @@ arvo-transparent = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "d
 # working environment. Paths now relative to viola/mock/Cargo.toml so
 # the leading `..` count is one greater than the prior root manifest.
 [patch."ssh://git@github.com/orgrinrt/hilavitkutin.git"]
+hilavitkutin = { path = "../../hilavitkutin/mock/crates/hilavitkutin" }
 hilavitkutin-linking = { path = "../../hilavitkutin/mock/crates/hilavitkutin-linking" }
 hilavitkutin-extensions = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions" }
 hilavitkutin-extensions-macros = { path = "../../hilavitkutin/mock/crates/hilavitkutin-extensions-macros" }

@@ -51,6 +51,10 @@ fn write_all_to_stderr(bytes: &[u8]) {
         // SAFETY: stderr (fd 2) is process-lifetime; `remainder.as_ptr()`
         // is valid for read of `remainder.len()` bytes for the call
         // duration. libc::write follows the POSIX contract.
+        debug_assert!(
+            remainder.len() <= libc::ssize_t::MAX as usize,
+            "remainder must fit ssize_t for libc::write",
+        );
         let written = unsafe {
             libc::write(
                 2, // lint:allow(no-bare-numeric) reason: fd 2 = stderr POSIX constant; tracked: #207

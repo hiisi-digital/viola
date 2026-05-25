@@ -1,7 +1,8 @@
 #![no_std]
 #![no_main]
+#![recursion_limit = "1024"]
 
-//! `viola-cli`: host executable (Slice 8a transitional state).
+//! `viola-cli`: host executable (Slice 8b.2 scheduler-driven state).
 //!
 //! `#![no_std]` + `#![no_main]` libc entry. Reads `./viola.toml` (or
 //! the path supplied as argv[1]), parses it via [`viola_config`].
@@ -41,13 +42,70 @@
 use core::ffi::c_void;
 use core::panic::PanicInfo;
 
-#[allow(dead_code)]
 mod emit;
 mod fmt;
 mod io;
 
+use hilavitkutin::scheduler::Scheduler;
+use hilavitkutin_api::store::{Column, Resource};
 use hilavitkutin_extensions::ExtensionHost;
-use viola_core::{BytesRef, Extension, ExtensionRequirement, ProviderId};
+use viola_config::{ConfigBytes, ViolaCfg};
+use viola_core::resources::{
+    CiState, DiagnosticCounts, DiscoveredFilePaths,
+    ExtensionHost as HostExtensionHost, FileEntryBuffer, LintConfigBuffer,
+    LintSlots, Workspace,
+};
+use viola_core::wus::{
+    DiagnosticSink, DiscoverFiles, EmitDiagnostics, FileInfo, LoadConfig,
+    LoadPlugins, Nam, PluginEntry, RunLint, RunRunner, WuDiagnostic,
+};
+use viola_core::{BytesRef, Extension, ExtensionRequirement, ProviderId, RunSurface};
+
+use crate::emit::StderrEmitter;
+
+/// Register every `RunLint<N>` instance from N=0 through N=MAX_LINTS-1
+/// (=31) on the scheduler builder. Rust declarative macros do not
+/// support count-driven loops natively; the 32-call unroll is the
+/// canonical workaround. The macro is local because viola-cli is the
+/// sole caller; the unroll length matches `MAX_LINTS` in
+/// `viola_core::resources`.
+macro_rules! register_lints {
+    ($builder:expr) => {
+        $builder
+            .with(RunLint::<0>)
+            .with(RunLint::<1>)
+            .with(RunLint::<2>)
+            .with(RunLint::<3>)
+            .with(RunLint::<4>)
+            .with(RunLint::<5>)
+            .with(RunLint::<6>)
+            .with(RunLint::<7>)
+            .with(RunLint::<8>)
+            .with(RunLint::<9>)
+            .with(RunLint::<10>)
+            .with(RunLint::<11>)
+            .with(RunLint::<12>)
+            .with(RunLint::<13>)
+            .with(RunLint::<14>)
+            .with(RunLint::<15>)
+            .with(RunLint::<16>)
+            .with(RunLint::<17>)
+            .with(RunLint::<18>)
+            .with(RunLint::<19>)
+            .with(RunLint::<20>)
+            .with(RunLint::<21>)
+            .with(RunLint::<22>)
+            .with(RunLint::<23>)
+            .with(RunLint::<24>)
+            .with(RunLint::<25>)
+            .with(RunLint::<26>)
+            .with(RunLint::<27>)
+            .with(RunLint::<28>)
+            .with(RunLint::<29>)
+            .with(RunLint::<30>)
+            .with(RunLint::<31>)
+    };
+}
 
 const MAX_PLUGINS: usize = 16;
 const MAX_CONFIG_BYTES: usize = 64 * 1024;
@@ -126,19 +184,63 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
         return passthrough_to_deno_cli(argc, argv);
     }
 
-    // Slice 8a transitional stub: viola-core's pre-#254 in-process
-    // pipeline (pipeline::run + Session<N> + CaptureSink) is deleted.
-    // Slice 8b ships the scheduler-driven host wiring + concrete
-    // EmitWriter impl; until then the Rust-plugin lint path panics
-    // here with this documented message. The libc entry, arg
-    // parsing, config reading, and pure-TS passthrough above remain
-    // functional in the transitional state.
+    // Slice 8b.2 scheduler-build chain. Registers twelve Resources,
+    // four Columns, five unit-WU instances, plus the 32-instance
+    // RunLint cohort via the register_lints! declarative macro. The
+    // chain's `.build()` proves every WU's `Read`/`Write` AccessSet is
+    // covered by the registered stores at compile time. `.run()`
+    // panics at `hilavitkutin::Scheduler::run`'s body
+    // `unimplemented!()` until the runtime megaround Pass 7+8 lands;
+    // the AccessSet contract proof is Slice 8b.2's load-bearing test.
+    //
+    // Host-shim Resources use defaults: `Workspace::default()` /
+    // `CiState::default()` / `HostExtensionHost::new()` etc. A future
+    // slice replaces the defaults with populated Resources (real
+    // workspace path, real CI detection, real plugin handles). The
+    // `RunSurface::Cli` value is semantically known at the cli entry
+    // point.
     let _gate = args.gate;
     let _cfg_ref: &viola_config::ViolaConfig<'_, MAX_PLUGINS> = &cfg;
-    unimplemented!(
-        "Slice 8b ships viola-cli scheduler rewire; \
-         viola-core's pre-#254 pipeline::run is deleted (Slice 8a)"
+
+    let mut scheduler = register_lints!(
+        Scheduler::builder()
+            .with(Resource::new(HostExtensionHost::new()))
+            .with(Resource::new(Workspace::default()))
+            .with(Resource::new(CiState::default()))
+            .with(Resource::new(DiscoveredFilePaths::new()))
+            .with(Resource::new(FileEntryBuffer::default()))
+            .with(Resource::new(LintSlots::default()))
+            .with(Resource::new(LintConfigBuffer::default()))
+            .with(Resource::new(DiagnosticCounts::new()))
+            .with(Resource::new(DiagnosticSink::new(StderrEmitter)))
+            .with(Resource::new(ConfigBytes::empty()))
+            .with(Resource::new(RunSurface::Cli))
+            .with(Resource::new(ViolaCfg::new()))
+            .with(Column::<PluginEntry>::new())
+            .with(Column::<FileInfo>::new())
+            .with(Column::<Nam>::new())
+            .with(Column::<WuDiagnostic>::new())
+            .with(LoadConfig)
+            .with(LoadPlugins)
+            .with(DiscoverFiles)
+            .with(RunRunner)
+            .with(EmitDiagnostics::<StderrEmitter>::new())
     )
+    .build();
+
+    // `Scheduler::run` returns `Cfg::Out`, a generic associated type
+    // that resolves to an `Outcome`-shaped value once the engine body
+    // ships (hilavitkutin Pass 7+8). Today the body is
+    // `unimplemented!()` so the call panics before any return; the
+    // `let _ =` exists only to silence the unused-must-use lint until
+    // the engine body lands. The follow-up that wires the Outcome to
+    // a concrete exit code (EXIT_OK on Ok, EXIT_PLUGIN on Err) is
+    // tracked under viola-core's `viola-cli Scheduler::run Outcome
+    // handling` BACKLOG entry; reaching that point requires the
+    // engine body and the host-shim Resources to be populated, not
+    // just the AccessSet typestate proof Slice 8b.2 ships.
+    let _ = scheduler.run();
+    EXIT_OK
 }
 
 /// Parsed CLI arguments. The host has exactly two flag-shaped inputs

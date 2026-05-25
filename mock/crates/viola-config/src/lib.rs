@@ -473,6 +473,29 @@ pub struct ConfigBytes {
     pub len: arvo::Cap,
 }
 
+impl ConfigBytes {
+    /// Construct an empty buffer with zero populated length. The host
+    /// shim populates the real bytes once filesystem access lands in a
+    /// future slice. Pre-1.0; named constructor (vs `Default::default`)
+    /// makes the call site's intent explicit: this is a not-yet-populated
+    /// placeholder, not a semantically meaningful default config buffer.
+    pub fn empty() -> Self {
+        Self {
+            bytes: [0u8; CONFIG_MAX_BYTES], // lint:allow(no-bare-numeric) reason: zero-init array filler; tracked: #72
+            len: arvo::Cap(arvo::USize::ZERO),
+        }
+    }
+}
+
+impl Default for ConfigBytes {
+    /// Delegates to [`ConfigBytes::empty`] for callers that need the
+    /// `Default` trait shape (builder patterns, derives). Both call
+    /// shapes produce the same empty-buffer state.
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 /// Crate-private fixed-cap arena backing every `Str` handle inside one
 /// `ViolaConfigOwned`. Cursor-based byte arena with a separate
 /// offsets table indexed by 28-bit id. `&self` mutation is gated by
