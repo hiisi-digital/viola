@@ -41,12 +41,13 @@
 use core::ffi::c_void;
 use core::panic::PanicInfo;
 
+#[allow(dead_code)]
+mod emit;
 mod fmt;
 mod io;
 
-use viola_core::{
-    BytesRef, Extension, ExtensionHost, ExtensionRequirement, ProviderId,
-};
+use hilavitkutin_extensions::ExtensionHost;
+use viola_core::{BytesRef, Extension, ExtensionRequirement, ProviderId};
 
 const MAX_PLUGINS: usize = 16;
 const MAX_CONFIG_BYTES: usize = 64 * 1024;
