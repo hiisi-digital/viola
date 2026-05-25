@@ -135,7 +135,12 @@ pub enum WuDiagnosticSource {
 /// recovery action at WU body level, so methods return unit.
 /// Concrete impls (viola-cli's stderr writer, future LSP-buffered
 /// emitter, future network sink) handle syscall context internally.
-pub trait EmitWriter {
+///
+/// `Send + Sync` supertraits are load-bearing: the
+/// `unsafe impl<W: EmitWriter> Sync for DiagnosticSink<W>` below
+/// requires `W: Send + Sync` for the four-invariant Sync contract on
+/// the Resource to complete at scheduler-build time.
+pub trait EmitWriter: Send + Sync {
     /// Emit `s` as part of the current diagnostic line. Implementors
     /// may buffer, route, drop, or panic on failure per their
     /// concrete policy.

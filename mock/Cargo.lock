@@ -59,6 +59,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "arvo-comb"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "arvo-tensor",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+]
+
+[[package]]
+name = "arvo-graph"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+]
+
+[[package]]
 name = "arvo-mask-contracts"
 version = "0.1.0"
 dependencies = [
@@ -91,6 +110,28 @@ dependencies = [
  "arvo-storage",
  "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
+]
+
+[[package]]
+name = "arvo-sparse"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "arvo-bits-contracts",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+ "notko",
+]
+
+[[package]]
+name = "arvo-spectral"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "arvo-sparse",
+ "arvo-tensor",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
@@ -163,6 +204,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 
 [[package]]
+name = "hilavitkutin"
+version = "0.1.0"
+dependencies = [
+ "arvo",
+ "arvo-bitmask",
+ "arvo-comb",
+ "arvo-graph",
+ "arvo-sparse",
+ "arvo-spectral",
+ "hilavitkutin-api",
+ "hilavitkutin-kit",
+ "libc",
+ "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
+ "notko",
+]
+
+[[package]]
 name = "hilavitkutin-api"
 version = "0.1.0"
 dependencies = [
@@ -195,6 +253,13 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "hilavitkutin-kit"
+version = "0.1.0"
+dependencies = [
+ "hilavitkutin-api",
 ]
 
 [[package]]
@@ -478,7 +543,9 @@ version = "0.1.0"
 dependencies = [
  "arvo",
  "arvo-bits",
+ "hilavitkutin",
  "hilavitkutin-api",
+ "hilavitkutin-extensions",
  "libc",
  "notko",
  "viola-config",
@@ -643,3 +710,7 @@ checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
 dependencies = [
  "memchr",
 ]
+
+[[patch.unused]]
+name = "arvo-hash"
+version = "0.1.0"

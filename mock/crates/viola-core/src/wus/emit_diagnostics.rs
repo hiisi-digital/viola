@@ -92,7 +92,7 @@ const _: () = {
     );
 };
 
-impl<W: EmitWriter + Send + Sync + 'static> WorkUnit for EmitDiagnostics<W> {
+impl<W: EmitWriter + 'static> WorkUnit for EmitDiagnostics<W> {
     type Read = Cons<Resource<DiagnosticCounts>, Cons<Column<WuDiagnostic>, Empty>>;
     type Write = Cons<Resource<DiagnosticSink<W>>, Empty>;
     type Hint = (Relaxed, Atomic, Important);
