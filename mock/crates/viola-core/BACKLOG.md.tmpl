@@ -130,7 +130,7 @@ Shipped in Slice 7b. Human-readable emit format hardcoded: one line per diagnost
 
 ## viola-cli Scheduler::run Outcome handling
 
-Slice 8b.2's scheduler-build chain ends with `let _ = scheduler.run(); EXIT_OK`, intentionally discarding `Scheduler::run`'s `Cfg::Out` return value. The engine body is `unimplemented!()` per the hilavitkutin Pass 6 signature commit; `run()` panics before any return today, so the `let _ =` is a placeholder until the engine body ships (Pass 7+8 of the runtime megaround). A future slice replaces this with explicit pattern-matching: `Outcome::Ok(_) => EXIT_OK; Outcome::Err(_) => EXIT_PLUGIN` (or whatever shape `Cfg::Out` resolves to once the engine body commits). Sequencing: this follow-up lands after the engine body lands, NOT before, because the concrete return type is the engine's choice.
+Shipped in viola-cli Scheduler::run Outcome handling slice: viola-cli's unix-main matches `Outcome::Ok(_) -> EXIT_OK`, `Outcome::Err(_) -> EXIT_PLUGIN`. Hilavitkutin's engine body (hilavitkutin PR #83 at hilavitkutin dev `c040b4d`) returns `Outcome::Ok(())` cleanly as the no-op transitional shape; the `Err` arm is unreachable in practice until the real morsel loop body lands (the LLVM-plugin-gated follow-up tracked in hilavitkutin's `Scheduler::run real morsel loop body` BACKLOG entry), but the arm stays in place for forward compatibility per pre-1.0 churn discipline.
 
 ## viola-cli scheduler wiring and concrete EmitWriter impl
 
