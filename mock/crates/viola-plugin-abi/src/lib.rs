@@ -52,7 +52,7 @@ pub use diagnostic::{
     Diagnostic, DiagnosticBatch, DiagnosticSeverity, SourceLocation,
     SourceRange,
 };
-pub use nam::{NamPayload, NamVersion};
+pub use nam::{NamFileEntry, NamPayload, NamVersion, nam_file_entries};
 pub use vtable::{
     FileEntry, GrammarExtractVtable, LintEvaluateVtable, RunScope,
     RunnerExecuteScopeVtable,
@@ -213,5 +213,78 @@ mod tests {
         let _ = offset_of!(StructuredError, message);
         let _ = offset_of!(StructuredError, retryable);
         let _ = offset_of!(StructuredError, _reserved);
+    }
+
+    #[test]
+    fn nam_v1_0_0_is_one_zero_zero() {
+        assert_eq!(NamVersion::V1_0_0.major, 1);
+        assert_eq!(NamVersion::V1_0_0.minor, 0);
+        assert_eq!(NamVersion::V1_0_0.patch, 0);
+        assert_eq!(NamVersion::V1_0_0._reserved, 0);
+    }
+
+    #[test]
+    fn nam_file_entry_layout_three_fields() {
+        use core::mem::offset_of;
+        let _ = offset_of!(NamFileEntry, path);
+        let _ = offset_of!(NamFileEntry, language);
+        let _ = offset_of!(NamFileEntry, source);
+        assert_eq!(
+            size_of::<NamFileEntry>(),
+            size_of::<BytesRef>() * 2 + size_of::<arvo::USize>(),
+        );
+    }
+
+    #[test]
+    fn nam_file_entries_returns_none_on_null() {
+        let entries = unsafe { nam_file_entries(core::ptr::null()) };
+        assert!(entries.is_none());
+    }
+
+    #[test]
+    fn nam_file_entries_returns_none_on_version_mismatch() {
+        let payload = NamPayload {
+            version: NamVersion::new(2, 0, 0),
+            data: core::ptr::null(),
+            len: arvo::USize(0),
+        };
+        let entries = unsafe { nam_file_entries(&payload) };
+        assert!(entries.is_none());
+    }
+
+    #[test]
+    fn nam_file_entries_returns_empty_on_null_data_v1() {
+        let payload = NamPayload {
+            version: NamVersion::V1_0_0,
+            data: core::ptr::null(),
+            len: arvo::USize(0),
+        };
+        let entries = unsafe { nam_file_entries(&payload) }.expect("v1 with null data yields Some(&[])");
+        assert_eq!(entries.len(), 0);
+    }
+
+    #[test]
+    fn nam_file_entries_walks_v1_slice() {
+        let payload_bytes: &[NamFileEntry] = &[
+            NamFileEntry {
+                path: BytesRef::EMPTY,
+                language: arvo::USize(0),
+                source: BytesRef::EMPTY,
+            },
+            NamFileEntry {
+                path: BytesRef::EMPTY,
+                language: arvo::USize(1),
+                source: BytesRef::EMPTY,
+            },
+        ];
+        let payload = NamPayload {
+            version: NamVersion::V1_0_0,
+            data: payload_bytes.as_ptr() as *const core::ffi::c_void,
+            len: arvo::USize(payload_bytes.len() * size_of::<NamFileEntry>()),
+        };
+        let entries = unsafe { nam_file_entries(&payload) }.expect("v1 with valid data yields slice");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].language.0, 0);
+        assert_eq!(entries[1].language.0, 1);
     }
 }
