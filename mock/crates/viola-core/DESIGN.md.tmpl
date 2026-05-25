@@ -457,3 +457,30 @@ The seven WUs in `wus/` and their Resources in `resources.rs` are the post-#254 
 ### viola-cli transitional state
 
 Slice 8a stubs viola-cli's run paths to `unimplemented!("Slice 8b ships viola-cli scheduler rewire")`. The binary's libc entry point compiles; arg parsing works; the actual lint-running paths panic with the documented message. Slice 8b fills the bodies with the scheduler-driven flow.
+
+## Slice 8b.1 patch fix + EmitWriter + ExtensionHost drop
+
+Slice 8b.1 splits the originally-scoped Slice 8b into two phases. The first phase ships three engine-independent pieces and unblocks the second.
+
+### Patch fix root cause
+
+The first attempt at Slice 8b added `hilavitkutin` (the engine crate) to viola-cli's dependencies and got a transitive compile failure with `Csr::row_col_indices` and `Csr::row_values` reported as "method not found" on `arvo_sparse::Csr<ROWS, NNZ, W>`. The methods exist on arvo HEAD; the failure was not an arvo bug. It was a viola-mock-workspace `[patch."ssh://git@github.com/orgrinrt/arvo.git"]` configuration gap. The patch overrode only six arvo crates to local paths (`arvo`, `arvo-bits`, `arvo-bitmask`, `arvo-refit`, `arvo-storage`, `arvo-bits-contracts`) but left ten others unpatched (`arvo-comb`, `arvo-graph`, `arvo-hash`, `arvo-mask-contracts`, `arvo-numeric-contracts`, `arvo-sparse`, `arvo-spectral`, `arvo-strategy`, `arvo-tensor`, `arvo-transparent`). When hilavitkutin pulled `arvo-spectral`, cargo resolved it from git while `arvo-sparse` (its dep) sat in a dual-source state: the `arvo` types `arvo-sparse` referenced came from the path-patched version, but `arvo-sparse` itself came from git. The type system saw two distinct `Csr` shapes from "the same path" and reported a misleading method-not-found error. The fix extends the `[patch]` block to cover all 16 arvo crates so every workspace member resolves arvo consistently.
+
+### `viola_core::ExtensionHost` re-export drop
+
+The Slice 8a-deferred disambiguation lands: `viola_core::lib.rs` no longer re-exports `ExtensionHost` from `hilavitkutin_extensions`. Consumers split:
+
+- viola-cli imports `hilavitkutin_extensions::ExtensionHost` directly when it needs the substrate type for plugin-loading via `host.load(...)`.
+- Future Slice 8b.2 scheduler-builder code imports `viola_core::resources::ExtensionHost` for the `Resource::new(host)` call.
+
+Two distinct concepts, two distinct paths. The non-colliding sibling re-exports from `hilavitkutin_extensions` (`ProviderId`, `Extension`, `ExtensionMeta`, `ExtensionRequirement`, etc) stay because they are non-colliding plugin-loading surfaces.
+
+### `StderrEmitter`
+
+`viola-cli/src/emit.rs` ships `pub struct StderrEmitter;` as a ZST + `impl viola_core::wus::EmitWriter for StderrEmitter`. Three methods: `write_str(s: &str)` and `write_bytes(b: &[u8])` both call an internal `write_all_to_stderr(bytes: &[u8])` helper that loops `libc::write(2, ptr, len)` until the buffer drains. On `-1` errno or zero-progress retry exhaustion the helper panics via the existing panic_handler, which routes to libc::abort on unix. `flush(&mut self)` is a no-op (unbuffered emitter).
+
+Pre-1.0; the trait can switch to a buffered impl or a non-panicking impl later without changing the trait signature. The Slice 8b.1 choice favours simplicity: one syscall per write, panic on failure, no buffering. viola-cli's stderr-failure mode is "abort visibly"; silent drop would mask broken output paths.
+
+### Path forward for Slice 8b.2
+
+With the patch gap closed, Slice 8b.2 adds `hilavitkutin` to viola-cli's `Cargo.toml`, adds the `register_lints!` declarative macro that unrolls 32 `.with(RunLint::<N>)` calls, builds the full scheduler-build chain (nine `Resource::new(...)` calls including `Resource::new(DiagnosticSink::new(StderrEmitter))`, four `Column::<T>::new()` calls, five unit-WU calls, the `register_lints!` expansion, `EmitDiagnostics::<StderrEmitter>::new()`, `.build()`, `.run()`), drops the Slice 8a `#[allow(dead_code)]` annotations on `EXIT_OK` / `EXIT_PLUGIN` / `HOST_CAPS_EMPTY` / `_BYTES_REF_KEEPALIVE` / `load_plugin`, and replaces the `unimplemented!()` lint-path stub. The runtime continues to panic at `hilavitkutin::Scheduler::run`'s own `unimplemented!()` until Pass 7+8 of the runtime megaround lands; the AccessSet contracts compile, which is the load-bearing test for task #254 at the type level.

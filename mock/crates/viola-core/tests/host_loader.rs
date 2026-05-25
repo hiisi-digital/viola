@@ -10,8 +10,9 @@
 use std::env;
 use std::path::PathBuf;
 
+use hilavitkutin_extensions::ExtensionHost;
 use viola_core::{
-    PROVIDER_LINT_EVALUATE, DiagnosticBatch, ExtensionAbiStatus, ExtensionHost,
+    PROVIDER_LINT_EVALUATE, DiagnosticBatch, ExtensionAbiStatus,
     ExtensionRequirement, NamPayload, NamVersion, default_policy,
     invoke::lint_vtable,
     role::{is_lint, is_runner, roles_of, Role},

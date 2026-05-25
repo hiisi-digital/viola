@@ -32,10 +32,14 @@ pub mod resources;
 pub mod role;
 pub mod wus;
 
+// `ExtensionHost` re-export dropped in Slice 8b.1 to disambiguate
+// from `viola_core::resources::ExtensionHost` (the Resource version).
+// Consumers that need the substrate type import
+// `hilavitkutin_extensions::ExtensionHost` directly.
 pub use hilavitkutin_extensions::{
     ProviderEntry, ProviderExport, ProviderId, DESCRIPTOR_SYMBOL,
     Extension, ExtensionAbiStatus, ExtensionDescriptor, ExtensionError,
-    ExtensionHost, ExtensionMeta, ExtensionRequirement, ExtensionVersion,
+    ExtensionMeta, ExtensionRequirement, ExtensionVersion,
     FailurePolicyFn, HOST_ABI_VERSION, InitHandler, PolicyVerdict,
     ShutdownHandler, default_policy,
 };

@@ -53,6 +53,16 @@ arvo-bitmask = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev",
 arvo-refit = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 arvo-storage = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 arvo-bits-contracts = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-comb = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-graph = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-hash = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-mask-contracts = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-numeric-contracts = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-sparse = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-spectral = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-strategy = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-tensor = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
+arvo-transparent = { git = "ssh://git@github.com/orgrinrt/arvo.git", branch = "dev", default-features = false }
 
 # Local iteration overrides. Sibling-checkout layout
 # (`~/Dev/clause-dev/{viola,hilavitkutin,arvo,notko}`) is the assumed
@@ -75,3 +85,13 @@ arvo-bitmask = { path = "../../arvo/mock/crates/arvo-bitmask" }
 arvo-refit = { path = "../../arvo/mock/crates/arvo-refit" }
 arvo-storage = { path = "../../arvo/mock/crates/arvo-storage" }
 arvo-bits-contracts = { path = "../../arvo/mock/crates/arvo-bits-contracts" }
+arvo-comb = { path = "../../arvo/mock/crates/arvo-comb" }
+arvo-graph = { path = "../../arvo/mock/crates/arvo-graph" }
+arvo-hash = { path = "../../arvo/mock/crates/arvo-hash" }
+arvo-mask-contracts = { path = "../../arvo/mock/crates/arvo-mask-contracts" }
+arvo-numeric-contracts = { path = "../../arvo/mock/crates/arvo-numeric-contracts" }
+arvo-sparse = { path = "../../arvo/mock/crates/arvo-sparse" }
+arvo-spectral = { path = "../../arvo/mock/crates/arvo-spectral" }
+arvo-strategy = { path = "../../arvo/mock/crates/arvo-strategy" }
+arvo-tensor = { path = "../../arvo/mock/crates/arvo-tensor" }
+arvo-transparent = { path = "../../arvo/mock/crates/arvo-transparent" }
