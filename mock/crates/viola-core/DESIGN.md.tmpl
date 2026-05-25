@@ -433,3 +433,27 @@ The stack-buffer cap matches `MAX_LINTS * MAX_DIAGS_PER_LINT` per the Slice 7a-d
 `RunLint<L>::Write` extends from `Cons<Column<WuDiagnostic>, Empty>` to `Cons<Column<WuDiagnostic>, Cons<Resource<DiagnosticCounts>, Empty>>`. The body acquires a `DiagnosticCounts` resource projection through the Write set's HasResourceProvider and calls `DiagnosticCounts::set_count(arvo::Cap(USize(L)), USize(count))` at every exit point: empty-plugin-slot (count zero), vtable-resolution-failure (count one for the failure record), evaluate-status-failure (count one for the failure record), normal-exit (count equals the staged record count).
 
 This is a load-bearing AccessSet change to the previously-closed Slice 6b RunLint WU body. Pre-1.0 permits in-round edits per the Slice 7a CL framing. Slice 9 audit re-checks COMMUTATIVE-flag commutativity against the extended Write set; per-L writes to `counts[L]` for distinct L touch disjoint slot indexes by construction; no shared scalar is touched; commutativity holds.
+
+## Slice 8a viola-core legacy-surface deletion
+
+Slice 8a tears down the pre-#254 in-process pipeline surface from viola-core. The post-#254 design routes every consumer flow through the hilavitkutin Scheduler; the legacy in-process orchestrator and its supporting types have no use post-transition. Per `no-legacy-shims-pre-1.0` the deletion is direct rather than deprecated-with-shim.
+
+### Deleted surfaces
+
+`pipeline.rs` (the `pipeline::run` function) is the pre-#254 in-process runner-once-plus-lint-fan-out orchestrator. Replaced by the seven WUs in `wus/` composed at scheduler-build time. The function and its module go away.
+
+`session.rs` (`Session<const N: usize>`) was a manual fixed-cap LIFO container that pinned reverse-insertion-order shutdown across loaded extensions. The hilavitkutin Scheduler's `Drop` impl owns scheduler-time resource lifetime; the application-level Session helper is no longer load-bearing. Module deleted.
+
+`viola-cli/src/main.rs`'s local `CaptureSink` struct (Slice 1 vintage) carried Diagnostic aggregation in the cli binary itself. The post-#254 shape moves aggregation into the host-shim `DiagnosticSink<W>` Resource (Slice 7b); the cli supplies its concrete `EmitWriter` impl in Slice 8b. The local struct + its `Push<Diagnostic>` and `Len` impls drop.
+
+`viola-core/tests/pipeline_e2e.rs` exercised the deleted `pipeline::run` surface. Removed; the post-#254 runtime e2e test waits on hilavitkutin's `Scheduler::run` body landing (currently `unimplemented!()` per the Pass 6 signature commitment of the runtime megaround).
+
+### Surviving surfaces
+
+`aggregate.rs` keeps `sort_diagnostics` and `cmp_diag` as host-shim helpers; the host-shim layer may still need them for sibling consumer flows distinct from the in-WU sort that Slice 7b's EmitDiagnostics body already ships.
+
+The seven WUs in `wus/` and their Resources in `resources.rs` are the post-#254 in-process surface. The FFI shapes re-exported from `viola_plugin_abi` and `hilavitkutin_extensions` stay; they are the plugin-side contract independent of the host's internal runner shape.
+
+### viola-cli transitional state
+
+Slice 8a stubs viola-cli's run paths to `unimplemented!("Slice 8b ships viola-cli scheduler rewire")`. The binary's libc entry point compiles; arg parsing works; the actual lint-running paths panic with the documented message. Slice 8b fills the bodies with the scheduler-driven flow.
