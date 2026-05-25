@@ -228,19 +228,20 @@ pub extern "C" fn main(argc: i32, argv: *const *const u8) -> i32 {
     )
     .build();
 
-    // `Scheduler::run` returns `Cfg::Out`, a generic associated type
-    // that resolves to an `Outcome`-shaped value once the engine body
-    // ships (hilavitkutin Pass 7+8). Today the body is
-    // `unimplemented!()` so the call panics before any return; the
-    // `let _ =` exists only to silence the unused-must-use lint until
-    // the engine body lands. The follow-up that wires the Outcome to
-    // a concrete exit code (EXIT_OK on Ok, EXIT_PLUGIN on Err) is
-    // tracked under viola-core's `viola-cli Scheduler::run Outcome
-    // handling` BACKLOG entry; reaching that point requires the
-    // engine body and the host-shim Resources to be populated, not
-    // just the AccessSet typestate proof Slice 8b.2 ships.
-    let _ = scheduler.run();
-    EXIT_OK
+    // `Scheduler::run` returns `Cfg::Out`. For `DefaultRunCfg` this
+    // resolves to `notko::Outcome<(), ()>`. The hilavitkutin engine
+    // body ships a transitional no-op that returns
+    // `Outcome::Ok(())` cleanly; the real morsel-loop body (per the
+    // `Scheduler::run real morsel loop body` BACKLOG entry on
+    // hilavitkutin) surfaces failures via the `Err` arm once it
+    // lands. The match below pins the exit-code mapping for both
+    // arms. Today the `Err` arm is unreachable in practice; it
+    // stays in place for forward compatibility per the pre-1.0
+    // churn discipline.
+    match scheduler.run() {
+        notko::Outcome::Ok(_) => EXIT_OK,
+        notko::Outcome::Err(_) => EXIT_PLUGIN,
+    }
 }
 
 /// Parsed CLI arguments. The host has exactly two flag-shaped inputs
