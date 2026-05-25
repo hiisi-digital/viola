@@ -17,23 +17,20 @@
 //! - [`invoke`]: typed vtable resolvers for the three v1 providers,
 //!   bridging raw `*const c_void` to the `#[repr(C)]` shapes pinned in
 //!   [`viola_plugin_abi::vtable`].
-//! - [`pipeline`]: runner-once + lint-fan-out orchestration over a
-//!   single NAM snapshot, per §7.1 / §8.3. Diagnostics egress through
-//!   a consumer-provided [`pipeline::DiagnosticSink`].
 //! - [`aggregate`]: §10 deterministic diagnostic comparator + slice
-//!   sort.
-//! - [`session`]: fixed-cap LIFO container that pins reverse-
-//!   insertion-order shutdown across multiple extensions, per §7.4.
+//!   sort helpers retained for host-shim sibling consumers; the
+//!   in-WU sort lives inside [`wus::EmitDiagnostics`].
+//! - [`resources`] + [`wus`]: post-#254 hilavitkutin-app surface. The
+//!   in-process pipeline runs through `hilavitkutin::Scheduler` over
+//!   the WorkUnits in [`wus`] and the Resources / Columns in
+//!   [`resources`]. The pre-#254 `pipeline::run` orchestrator and
+//!   `Session<N>` LIFO helper are removed per Slice 8a.
 
 pub mod aggregate;
 pub mod invoke;
-pub mod pipeline;
 pub mod resources;
 pub mod role;
-pub mod session;
 pub mod wus;
-
-pub use session::Session;
 
 pub use hilavitkutin_extensions::{
     ProviderEntry, ProviderExport, ProviderId, DESCRIPTOR_SYMBOL,
