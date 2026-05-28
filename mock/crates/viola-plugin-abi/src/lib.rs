@@ -14,8 +14,8 @@
 //!   [`PROVIDER_LINT_EVALUATE`]) and their `#[repr(C)]` vtable shapes;
 //! - the [`NamPayload`] / [`NamVersion`] carriers for the normalized
 //!   analysis model produced once per run;
-//! - the [`Diagnostic`] / [`DiagnosticBatch`] wire shapes the lint
-//!   role emits;
+//! - the [`Diagnostic`] wire shape the lint role writes into the
+//!   host-owned output buffer;
 //! - viola-specific helpers ([`BytesRef`], [`RunSurface`],
 //!   [`PluginError`]) used only inside the viola domain layering.
 //!
@@ -49,8 +49,7 @@ mod nam;
 mod vtable;
 
 pub use diagnostic::{
-    Diagnostic, DiagnosticBatch, DiagnosticSeverity, SourceLocation,
-    SourceRange,
+    Diagnostic, DiagnosticSeverity, SourceLocation, SourceRange,
 };
 pub use nam::{NamFileEntry, NamPayload, NamVersion, nam_file_entries};
 pub use vtable::{
@@ -94,8 +93,12 @@ pub const PROVIDER_GRAMMAR_EXTRACT: ProviderId =
     ProviderId::from_name("viola.grammar.extract.v1");
 
 /// Provider id for the lint role's evaluation entrypoint.
+///
+/// v2 carries the host-owned output buffer shape (see
+/// [`LintEvaluateVtable`]); v1's plugin-owned batch return was deleted
+/// outright per the no-legacy-shims-pre-1.0 rule.
 pub const PROVIDER_LINT_EVALUATE: ProviderId =
-    ProviderId::from_name("viola.lint.evaluate.v1");
+    ProviderId::from_name("viola.lint.evaluate.v2");
 
 /// Run surface tag mirrored into NAM `run_context.surface`.
 ///

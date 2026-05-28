@@ -18,7 +18,7 @@ Internal `cdylib` that ships a deterministic lint-evaluation plugin for viola's 
 
 ### `LintEvalProvider`
 
-Implements the `viola.lint.evaluate.v1` contract via `LintEvaluateVtable`. Emits a fixed diagnostic batch on every call so tests can assert exact output.
+Implements the `viola.lint.evaluate.v2` contract via `LintEvaluateVtable`. Writes a fixed set of diagnostics into the host-owned `Diagnostic` buffer on every call so tests can assert exact output.
 
 ## Extension entry point
 

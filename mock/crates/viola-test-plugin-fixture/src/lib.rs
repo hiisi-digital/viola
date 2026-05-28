@@ -30,7 +30,7 @@ use hilavitkutin_extensions::{
 };
 use hilavitkutin_extensions_macros::export_extension;
 use viola_plugin_abi::{
-    BytesRef, PROVIDER_LINT_EVALUATE, Diagnostic, DiagnosticBatch,
+    BytesRef, PROVIDER_LINT_EVALUATE, Diagnostic,
     DiagnosticSeverity, LintEvaluateVtable, NamPayload, SourceLocation,
     SourceRange,
 };
@@ -77,19 +77,30 @@ unsafe extern "C" fn evaluate(
     _nam: *const NamPayload,
     _lint_config_bytes: *const u8,
     _lint_config_len: arvo::USize,
-    out_batch: *mut DiagnosticBatch,
+    out_entries: *mut Diagnostic,
+    out_capacity: arvo::USize,
+    out_len: *mut arvo::USize,
 ) -> viola_plugin_abi::AbiStatus {
     EVALUATE_CALLS.fetch_add(1, Ordering::SeqCst);
-    if out_batch.is_null() {
+    if out_entries.is_null() || out_len.is_null() {
         return ExtensionAbiStatus::InvalidArg;
     }
-    // SAFETY: out_batch is a host-owned out-parameter the contract
-    // requires the plugin to populate exactly once per call.
+    // The fixture emits exactly one diagnostic.
+    let emit = arvo::USize(1);
+    if out_capacity.0 < emit.0 {
+        // Overflow: report the would-have-emitted count, write nothing.
+        // SAFETY: out_len is non-null (checked above), host-owned.
+        unsafe {
+            *out_len = emit;
+        }
+        return ExtensionAbiStatus::Internal;
+    }
+    // SAFETY: out_entries is non-null with capacity >= 1 (checked), so
+    // slot 0 is writable; out_len is non-null. Both are host-owned for
+    // the call's duration.
     unsafe {
-        *out_batch = DiagnosticBatch {
-            entries: &DIAGNOSTIC as *const Diagnostic,
-            len: arvo::USize(1),
-        };
+        *out_entries = DIAGNOSTIC;
+        *out_len = emit;
     }
     ExtensionAbiStatus::Ok
 }

@@ -6,7 +6,7 @@ This crate is the foundation every viola plugin compiles against. The vtable sha
 
 ## Provider IDs
 
-Three v1 provider IDs that viola plugins implement against. Each maps to one vtable shape and one viola role.
+Three provider IDs that viola plugins implement against (the runner and grammar roles at v1, the lint role at v2). Each maps to one vtable shape and one viola role.
 
 ### `PROVIDER_RUNNER_EXECUTE_SCOPE`
 
@@ -18,7 +18,7 @@ Three v1 provider IDs that viola plugins implement against. Each maps to one vta
 
 ### `PROVIDER_LINT_EVALUATE`
 
-`viola.lint.evaluate.v1`. The lint-role provider id. Points at a `LintEvaluateVtable`. Plugins declaring this provider take a `NamPayload` plus lint config bytes and produce a `DiagnosticBatch`.
+`viola.lint.evaluate.v2`. The lint-role provider id. Points at a `LintEvaluateVtable`. Plugins declaring this provider take a `NamPayload` plus lint config bytes and write findings into a host-owned `Diagnostic` buffer.
 
 ## Vtable shapes
 
@@ -34,7 +34,7 @@ Single function pointer `extract(host_ctx, file, source_bytes, source_len, out_c
 
 ### `LintEvaluateVtable`
 
-Single function pointer `evaluate(host_ctx, nam, lint_config_bytes, lint_config_len, out_batch) -> AbiStatus`. Direct args (no wrapper struct). The 2026-05-23 three-specialist convergence settled the wrapper-vs-direct-args design Q in favour of direct args.
+Single function pointer `evaluate(host_ctx, nam, lint_config_bytes, lint_config_len, out_entries, out_capacity, out_len) -> AbiStatus`. The host owns the output buffer: it passes a `*mut Diagnostic` slice (`out_entries`) with its `out_capacity` and an `out_len` pointer; the plugin writes through up to capacity. On overflow the plugin writes the first `out_capacity` entries, sets `*out_len` to the count it would have emitted, and returns `AbiStatus::Internal`; otherwise it sets `*out_len` to the written count and returns `AbiStatus::Ok`. Direct args (no wrapper struct). The 2026-05-23 three-specialist convergence settled the wrapper-vs-direct-args design Q in favour of direct args.
 
 ## Runner-role carriers
 
@@ -64,11 +64,7 @@ Version tag carried on the payload. Lets the host validate that runner and lint 
 
 ## Diagnostic wire shape
 
-The output a lint emits; the host sorts and renders.
-
-### `DiagnosticBatch`
-
-`#[repr(C)]` collection the lint fills with one or more `Diagnostic` records during the `evaluate` call.
+The output a lint emits; the host sorts and renders. The host owns the output buffer and passes it to `evaluate` as `out_entries` (a `*mut Diagnostic` slice) plus `out_capacity`; the lint writes its records through and reports the count via `out_len`.
 
 ### `Diagnostic`
 

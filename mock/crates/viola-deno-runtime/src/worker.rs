@@ -23,7 +23,7 @@ use std::sync::Mutex;                                                // lint:all
 use std::thread;                                                     // lint:allow(forbidden-imports, no-std) -- subprocess shutdown poll loop. tracked: #197
 use std::time::{Duration, Instant};                                  // lint:allow(forbidden-imports, no-std) -- subprocess shutdown deadline. tracked: #197
 use viola_plugin_abi::{
-    AbiStatus, BytesRef, Diagnostic, DiagnosticBatch, DiagnosticSeverity, NamPayload,
+    AbiStatus, BytesRef, Diagnostic, DiagnosticSeverity, NamPayload,
     RunScope, RunSurface, SourceLocation, SourceRange,
 };
 
@@ -322,9 +322,11 @@ pub(crate) unsafe extern "C" fn lint_evaluate(
     _nam: *const NamPayload,
     lint_config_bytes: *const u8,
     lint_config_len: arvo::USize,
-    out_batch: *mut DiagnosticBatch,
+    out_entries: *mut Diagnostic,
+    out_capacity: arvo::USize,
+    out_len: *mut arvo::USize,
 ) -> AbiStatus {
-    if out_batch.is_null() {
+    if out_entries.is_null() || out_len.is_null() {
         return ExtensionAbiStatus::InvalidArg;
     }
 
@@ -363,7 +365,7 @@ pub(crate) unsafe extern "C" fn lint_evaluate(
     }
     let state = guard.as_mut().expect("just set above");
 
-    // The v1 lint vtable does not pass RunScope directly. The host
+    // The lint vtable does not pass RunScope directly. The host
     // has already populated NAM with run-derived data; the lint sees
     // only `nam` plus `lint_config`. PR-MVP sends an empty scope
     // payload to the bridge so user lint handlers receive an empty
@@ -384,13 +386,20 @@ pub(crate) unsafe extern "C" fn lint_evaluate(
 
     let entries_ptr = state.arena.diagnostics_ptr();
     let entries_len = state.arena.diag_count.0;
-    // SAFETY: out_batch is the host-owned out parameter the v1
-    // contract requires us to populate exactly once per call.
+    let cap = out_capacity.0;
+    let to_copy = if entries_len < cap { entries_len } else { cap };
+    // SAFETY: out_entries is host-owned with out_capacity slots; the
+    // arena's diagnostics_ptr is valid for entries_len reads while the
+    // worker state is locked. Diagnostic is Copy and the two regions do
+    // not overlap. out_len is non-null (checked at entry).
     unsafe {
-        *out_batch = DiagnosticBatch {
-            entries: entries_ptr,
-            len: arvo::USize(entries_len),
-        };
+        ptr::copy_nonoverlapping(entries_ptr, out_entries, to_copy);
+        *out_len = arvo::USize(entries_len);
+    }
+    if entries_len > cap {
+        // Overflow: the first out_capacity entries were written and
+        // out_len carries the would-have-emitted count.
+        return ExtensionAbiStatus::Internal;
     }
     ExtensionAbiStatus::Ok
 }
