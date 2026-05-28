@@ -60,6 +60,15 @@ impl NamVersion {
     /// signals that the producer MAY emit ids 20 and above. Walks via
     /// [`nam_file_entries`] / [`nam_file_nodes`] like the rest of v1.x.
     pub const V1_2_0: Self = Self::new(1, 2, 0);
+
+    /// Selects the v1.3.0 wire schema: identical layout to v1.2.0, with the
+    /// [`node_kind`] vocabulary extended by [`node_kind::IDENTIFIER`] so
+    /// name-reading lints (cross-file fn / item-name analysis) can resolve
+    /// item names. The id is append-only, so a v1.2.0 consumer still reads a
+    /// v1.3.0 payload (the new id appears as an opaque number); the bump only
+    /// signals that the producer MAY emit id 28. Accessors still gate
+    /// `major == 1`.
+    pub const V1_3_0: Self = Self::new(1, 3, 0);
 }
 
 /// Opaque payload carrier for a NAM snapshot.
@@ -255,4 +264,12 @@ pub mod node_kind {
     pub const PRIMITIVE_TYPE: USize = USize(26);
     /// An associated type, `type Bar;` / `type Bar = T;` in a trait / impl.
     pub const ASSOCIATED_TYPE: USize = USize(27);
+
+    // Identifier-leaf kind added at NAM v1.3.0 for the name-reading lints
+    // (append-only; ids 0..=27 keep their meaning).
+
+    /// A plain identifier leaf naming an item, function, field, variant, or
+    /// binding (the name token itself), distinct from [`TYPE_IDENTIFIER`]
+    /// which names a type. Read via the node source byte span.
+    pub const IDENTIFIER: USize = USize(28);
 }

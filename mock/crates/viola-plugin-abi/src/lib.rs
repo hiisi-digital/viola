@@ -445,6 +445,7 @@ mod tests {
             TYPE_IDENTIFIER.0,
             PRIMITIVE_TYPE.0,
             ASSOCIATED_TYPE.0,
+            IDENTIFIER.0,
         ];
         for (i, &id) in ids.iter().enumerate() {
             assert_eq!(id, i, "node_kind id at position {i} must equal {i}");
@@ -452,6 +453,8 @@ mod tests {
         // the v1.2.0 additions occupy 20..=27.
         assert_eq!(CALL_EXPRESSION.0, 20);
         assert_eq!(ASSOCIATED_TYPE.0, 27);
+        // the v1.3.0 addition is the next contiguous id.
+        assert_eq!(IDENTIFIER.0, 28);
     }
 
     #[test]
@@ -459,5 +462,12 @@ mod tests {
         assert_eq!(NamVersion::V1_2_0.major, 1);
         assert_eq!(NamVersion::V1_2_0.minor, 2);
         assert_eq!(NamVersion::V1_2_0.patch, 0);
+    }
+
+    #[test]
+    fn nam_version_v1_3_0() {
+        assert_eq!(NamVersion::V1_3_0.major, 1);
+        assert_eq!(NamVersion::V1_3_0.minor, 3);
+        assert_eq!(NamVersion::V1_3_0.patch, 0);
     }
 }

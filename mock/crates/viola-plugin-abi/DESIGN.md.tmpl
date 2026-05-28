@@ -70,7 +70,7 @@ The normalised analysis model the runner produces and the lints read.
 
 ### `NamVersion`
 
-Version tag carried on the payload. Lets the host validate that runner and lint agree on the NAM schema version before invoking the lint. `V1_0_0` selects the per-file entry slice; `V1_1_0` adds the per-file serialised AST; `V1_2_0` keeps the same layout and extends the `node_kind` vocabulary with expression and type-position kinds. The `NamFileEntry` layout is shared across the v1.x line, so all versions walk via `nam_file_entries`.
+Version tag carried on the payload. Lets the host validate that runner and lint agree on the NAM schema version before invoking the lint. `V1_0_0` selects the per-file entry slice; `V1_1_0` adds the per-file serialised AST; `V1_2_0` keeps the same layout and extends the `node_kind` vocabulary with expression and type-position kinds; `V1_3_0` keeps the same layout again and appends the `IDENTIFIER` kind for name-reading lints. The `NamFileEntry` layout is shared across the v1.x line, so all versions walk via `nam_file_entries`.
 
 ### `NamFileEntry`
 
@@ -82,7 +82,7 @@ One node of a file's serialised AST under v1.1.0. The host pre-walks the parsed 
 
 ### `node_kind`
 
-Workspace-canonical id table for `NamNode` `kind` values. Every consumer agrees on what an id means without sharing a parser grammar. `UNKNOWN` is the catch-all; v1.1.0 coverage is the common Rust structural kinds (items, comments, visibility), and v1.2.0 appends expression and type-position kinds (`CALL_EXPRESSION`, `FIELD_EXPRESSION`, `FIELD_DECLARATION`, `PARAMETER`, `ENUM_VARIANT`, `TYPE_IDENTIFIER`, `PRIMITIVE_TYPE`, `ASSOCIATED_TYPE`) for the AST node-position and type-position lints. Ids are stable and append-only; new kinds and non-Rust grammars ship in later schema sub-versions. The host serialiser that fills `nodes` from a parsed tree ships with the rust-native runner plugin, not this crate.
+Workspace-canonical id table for `NamNode` `kind` values. Every consumer agrees on what an id means without sharing a parser grammar. `UNKNOWN` is the catch-all; v1.1.0 coverage is the common Rust structural kinds (items, comments, visibility), and v1.2.0 appends expression and type-position kinds (`CALL_EXPRESSION`, `FIELD_EXPRESSION`, `FIELD_DECLARATION`, `PARAMETER`, `ENUM_VARIANT`, `TYPE_IDENTIFIER`, `PRIMITIVE_TYPE`, `ASSOCIATED_TYPE`) for the AST node-position and type-position lints. v1.3.0 appends `IDENTIFIER`, the name token of an item, function, field, variant, or binding (distinct from `TYPE_IDENTIFIER`, which names a type), so name-reading lints can resolve item names by the node's source byte span. Ids are stable and append-only; new kinds and non-Rust grammars ship in later schema sub-versions. The host serialiser that fills `nodes` from a parsed tree ships with the rust-native runner plugin, not this crate.
 
 ## Diagnostic wire shape
 

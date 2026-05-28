@@ -1,0 +1,50 @@
+906a0ed chore: lock src changelist for round 202605282700
+afc068f feat: nam v1.3.0 identifier node-kind for item-name reading
+6907e84 docs: draft src cl for nam v1.3.0 identifier round
+d75c337 chore: lock doc changelist for round 202605282700
+1a992f3 docs: nam v1.3.0 identifier node-kind in design doc
+cdd0992 feat: nam v1.2.0 node-kind vocabulary for expression and type positions
+523b7bd feat: two-phase project-scope lint abi with indexbatch carrier
+c575db9 feat: nam v1.1.0 flat node array and canonical rust node-kind table
+15b6243 feat: host-owned output buffer for lint-evaluate abi v2
+51b5d73 feat: add nam v1.0.0 schema and accessor
+d03a25d chore: add restrict-main-merges workflow
+36a2a60 docs: slice 9 viola parallel fan-out audit
+c5f4e54 feat: viola cli scheduler outcome match for exit code
+2ff7cba feat: viola 254 slice 8b2 scheduler wiring
+bcf747b feat: viola 254 slice 8b1 patch emit rexport
+5e6fde2 feat: viola 254 slice 8a viola core legacy surface deletion
+c5653b3 feat: viola 254 slice 7b emit diagnostics body
+bfb8bef feat: viola 254 slice 7a emit diagnostics design
+f5dba6f feat: viola 254 slice 6b runlint body
+2d18282 feat: viola 254 slice 6a runlint commutative flag
+e84cb3f feat: viola 254 slice 5b runrunner body
+cc7c551 feat: viola 254 slice 5a runrunner design and nam flip
+a5150c2 feat: viola 254 slice 4 discover files body
+6efd7d3 docs: viola 254 slice 3 design sections
+254959a chore: lock and close viola 254 round 202605250000
+1909f5c feat: loadplugins body plus resolve_descriptor helper
+2f05a3e feat: wrap viola-config plugins array in unsafecell plus cell
+3e6704e feat: viola-core slice 3b types resource and accessset witness
+73aaba8 feat: flip PluginEntryOwned to fields-bearing in viola-config
+aa8ff0b docs: draft viola 254 slice 3 src cl
+15aff35 docs: draft and lock slice 3 doc cl for viola 254
+4470cf4 docs: open viola 254 slice 3 topic for loadplugins body
+f82a693 feat: ship slice 2b design sections and backlog entries
+2f3cdb6 chore: lock and close viola 254 round 202605242200
+ba59711 feat: ship loadconfig body and accessset witness test
+1feb01e feat: ship slice 2b partial source for viola #254
+6f4314f docs: draft viola 254 slice 2b src cl
+52cca05 docs: draft and lock viola 254 slice 2b doc cl
+178729a docs: open viola 254 slice 2b topic
+daa8d8e docs: viola 254 slice 2 design sections
+36465f0 chore: close round 1900 after slice 2a source merge
+3a84db1 feat: viola 254 slice 2a source
+d8ac273 docs: draft viola 254 slice 2a src cl
+0c2005e docs: draft and lock viola 254 slice 2 doc cl
+eff47ab chore: close round 1600 and open slice 2 topic
+5f9ca84 feat: viola 254 slice 1 scaffolding
+5df2456 docs: draft viola 254 slice 1 src cl
+57286f6 docs: draft and lock #254 Slice 1 DOC CL
+400ce45 docs: open #254 Slice 1 scaffolding round TOPIC
+b577d7e chore: lock viola-deno-runtime IPC refactor src CL
