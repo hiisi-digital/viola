@@ -51,6 +51,15 @@ impl NamVersion {
     /// appended `nodes` carrier, so both versions walk via
     /// [`nam_file_entries`].
     pub const V1_1_0: Self = Self::new(1, 1, 0);
+
+    /// Selects the v1.2.0 wire schema: identical layout to v1.1.0, with an
+    /// extended [`node_kind`] vocabulary (expression and type-position kinds
+    /// for the AST node-position / type-position lints). Kinds are
+    /// append-only, so a v1.1.0 consumer still reads a v1.2.0 payload (it
+    /// sees the new ids it does not know as opaque numbers); the bump only
+    /// signals that the producer MAY emit ids 20 and above. Walks via
+    /// [`nam_file_entries`] / [`nam_file_nodes`] like the rest of v1.x.
+    pub const V1_2_0: Self = Self::new(1, 2, 0);
 }
 
 /// Opaque payload carrier for a NAM snapshot.
@@ -224,4 +233,26 @@ pub mod node_kind {
     pub const ATTRIBUTE_ITEM: USize = USize(18);
     /// An `extern "..." { ... }` block.
     pub const FOREIGN_MOD_ITEM: USize = USize(19);
+
+    // Expression and type-position kinds added at NAM v1.2.0 for the
+    // AST node-position and type-position lints (append-only; ids 0..=19
+    // keep their meaning).
+
+    /// A function / method call expression, `f(...)`.
+    pub const CALL_EXPRESSION: USize = USize(20);
+    /// A field access expression, `x.field`.
+    pub const FIELD_EXPRESSION: USize = USize(21);
+    /// A struct field declaration, `name: T` (also struct-style enum
+    /// variant fields).
+    pub const FIELD_DECLARATION: USize = USize(22);
+    /// A function parameter, `name: T`.
+    pub const PARAMETER: USize = USize(23);
+    /// An enum variant, `Variant` / `Variant(T)` / `Variant { f: T }`.
+    pub const ENUM_VARIANT: USize = USize(24);
+    /// A named type leaf, e.g. `Vec`, `String`, a user type.
+    pub const TYPE_IDENTIFIER: USize = USize(25);
+    /// A built-in primitive type leaf, e.g. `u8`, `bool`, `usize`.
+    pub const PRIMITIVE_TYPE: USize = USize(26);
+    /// An associated type, `type Bar;` / `type Bar = T;` in a trait / impl.
+    pub const ASSOCIATED_TYPE: USize = USize(27);
 }
