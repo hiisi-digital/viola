@@ -60,7 +60,19 @@ The normalised analysis model the runner produces and the lints read.
 
 ### `NamVersion`
 
-Version tag carried on the payload. Lets the host validate that runner and lint agree on the NAM schema version before invoking the lint.
+Version tag carried on the payload. Lets the host validate that runner and lint agree on the NAM schema version before invoking the lint. `V1_0_0` selects the per-file entry slice; `V1_1_0` adds the per-file serialised AST. The `NamFileEntry` layout is shared across the v1.x line, so both versions walk via `nam_file_entries`.
+
+### `NamFileEntry`
+
+Per-file record behind a `NamPayload`: `path`, `language`, `source`, and (v1.1.0) `nodes`. The first three identify the file and carry its source bytes; `nodes` is a `BytesRef`-style carrier addressing the file's flat AST array, left empty by a v1.0.0 producer. `nam_file_entries` walks the entry slice for any v1.x payload.
+
+### `NamNode`
+
+One node of a file's serialised AST under v1.1.0. The host pre-walks the parsed tree once and serialises it into a flat array so a lint can walk it by index without linking a parser. Tree topology is index-encoded: `parent` and `first_child` index into the same slice, with a value equal to the slice length acting as the one-past-the-end sentinel (root has no parent, a leaf has no first child). `kind` is an id from the `node_kind` table; the byte and row spans bound the node in the source. `nam_file_nodes` returns the node slice for an entry, or `None` when no tree was serialised.
+
+### `node_kind`
+
+Workspace-canonical id table for `NamNode` `kind` values. Every consumer agrees on what an id means without sharing a parser grammar. `UNKNOWN` is the catch-all; initial coverage is the common Rust structural kinds (items, comments, visibility). Ids are stable and append-only; new kinds and non-Rust grammars ship in later schema sub-versions. The host serialiser that fills `nodes` from a parsed tree ships with the rust-native runner plugin, not this crate.
 
 ## Diagnostic wire shape
 

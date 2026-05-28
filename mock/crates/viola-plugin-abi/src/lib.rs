@@ -51,7 +51,10 @@ mod vtable;
 pub use diagnostic::{
     Diagnostic, DiagnosticSeverity, SourceLocation, SourceRange,
 };
-pub use nam::{NamFileEntry, NamPayload, NamVersion, nam_file_entries};
+pub use nam::{
+    NamFileEntry, NamNode, NamPayload, NamVersion, nam_file_entries,
+    nam_file_nodes, node_kind,
+};
 pub use vtable::{
     FileEntry, GrammarExtractVtable, LintEvaluateVtable, RunScope,
     RunnerExecuteScopeVtable,
@@ -227,14 +230,15 @@ mod tests {
     }
 
     #[test]
-    fn nam_file_entry_layout_three_fields() {
+    fn nam_file_entry_layout_four_fields() {
         use core::mem::offset_of;
         let _ = offset_of!(NamFileEntry, path);
         let _ = offset_of!(NamFileEntry, language);
         let _ = offset_of!(NamFileEntry, source);
+        let _ = offset_of!(NamFileEntry, nodes);
         assert_eq!(
             size_of::<NamFileEntry>(),
-            size_of::<BytesRef>() * 2 + size_of::<arvo::USize>(),
+            size_of::<BytesRef>() * 3 + size_of::<arvo::USize>(),
         );
     }
 
@@ -273,11 +277,13 @@ mod tests {
                 path: BytesRef::EMPTY,
                 language: arvo::USize(0),
                 source: BytesRef::EMPTY,
+                nodes: BytesRef::EMPTY,
             },
             NamFileEntry {
                 path: BytesRef::EMPTY,
                 language: arvo::USize(1),
                 source: BytesRef::EMPTY,
+                nodes: BytesRef::EMPTY,
             },
         ];
         let payload = NamPayload {
@@ -289,5 +295,82 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].language.0, 0);
         assert_eq!(entries[1].language.0, 1);
+    }
+
+    #[test]
+    fn nam_v1_1_0_is_one_one_zero() {
+        assert_eq!(NamVersion::V1_1_0.major, 1);
+        assert_eq!(NamVersion::V1_1_0.minor, 1);
+        assert_eq!(NamVersion::V1_1_0.patch, 0);
+        assert_eq!(NamVersion::V1_1_0._reserved, 0);
+    }
+
+    #[test]
+    fn nam_file_entries_walks_v1_1_0_slice() {
+        let entries: &[NamFileEntry] = &[NamFileEntry {
+            path: BytesRef::EMPTY,
+            language: arvo::USize(7),
+            source: BytesRef::EMPTY,
+            nodes: BytesRef::EMPTY,
+        }];
+        let payload = NamPayload {
+            version: NamVersion::V1_1_0,
+            data: entries.as_ptr() as *const core::ffi::c_void,
+            len: arvo::USize(entries.len() * size_of::<NamFileEntry>()),
+        };
+        let walked =
+            unsafe { nam_file_entries(&payload) }.expect("v1.1.0 payload walks the entry slice");
+        assert_eq!(walked.len(), 1);
+        assert_eq!(walked[0].language.0, 7);
+    }
+
+    #[test]
+    fn nam_file_nodes_returns_none_when_no_tree() {
+        let entry = NamFileEntry {
+            path: BytesRef::EMPTY,
+            language: arvo::USize(0),
+            source: BytesRef::EMPTY,
+            nodes: BytesRef::EMPTY,
+        };
+        assert!(nam_file_nodes(&entry).is_none());
+    }
+
+    #[test]
+    fn nam_file_nodes_walks_node_slice() {
+        let nodes: &[NamNode] = &[
+            NamNode {
+                kind: node_kind::SOURCE_FILE,
+                parent: arvo::USize(1),
+                first_child: arvo::USize(1),
+                start_byte: arvo::USize(0),
+                end_byte: arvo::USize(20),
+                start_row: arvo::USize(0),
+                end_row: arvo::USize(2),
+            },
+            NamNode {
+                kind: node_kind::FUNCTION_ITEM,
+                parent: arvo::USize(0),
+                first_child: arvo::USize(2),
+                start_byte: arvo::USize(0),
+                end_byte: arvo::USize(20),
+                start_row: arvo::USize(0),
+                end_row: arvo::USize(2),
+            },
+        ];
+        let entry = NamFileEntry {
+            path: BytesRef::EMPTY,
+            language: arvo::USize(0),
+            source: BytesRef::EMPTY,
+            nodes: BytesRef {
+                data: nodes.as_ptr() as *const u8,
+                len: arvo::USize(nodes.len() * size_of::<NamNode>()),
+            },
+        };
+        let walked = nam_file_nodes(&entry).expect("populated nodes carrier yields a slice");
+        assert_eq!(walked.len(), 2);
+        assert_eq!(walked[0].kind.0, node_kind::SOURCE_FILE.0);
+        // The root's parent index equals the slice length (sentinel).
+        assert_eq!(walked[1].kind.0, node_kind::FUNCTION_ITEM.0);
+        assert_eq!(walked[1].parent.0, 0);
     }
 }
