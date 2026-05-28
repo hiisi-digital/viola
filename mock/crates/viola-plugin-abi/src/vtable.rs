@@ -4,8 +4,8 @@
 //! in-process calls via the v1 function table. A
 //! [`hilavitkutin_extensions::ProviderEntry::vtable_ptr`] is a thin
 //! extension-owned pointer; the layout behind that pointer is specific
-//! to the provider id. This module pins the layout for the three v1
-//! provider ids:
+//! to the provider id. This module pins the layout for the well-known
+//! provider ids (runner and grammar at v1, lint at v2):
 //!
 //! - [`crate::PROVIDER_RUNNER_EXECUTE_SCOPE`] -> [`RunnerExecuteScopeVtable`]
 //! - [`crate::PROVIDER_GRAMMAR_EXTRACT`] -> [`GrammarExtractVtable`]
@@ -14,11 +14,13 @@
 //! Vtable shapes are append-only within an ABI major. Adding a new
 //! function pointer to a vtable would silently change the layout for
 //! existing plugins; instead, register a NEW provider id (e.g.
-//! `viola.lint.evaluate.v2`) and ship a parallel vtable.
+//! `viola.lint.evaluate.v3`) and ship a parallel vtable. The lint
+//! vtable already took this path once: v2 replaced the v1 plugin-owned
+//! batch return with a host-owned output buffer.
 
 use core::ffi::c_void;
 
-use crate::diagnostic::DiagnosticBatch;
+use crate::diagnostic::Diagnostic;
 use crate::nam::NamPayload;
 use crate::{AbiStatus, BytesRef, RunSurface};
 
@@ -92,7 +94,21 @@ pub struct GrammarExtractVtable {
 unsafe impl Send for GrammarExtractVtable {}
 unsafe impl Sync for GrammarExtractVtable {}
 
-/// Vtable behind `viola.lint.evaluate.v1`.
+/// Vtable behind `viola.lint.evaluate.v2`.
+///
+/// The host owns the output buffer. `out_entries` points at a host
+/// allocation of `out_capacity` [`Diagnostic`] slots; the plugin
+/// writes its findings through it and reports the count via `out_len`.
+/// The plugin retains no state across calls, so the host may run many
+/// invocations in parallel with separate buffers.
+///
+/// Overflow contract: the plugin MUST NOT write past `out_capacity`.
+/// On success it writes `n <= out_capacity` entries, sets `*out_len`
+/// to `n`, and returns [`AbiStatus::Ok`]. When the lint would emit more
+/// than `out_capacity` entries it writes the first `out_capacity`, sets
+/// `*out_len` to the count it would have emitted, and returns
+/// [`AbiStatus::Internal`]; the host reads `*out_len > out_capacity` as
+/// the truncation signal.
 ///
 /// Determinism is per `docs/PLUGIN-ABI-V1-DESIGN.md` §10: the host
 /// sorts entries by `(path, start_line, start_col, plugin_id, rule_id)`
@@ -105,7 +121,9 @@ pub struct LintEvaluateVtable {
         nam: *const NamPayload,
         lint_config_bytes: *const u8,
         lint_config_len: arvo::USize,
-        out_batch: *mut DiagnosticBatch,
+        out_entries: *mut Diagnostic,
+        out_capacity: arvo::USize,
+        out_len: *mut arvo::USize,
     ) -> AbiStatus,
 }
 

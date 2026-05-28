@@ -16,7 +16,7 @@ Wraps the Deno worker for `viola.grammar.extract.v1`. Forwards source bytes; rec
 
 ### `LintEvalProvider`
 
-Wraps the Deno worker for `viola.lint.evaluate.v1`. Forwards `NamPayload` + lint config; receives `DiagnosticBatch`.
+Wraps the Deno worker for `viola.lint.evaluate.v2`. Forwards `NamPayload` + lint config; writes findings into the host-owned `Diagnostic` buffer.
 
 ## Lifecycle
 
@@ -64,7 +64,7 @@ Terminate signal sent on shutdown.
 
 ### `Arena`
 
-Plugin-side arena holding the owned bytes that a `Diagnostic` references via `BytesRef`. Rebuilt on each lint invocation so each call's pointers stay valid only until the next one, matching the v1 contract that "host copies before next invocation".
+Plugin-side arena holding the owned bytes that a `Diagnostic` references via `BytesRef`. Rebuilt on each lint invocation so each call's pointers stay valid only until the next one. Under the v2 host-owned-buffer contract the host copies each `Diagnostic` it reads out of the buffer before the next invocation reuses the arena.
 
 ### `WorkerState`
 

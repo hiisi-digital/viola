@@ -48,7 +48,7 @@ pub use viola_config::ViolaCfg;
 
 pub use viola_plugin_abi::{
     BytesRef, PROVIDER_GRAMMAR_EXTRACT, PROVIDER_LINT_EVALUATE,
-    PROVIDER_RUNNER_EXECUTE_SCOPE, Diagnostic, DiagnosticBatch,
+    PROVIDER_RUNNER_EXECUTE_SCOPE, Diagnostic,
     DiagnosticSeverity, FileEntry, GrammarExtractVtable, LintEvaluateVtable,
     NamPayload, NamVersion, PluginError, RunScope, RunSurface,
     RunnerExecuteScopeVtable, SourceLocation, SourceRange,

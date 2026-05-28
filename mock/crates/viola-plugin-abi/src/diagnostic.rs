@@ -84,18 +84,9 @@ pub struct Diagnostic {
 unsafe impl Send for Diagnostic {}
 unsafe impl Sync for Diagnostic {}
 
-/// Batch of diagnostics returned by a single lint invocation.
-///
-/// `entries` points at an array of [`Diagnostic`] of length `len`.
-/// Buffer ownership is plugin-side; the host copies before the next
-/// invocation.
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct DiagnosticBatch {
-    pub entries: *const Diagnostic,
-    pub len: arvo::USize,
-}
-
-// SAFETY: see Diagnostic.
-unsafe impl Send for DiagnosticBatch {}
-unsafe impl Sync for DiagnosticBatch {}
+// Output-buffer ownership note: a lint invocation writes its
+// [`Diagnostic`] records into a host-owned buffer passed to
+// `LintEvaluateVtable.evaluate` as `out_entries` + `out_capacity`, and
+// reports the written count via `out_len`. There is no plugin-owned
+// batch carrier; the host allocates, the plugin writes through, and the
+// host reads `*out_len` entries after the call returns.
