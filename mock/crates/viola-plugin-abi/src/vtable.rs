@@ -5,11 +5,13 @@
 //! [`hilavitkutin_extensions::ProviderEntry::vtable_ptr`] is a thin
 //! extension-owned pointer; the layout behind that pointer is specific
 //! to the provider id. This module pins the layout for the well-known
-//! provider ids (runner and grammar at v1, lint at v2):
+//! provider ids (runner and grammar at v1, lint at v2, project-scoped
+//! lint at v1):
 //!
 //! - [`crate::PROVIDER_RUNNER_EXECUTE_SCOPE`] -> [`RunnerExecuteScopeVtable`]
 //! - [`crate::PROVIDER_GRAMMAR_EXTRACT`] -> [`GrammarExtractVtable`]
 //! - [`crate::PROVIDER_LINT_EVALUATE`] -> [`LintEvaluateVtable`]
+//! - [`crate::PROVIDER_LINT_EVALUATE_PROJECT`] -> [`LintEvaluateProjectIndexVtable`]
 //!
 //! Vtable shapes are append-only within an ABI major. Adding a new
 //! function pointer to a vtable would silently change the layout for
@@ -130,3 +132,84 @@ pub struct LintEvaluateVtable {
 // SAFETY: see RunnerExecuteScopeVtable.
 unsafe impl Send for LintEvaluateVtable {}
 unsafe impl Sync for LintEvaluateVtable {}
+
+/// Default `IndexBatch` capacity a host pre-allocates before
+/// `index_phase`, in plugin-defined entry units.
+///
+/// Sized for `no_duplicate_fn` / `undocumented_type` on any realistic
+/// project; a host may size from the project file count instead. On
+/// overflow the plugin reports the capacity it needs via
+/// [`IndexBatch::needed`] and the host may re-allocate and retry.
+pub const MAX_INDEX_ENTRIES: arvo::USize = arvo::USize(1 << 20);
+
+/// Host-owned index buffer shared across the two phases of a
+/// project-scoped lint (`viola.lint.evaluate-project.v1`).
+///
+/// `index_phase` writes a plugin-defined index into the host-provided
+/// `entries` buffer; `evaluate_phase` reads it back per file. The host
+/// never inspects `entries`: it shuttles the same pointer from the
+/// phase-1 output into every phase-2 call and frees it after the last
+/// `evaluate_phase` for the project. Each cdylib defines its own
+/// internal layout; cross-cdylib index sharing is out of scope.
+///
+/// Buffer ownership follows the lint output-buffer rule: the host
+/// allocates `capacity`, the plugin writes through up to it. On success
+/// `index_phase` sets `len` to the count it wrote and returns
+/// [`AbiStatus::Ok`]. On overflow it writes what fits, sets `len`
+/// accordingly, writes the capacity it needs into `needed`, and returns
+/// [`AbiStatus::Internal`]; the host may re-allocate to at least
+/// `needed` and retry. `capacity`, `len`, and `needed` are in
+/// plugin-defined units.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct IndexBatch {
+    pub entries: *mut c_void,
+    pub capacity: arvo::USize,
+    pub len: arvo::USize,
+    pub needed: arvo::USize,
+}
+
+// SAFETY: `entries` references a host-owned buffer stable across both
+// phases of one project run; the host shuttles it unchanged and never
+// inspects its content.
+unsafe impl Send for IndexBatch {}
+unsafe impl Sync for IndexBatch {}
+
+/// Vtable behind `viola.lint.evaluate-project.v1`.
+///
+/// Two-phase dispatch for project-scoped (cross-file) lints. The host
+/// calls `index_phase` once with the full NAM to build a shared
+/// [`IndexBatch`], then calls `evaluate_phase` per file, passing the
+/// same index back. Splitting the work keeps overflow handling per-file
+/// (one busy file does not fill the whole project's output buffer) and
+/// lets the host run `evaluate_phase` across files in parallel, each
+/// reading the shared index and writing its own output buffer.
+///
+/// `evaluate_phase`'s output buffer follows the same host-owned-buffer
+/// and overflow contract as [`LintEvaluateVtable`]: write up to
+/// `out_capacity`, set `*out_len`, return [`AbiStatus::Internal`] with
+/// `*out_len` set to the would-have-emitted count on overflow.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct LintEvaluateProjectIndexVtable {
+    pub index_phase: unsafe extern "C" fn(
+        host_ctx: *mut c_void,
+        nam: *const NamPayload,
+        lint_config_bytes: *const u8,
+        lint_config_len: arvo::USize,
+        out_index: *mut IndexBatch,
+    ) -> AbiStatus,
+    pub evaluate_phase: unsafe extern "C" fn(
+        host_ctx: *mut c_void,
+        nam: *const NamPayload,
+        file_idx: arvo::USize,
+        index: *const IndexBatch,
+        out_entries: *mut Diagnostic,
+        out_capacity: arvo::USize,
+        out_len: *mut arvo::USize,
+    ) -> AbiStatus,
+}
+
+// SAFETY: see RunnerExecuteScopeVtable.
+unsafe impl Send for LintEvaluateProjectIndexVtable {}
+unsafe impl Sync for LintEvaluateProjectIndexVtable {}

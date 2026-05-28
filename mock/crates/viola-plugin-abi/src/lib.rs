@@ -9,9 +9,10 @@
 //! `hilavitkutin-extensions`. This crate adds the viola-specific
 //! layer on top:
 //!
-//! - the three v1 provider ids
+//! - the well-known provider ids
 //!   ([`PROVIDER_RUNNER_EXECUTE_SCOPE`], [`PROVIDER_GRAMMAR_EXTRACT`],
-//!   [`PROVIDER_LINT_EVALUATE`]) and their `#[repr(C)]` vtable shapes;
+//!   [`PROVIDER_LINT_EVALUATE`], [`PROVIDER_LINT_EVALUATE_PROJECT`]) and
+//!   their `#[repr(C)]` vtable shapes;
 //! - the [`NamPayload`] / [`NamVersion`] carriers for the normalized
 //!   analysis model produced once per run;
 //! - the [`Diagnostic`] wire shape the lint role writes into the
@@ -56,8 +57,8 @@ pub use nam::{
     nam_file_nodes, node_kind,
 };
 pub use vtable::{
-    FileEntry, GrammarExtractVtable, LintEvaluateVtable, RunScope,
-    RunnerExecuteScopeVtable,
+    FileEntry, GrammarExtractVtable, IndexBatch, LintEvaluateProjectIndexVtable,
+    LintEvaluateVtable, MAX_INDEX_ENTRIES, RunScope, RunnerExecuteScopeVtable,
 };
 
 /// Two-word `(ptr, len)` carrier for byte slices crossing the boundary.
@@ -102,6 +103,15 @@ pub const PROVIDER_GRAMMAR_EXTRACT: ProviderId =
 /// outright per the no-legacy-shims-pre-1.0 rule.
 pub const PROVIDER_LINT_EVALUATE: ProviderId =
     ProviderId::from_name("viola.lint.evaluate.v2");
+
+/// Provider id for the project-scoped lint role's two-phase entrypoint.
+///
+/// Distinct from [`PROVIDER_LINT_EVALUATE`]: it points at a
+/// [`LintEvaluateProjectIndexVtable`] (index then per-file evaluate)
+/// rather than extending the single-phase lint vtable, keeping the
+/// vtable shapes append-only.
+pub const PROVIDER_LINT_EVALUATE_PROJECT: ProviderId =
+    ProviderId::from_name("viola.lint.evaluate-project.v1");
 
 /// Run surface tag mirrored into NAM `run_context.surface`.
 ///
@@ -173,6 +183,9 @@ mod tests {
         assert_ne!(PROVIDER_RUNNER_EXECUTE_SCOPE.0, PROVIDER_GRAMMAR_EXTRACT.0);
         assert_ne!(PROVIDER_GRAMMAR_EXTRACT.0, PROVIDER_LINT_EVALUATE.0);
         assert_ne!(PROVIDER_RUNNER_EXECUTE_SCOPE.0, PROVIDER_LINT_EVALUATE.0);
+        assert_ne!(PROVIDER_LINT_EVALUATE.0, PROVIDER_LINT_EVALUATE_PROJECT.0);
+        assert_ne!(PROVIDER_RUNNER_EXECUTE_SCOPE.0, PROVIDER_LINT_EVALUATE_PROJECT.0);
+        assert_ne!(PROVIDER_GRAMMAR_EXTRACT.0, PROVIDER_LINT_EVALUATE_PROJECT.0);
     }
 
     #[test]
@@ -202,6 +215,29 @@ mod tests {
             size_of::<LintEvaluateVtable>(),
             size_of::<*const ()>(),
         );
+    }
+
+    #[test]
+    fn project_index_vtable_is_two_words() {
+        use core::mem::offset_of;
+        let ptr = size_of::<*const ()>();
+        assert_eq!(size_of::<LintEvaluateProjectIndexVtable>(), ptr * 2);
+        // pin the slot order: index_phase first, then evaluate_phase.
+        assert_eq!(offset_of!(LintEvaluateProjectIndexVtable, index_phase), 0);
+        assert_eq!(offset_of!(LintEvaluateProjectIndexVtable, evaluate_phase), ptr);
+    }
+
+    #[test]
+    fn index_batch_layout_pointer_plus_three_usize() {
+        use core::mem::offset_of;
+        let ptr = size_of::<*mut core::ffi::c_void>();
+        let usize_w = size_of::<arvo::USize>();
+        // pin field order and the no-padding layout across pointer widths.
+        assert_eq!(offset_of!(IndexBatch, entries), 0);
+        assert_eq!(offset_of!(IndexBatch, capacity), ptr);
+        assert_eq!(offset_of!(IndexBatch, len), ptr + usize_w);
+        assert_eq!(offset_of!(IndexBatch, needed), ptr + usize_w * 2);
+        assert_eq!(size_of::<IndexBatch>(), ptr + usize_w * 3);
     }
 
     #[test]

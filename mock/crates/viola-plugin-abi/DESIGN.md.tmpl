@@ -20,6 +20,10 @@ Three provider IDs that viola plugins implement against (the runner and grammar 
 
 `viola.lint.evaluate.v2`. The lint-role provider id. Points at a `LintEvaluateVtable`. Plugins declaring this provider take a `NamPayload` plus lint config bytes and write findings into a host-owned `Diagnostic` buffer.
 
+### `PROVIDER_LINT_EVALUATE_PROJECT`
+
+`viola.lint.evaluate-project.v1`. The project-scoped lint provider id, for cross-file lints that need a project-wide index before emitting per-file findings. Points at a `LintEvaluateProjectIndexVtable`. A distinct id rather than an extension of `PROVIDER_LINT_EVALUATE`, so the single-phase lint vtable stays append-only.
+
 ## Vtable shapes
 
 Each vtable is a `#[repr(C)]` struct of concrete `extern "C"` function pointers. Append-only within an ABI major per `docs/PLUGIN-ABI-V1-DESIGN.md` §7.3.
@@ -35,6 +39,12 @@ Single function pointer `extract(host_ctx, file, source_bytes, source_len, out_c
 ### `LintEvaluateVtable`
 
 Single function pointer `evaluate(host_ctx, nam, lint_config_bytes, lint_config_len, out_entries, out_capacity, out_len) -> AbiStatus`. The host owns the output buffer: it passes a `*mut Diagnostic` slice (`out_entries`) with its `out_capacity` and an `out_len` pointer; the plugin writes through up to capacity. On overflow the plugin writes the first `out_capacity` entries, sets `*out_len` to the count it would have emitted, and returns `AbiStatus::Internal`; otherwise it sets `*out_len` to the written count and returns `AbiStatus::Ok`. Direct args (no wrapper struct). The 2026-05-23 three-specialist convergence settled the wrapper-vs-direct-args design Q in favour of direct args.
+
+### `LintEvaluateProjectIndexVtable`
+
+Two function pointers for project-scoped lints: `index_phase(host_ctx, nam, lint_config_bytes, lint_config_len, out_index)` and `evaluate_phase(host_ctx, nam, file_idx, index, out_entries, out_capacity, out_len)`. The host calls `index_phase` once over the full NAM to build a shared `IndexBatch`, then calls `evaluate_phase` per file passing the same index back. Splitting the work keeps overflow handling per-file and lets the host run `evaluate_phase` across files in parallel.
+
+The `IndexBatch` carrier is host-owned, the same ownership rule as the lint output buffer: the host allocates `entries` with `capacity` (default `MAX_INDEX_ENTRIES`), the plugin writes a plugin-defined index through it during `index_phase` and sets `len`. `entries` is opaque to the host (a `*mut c_void` it shuttles unchanged from phase 1 into every phase-2 call); each cdylib defines its own internal layout. On overflow `index_phase` returns `AbiStatus::Internal` and writes the capacity it needs into `needed`, so the host can re-allocate and retry. `evaluate_phase`'s output buffer reuses the `LintEvaluateVtable` host-owned-buffer and overflow contract.
 
 ## Runner-role carriers
 
