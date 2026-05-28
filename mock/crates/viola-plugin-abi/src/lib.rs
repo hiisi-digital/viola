@@ -409,4 +409,55 @@ mod tests {
         assert_eq!(walked[1].kind.0, node_kind::FUNCTION_ITEM.0);
         assert_eq!(walked[1].parent.0, 0);
     }
+
+    #[test]
+    fn node_kind_ids_are_contiguous_and_distinct() {
+        use node_kind::*;
+        // the full table in id order; each id must equal its position, which
+        // proves distinctness AND append-only contiguity (a duplicate or a
+        // renumbering breaks the equality).
+        let ids = [
+            UNKNOWN.0,
+            SOURCE_FILE.0,
+            FUNCTION_ITEM.0,
+            STRUCT_ITEM.0,
+            ENUM_ITEM.0,
+            UNION_ITEM.0,
+            TRAIT_ITEM.0,
+            IMPL_ITEM.0,
+            MOD_ITEM.0,
+            TYPE_ITEM.0,
+            CONST_ITEM.0,
+            STATIC_ITEM.0,
+            USE_DECLARATION.0,
+            MACRO_DEFINITION.0,
+            MACRO_INVOCATION.0,
+            VISIBILITY_MODIFIER.0,
+            LINE_COMMENT.0,
+            BLOCK_COMMENT.0,
+            ATTRIBUTE_ITEM.0,
+            FOREIGN_MOD_ITEM.0,
+            CALL_EXPRESSION.0,
+            FIELD_EXPRESSION.0,
+            FIELD_DECLARATION.0,
+            PARAMETER.0,
+            ENUM_VARIANT.0,
+            TYPE_IDENTIFIER.0,
+            PRIMITIVE_TYPE.0,
+            ASSOCIATED_TYPE.0,
+        ];
+        for (i, &id) in ids.iter().enumerate() {
+            assert_eq!(id, i, "node_kind id at position {i} must equal {i}");
+        }
+        // the v1.2.0 additions occupy 20..=27.
+        assert_eq!(CALL_EXPRESSION.0, 20);
+        assert_eq!(ASSOCIATED_TYPE.0, 27);
+    }
+
+    #[test]
+    fn nam_version_v1_2_0() {
+        assert_eq!(NamVersion::V1_2_0.major, 1);
+        assert_eq!(NamVersion::V1_2_0.minor, 2);
+        assert_eq!(NamVersion::V1_2_0.patch, 0);
+    }
 }
