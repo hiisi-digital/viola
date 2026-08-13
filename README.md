@@ -139,7 +139,7 @@ when.issue.confidence(between(50, 90))
 
 **By category:**
 ```ts
-when.issue.category(equals(Category.Security))
+when.issue.category(equals(Category.Consistency))
 when.issue.category(oneOf(Category.Correctness, Category.Performance))
 ```
 
@@ -174,8 +174,8 @@ contains(substring)     // String contains
 startsWith(prefix)      // String prefix
 endsWith(suffix)        // String suffix
 matches(regex)          // Regex match
-always()                // Always true
-never()                 // Always false
+alwaysMatch()           // Always true
+neverMatch()            // Always false
 ```
 
 ## Writing Grammars
@@ -260,7 +260,7 @@ export const noUnderscoreFunctions = new NoUnderscoreFunctions();
 Plugins can add grammars, linters, and default rules:
 
 ```ts
-import { plugin, report, when, Impact, grammar } from "@hiisi/viola";
+import { plugin, report, when, Impact, grammar, atLeast } from "@hiisi/viola";
 import { typescript } from "./grammar.ts";
 import { myLinter } from "./linter.ts";
 
@@ -275,10 +275,16 @@ export default plugin((viola) => {
 
 ## Programmatic API
 
-```ts
-import { runViola, formatResults } from "@hiisi/viola";
+`runViola` requires a grammar registry with the grammars to parse with:
 
-const results = await runViola({ projectRoot: "." });
+```ts
+import { createGrammarRegistry, formatResults, runViola } from "@hiisi/viola";
+import typescript from "@hiisi/viola-grammar-ts";
+
+const grammarRegistry = createGrammarRegistry();
+grammarRegistry.add(typescript);
+
+const results = await runViola({ projectRoot: ".", grammarRegistry });
 console.log(formatResults(results));
 if (results.hasErrors) Deno.exit(1);
 ```
@@ -330,36 +336,7 @@ deno run -A jsr:@hiisi/viola-cli || exit 1
 
 ## Architecture
 
-Viola uses a **single tree-sitter engine** at its core:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       viola core                             │
-│  ┌─────────────────────────────────────────────────────────┐ │
-│  │              tree-sitter engine (WASM)                  │ │
-│  └─────────────────────────────────────────────────────────┘ │
-│      ↑               ↑                ↑                      │
-│  ┌───────┐      ┌────────┐       ┌────────┐                  │
-│  │  TS   │      │   JS   │       │  Bash  │    ← grammars    │
-│  │grammar│      │grammar │       │grammar │                  │
-│  └───────┘      └────────┘       └────────┘                  │
-│      │               │                │                      │
-│      └───────────────┼────────────────┘                      │
-│                      ↓                                       │
-│            ┌─────────────────┐                               │
-│            │  CodebaseData   │   ← unified data              │
-│            │  (functions,    │                               │
-│            │   types, etc.)  │                               │
-│            └─────────────────┘                               │
-│                      ↓                                       │
-│      ┌───────────────┼───────────────┐                       │
-│      ↓               ↓               ↓                       │
-│  ┌───────┐      ┌────────┐      ┌────────┐                   │
-│  │Linter │      │Linter  │      │Linter  │   ← linters       │
-│  │  A    │      │   B    │      │   C    │                   │
-│  └───────┘      └────────┘      └────────┘                   │
-└─────────────────────────────────────────────────────────────┘
-```
+Viola runs a single tree-sitter engine (WASM) at its core. Grammar packages supply the tree-sitter queries for each language. The crawler parses every matched file once, runs each matching grammar's queries, and merges the captures into one `CodebaseData` structure (functions, types, imports, exports, strings). Linters then run against that shared data, so adding a linter never adds another parse pass.
 
 ## Support
 
