@@ -1,87 +1,40 @@
-# Viola Rust crates (planned)
+# Viola Rust crates
 
-This directory is the planned Rust-side crate workspace for Viola’s host/plugin architecture.
+This directory is the Rust-side crate workspace for Viola's host and plugin architecture. The
+workspace manifest is `../Cargo.toml`; the design source of truth is
+`../../docs/PLUGIN-ABI-V1-DESIGN.md`.
 
 ## Status
 
-Planned scaffold only.  
-No implementation is required here yet.
+Implemented. Five crates ship the host runtime, the plugin contract, the config parser, the CLI and
+the Deno bridge plugin. Two further crates are cdylib fixtures that exercise the plugin shape in
+tests and are marked `publish = false`.
 
-The active design source of truth is:
+The crate naming question this file used to carry is settled: the host runtime crate is
+`viola-core`.
 
-- `../docs/PLUGIN-ABI-V1-DESIGN.md`
+## Workspace members
 
-## Why this exists
+| Crate | Role |
+|---|---|
+| `viola-plugin-abi` | Plugin contract: viola-specific roles, providers, vtables, NAM, and diagnostics layered over `hilavitkutin-extensions`. |
+| `viola-core` | Host runtime: viola-domain layering over `hilavitkutin-extensions` (cdylib loading, lifecycle, provider dispatch, deterministic diagnostic aggregation). |
+| `viola-config` | `viola.toml` config schema plus a zero-copy `no_std` `no_alloc` TOML subset parser. Produces `&[u8]` slices into caller-provided input bytes. |
+| `viola-cli` | Host CLI executable. `no_std` `no_main` entry on libc; reads `viola.toml`, loads configured plugins via `ExtensionHost`, runs the pipeline, emits sorted diagnostics, exits with status. |
+| `viola-deno-runtime` | Plugin that runs TS lint projects through a long-lived sibling deno worker process and bridges results into the v1 plugin ABI. |
+| `viola-test-plugin-fixture` | Internal cdylib fixture exercising the v1 plugin shape. Not published. |
+| `viola-test-runner-fixture` | Internal cdylib fixture exposing `PROVIDER_RUNNER_EXECUTE_SCOPE`. Pairs with the plugin fixture to exercise `pipeline::run` end to end. Not published. |
 
-Viola is moving to a host-loaded plugin model with a strict, stable ABI contract.
+## Relationship to the TS and Deno side
 
-This `crates/` directory will contain the Rust crates that define and host that contract, while keeping responsibilities clearly separated.
+This Rust crate workspace does not replace the TS and Deno ecosystem surface.
 
-## Planned crates
+- `viola-cli` runs the host runtime and attaches plugins.
+- The TS-side `viola` package provides the TS-facing ecosystem surfaces and bridge artifacts.
+- Rust-native plugins implement the ABI directly, with no bridge involved.
 
-## `viola-plugin-abi`
+## Dependencies outside this repo
 
-Purpose:
-
-- Define the stable plugin ABI contract surface used by host and plugins.
-- Hold shared contract constants and type definitions.
-- Prevent contract drift between host and plugin implementations.
-
-Expected contents (high-level):
-
-- ABI/version constants
-- Role identifiers (`runner`, `grammar`, `lint`)
-- Descriptor/manifest-aligned contract structs
-- Error code model and structured load/invoke failure types
-- FFI-safe contract types for load/lifecycle boundaries
-- Normative symbol naming constants
-
-This crate should be minimal and stable-first.
-
-## `viola-host` (name under consideration; previously referred to as `viola-core`)
-
-Purpose:
-
-- Implement the in-process host runtime that loads and executes ABI-conforming plugins.
-- Run the config-driven execution lifecycle:
-  - resolve config
-  - load/validate plugins
-  - execute runner once per scope
-  - fan out lints over normalized analysis model
-  - aggregate diagnostics
-
-Expected contents (high-level):
-
-- Plugin discovery/loading integration
-- Strict load-time ABI validation
-- Role dispatch orchestration
-- Run lifecycle and deterministic diagnostics aggregation
-- Host error/reporting behavior for load/invoke failures
-
-### Naming note
-
-`viola-host` may be clearer than `viola-core` for this crate, because it directly describes the crate’s role as plugin host runtime. Final naming can be decided after workspace shape is finalized.
-
-## Relationship to existing TS/Deno side
-
-This Rust crate workspace does **not** replace the TS/Deno ecosystem surface.
-
-Current intended packaging direction:
-
-- `viola-cli` runs the host runtime and attaches plugins
-- TS-side `viola` package provides TS-facing ecosystem surfaces and bridge artifacts
-- Rust-native plugins implement ABI directly without bridge requirements
-
-## Non-goals for this directory (for now)
-
-- No runtime implementation yet
-- No ABI finalization here beyond what is already documented
-- No speculative extra crates until the first two crate boundaries are locked
-
-## Next step
-
-When implementation starts:
-
-1. Create `viola-plugin-abi` first (contract-first).
-2. Create `viola-host` using that ABI crate.
-3. Keep this README synchronized with `PLUGIN-ABI-V1-DESIGN.md` as decisions evolve.
+Every crate here depends on `notko`, `arvo` and `hilavitkutin` through git references on their `dev`
+branches, declared in `../Cargo.toml`. Those references are what a build resolves against, and no
+crates.io release exists to pin instead.
