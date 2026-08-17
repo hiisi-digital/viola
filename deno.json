@@ -39,7 +39,7 @@
   },
   "tasks": {
     "check": "deno check mod.ts",
-    "test": "deno test src/",
+    "test": "deno test --allow-env --allow-read --allow-write --allow-ffi src/",
     "viola": "deno run -A scripts/viola.ts",
     "viola:strict": "deno run -A scripts/viola.ts --strict"
   },
