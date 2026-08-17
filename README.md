@@ -35,23 +35,17 @@ deno add jsr:@hiisi/viola
 Create a `viola.config.ts` in your project root:
 
 ```ts
-import { viola, report, when, grammar } from "@hiisi/viola";
+import { viola, report, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 import typescript from "@hiisi/viola-grammar-ts";
-import javascript from "@hiisi/viola-grammar-js";
 
 export default viola()
   // Grammars (how to parse files)
   .add(typescript).as("ts")
-  .add(javascript).as("js")
-  
-  // Grammar relationships
-  .rule(grammar("ts").overrides("js"), when.in("*.ts", "*.tsx"))
-  .rule(grammar("ts").supplements("js"), when.in("*.js", "*.jsx"))
-  
+
   // Linter plugin
   .use(defaultLints)
-  
+
   // Your rules (last wins!)
   .rule(report.off, when.in("**/*_test.ts"));
 ```
@@ -98,6 +92,10 @@ When multiple grammars match a file, you can control how they interact:
 - **overrides**: Primary grammar replaces secondary entirely
 - **supplements**: Primary runs first, secondary fills in gaps (elements not captured by primary)
 
+A relationship applies only where both named grammars already match the file. The matching set comes
+from each grammar's registered extensions and globs, and a relationship naming a grammar outside that
+set is skipped.
+
 ### Report Actions
 
 | Action | Description |
@@ -118,48 +116,57 @@ when.in("**/tests/**")
 when.in("src/**")
 ```
 
-**By issue source:**
+**By linter:**
 ```ts
-when.issue.by(similarFunctions)        // By linter reference
-when.issue.by("similar-functions")     // By linter ID string
+when.linter("similar-functions")
+when.linter("similar-*", "duplicate-*")
 ```
 
 **By impact:**
 ```ts
-when.issue.impact(atLeast(Impact.Major))
-when.issue.impact(equals(Impact.Critical))
-when.issue.impact(oneOf(Impact.Minor, Impact.Major))
+when.impact.atLeast(Impact.Major)
+when.impact.is(Impact.Critical)
+when.impact.above(Impact.Minor)
+when.impact.not(Impact.Trivial)
 ```
 
 **By confidence:**
 ```ts
-when.issue.confidence(atLeast(80))
-when.issue.confidence(between(50, 90))
+when.confidence.atLeast(80)
+when.confidence.below(50)
+when.confidence.between(50, 90)
 ```
 
 **By category:**
 ```ts
-when.issue.category(equals(Category.Consistency))
-when.issue.category(oneOf(Category.Correctness, Category.Performance))
-```
-
-**By environment:**
-```ts
-when.env("CI").exists()
-when.env("NODE_ENV").is(equals("production"))
-when.env("TIMEOUT").is(atLeast(30))
+when.category.is(Category.Consistency)
+when.category.in(Category.Correctness, Category.Performance)
+when.category.notIn(Category.Style)
 ```
 
 **Combining conditions:**
 ```ts
-when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
-when.env("CI").exists().or(when.in("packages/core/**"))
-when.in("**/*_test.ts").not()
+when.in("src/**").and(when.impact.atLeast(Impact.Major))
+when.category.is(Category.Style).not()
+when.all(when.in("src/**"), when.impact.atLeast(Impact.Major))
+when.any(when.in("**/*_test.ts"), when.in("**/*.spec.ts"))
 ```
 
-### Comparison Primitives
+### The condition-object builder
 
-All comparisons support `.and()`, `.or()`, `.not()` for composition:
+`when` above is the builder `.rule()` is written against. A second builder covers issue source and
+environment, and is exported under a different name to keep the two apart:
+
+```ts
+import { whenCondition, atLeast, equals } from "@hiisi/viola";
+
+whenCondition.issue.by("similar-functions")   // by linter ID
+whenCondition.issue.impact(atLeast(Impact.Major))
+whenCondition.env("CI").exists()
+whenCondition.env("NODE_ENV").is(equals("production"))
+```
+
+Its conditions take comparison primitives rather than plain values:
 
 ```ts
 equals(value)           // Exact equality
@@ -260,7 +267,7 @@ export const noUnderscoreFunctions = new NoUnderscoreFunctions();
 Plugins can add grammars, linters, and default rules:
 
 ```ts
-import { plugin, report, when, Impact, grammar, atLeast } from "@hiisi/viola";
+import { plugin, report, when, Impact } from "@hiisi/viola";
 import { typescript } from "./grammar.ts";
 import { myLinter } from "./linter.ts";
 
@@ -268,7 +275,7 @@ export default plugin((viola) => {
   viola
     .add(typescript).as("ts")
     .add(myLinter)
-    .rule(report.error, when.issue.impact(atLeast(Impact.Critical)))
+    .rule(report.error, when.impact.atLeast(Impact.Critical))
     .set("my-linter.threshold", 0.9);
 });
 ```
@@ -295,7 +302,7 @@ Rules use **"last wins"** semantics (like CSS):
 
 ```ts
 viola()
-  .rule(report.warn, when.issue.impact(atLeast(Impact.Minor)))  // base
+  .rule(report.warn, when.impact.atLeast(Impact.Minor))         // base
   .rule(report.off, when.in("**/*_test.ts"))                    // override for tests
   .rule(report.error, when.in("packages/core/**"))              // override for core
 ```
