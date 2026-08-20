@@ -4,28 +4,27 @@
  * Loads viola configuration from viola.config.ts or deno.json.
  */
 
-
 import { resolve } from "@std/path";
-import {
-    type ViolaBuilderConfig,
-    type ViolaBuilderConfigExtended
+import type {
+  ViolaBuilderConfig,
+  ViolaBuilderConfigExtended,
 } from "./builder.ts";
 import {
-    matchesFilePattern,
-    matchesIssuePattern,
-    parsePattern,
-    resolvePatternValue,
+  matchesFilePattern,
+  matchesIssuePattern,
+  parsePattern,
+  resolvePatternValue,
 } from "./pattern.ts";
-import {
-    type ConfigSource,
-    type IssueCategory,
-    type IssueImpact,
-    type ResolvedConfig,
-    type ResolvedPatternValue,
-    type ResolvedScope,
-    type ScopeConfig,
-    type Severity,
-    type ViolaConfig
+import type {
+  ConfigSource,
+  IssueCategory,
+  IssueImpact,
+  ResolvedConfig,
+  ResolvedPatternValue,
+  ResolvedScope,
+  ScopeConfig,
+  Severity,
+  ViolaConfig,
 } from "./types.ts";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
@@ -36,8 +35,18 @@ const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
  */
 export async function loadConfig(
   dir: string,
-  options: { verbose?: boolean; configPath?: string; preloadedModule?: unknown } = {}
-): Promise<{ config: ResolvedConfig; sources: ConfigSource[]; builderConfig?: ViolaBuilderConfigExtended }> {
+  options: {
+    verbose?: boolean;
+    configPath?: string;
+    preloadedModule?: unknown;
+  } = {},
+): Promise<
+  {
+    config: ResolvedConfig;
+    sources: ConfigSource[];
+    builderConfig?: ViolaBuilderConfigExtended;
+  }
+> {
   const sources: ConfigSource[] = [];
 
   // Try viola.config.ts first (or custom config path)
@@ -49,11 +58,14 @@ export async function loadConfig(
 
   // Use pre-loaded module if provided (for when running from non-file context)
   const builderConfig = options.preloadedModule
-    ? processModuleDefault(options.preloadedModule, options.verbose)
+    ? await processModuleDefault(options.preloadedModule, options.verbose)
     : await loadBuilderConfig(configTsPath, options.verbose);
 
   if (builderConfig) {
-    sources.push({ path: configTsPath, type: "viola.config.ts" as ConfigSource["type"] });
+    sources.push({
+      path: configTsPath,
+      type: "viola.config.ts" as ConfigSource["type"],
+    });
 
     if (options.verbose) {
       console.log("Config sources:");
@@ -70,10 +82,12 @@ export async function loadConfig(
 
   if (violaConfig) {
     sources.push({ path: denoPath, type: "deno.json" });
-    
+
     if (options.verbose) {
       console.log("Config sources:");
-      console.log(`  - ${denoPath} (deno.json) [deprecated: use viola.config.ts]`);
+      console.log(
+        `  - ${denoPath} (deno.json) [deprecated: use viola.config.ts]`,
+      );
     }
   }
 
@@ -83,7 +97,7 @@ export async function loadConfig(
 
 /**
  * Check if an object looks like a ViolaBuilder (duck typing).
- * 
+ *
  * We can't use instanceof because the config file may import ViolaBuilder
  * from a different module instance than the loader.
  */
@@ -102,7 +116,10 @@ function isViolaBuilder(obj: unknown): boolean {
 /**
  * Process an already-loaded module default export into builder config.
  */
-function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBuilderConfigExtended | null {
+async function processModuleDefault(
+  defaultExport: unknown,
+  verbose = false,
+): Promise<ViolaBuilderConfigExtended | null> {
   if (!defaultExport) {
     if (verbose) {
       console.log(`[loader] Config has no default export`);
@@ -117,15 +134,29 @@ function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBui
 
   // If it's a ViolaBuilder (duck typing), call build()
   if (isViolaBuilder(defaultExport)) {
-    const built = (defaultExport as { build(): ViolaBuilderConfigExtended }).build();
+    // resolve() where the builder has it: a plugin may supply its linters as a
+    // function, and build() refuses while any are undrained rather than
+    // returning a config that lints nothing. Older builders have only build().
+    const b = defaultExport as {
+      build(): ViolaBuilderConfigExtended;
+      resolve?: () => Promise<ViolaBuilderConfigExtended>;
+    };
+    const built = typeof b.resolve === "function"
+      ? await b.resolve()
+      : b.build();
     if (verbose) {
-      console.log(`[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`);
+      console.log(
+        `[loader] Built config: ${built.linters.length} linters, ${built.rules.length} rules`,
+      );
     }
     return built;
   }
 
   // If it's already a built config object
-  if (typeof defaultExport === "object" && "linters" in defaultExport && "rules" in defaultExport) {
+  if (
+    typeof defaultExport === "object" && "linters" in defaultExport &&
+    "rules" in defaultExport
+  ) {
     if (verbose) {
       console.log(`[loader] Config is already built`);
     }
@@ -141,7 +172,10 @@ function processModuleDefault(defaultExport: unknown, verbose = false): ViolaBui
 /**
  * Load viola.config.ts and get the builder config.
  */
-async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBuilderConfigExtended | null> {
+async function loadBuilderConfig(
+  path: string,
+  verbose = false,
+): Promise<ViolaBuilderConfigExtended | null> {
   try {
     // Check if file exists
     await Deno.stat(path);
@@ -152,7 +186,7 @@ async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBu
 
     // Dynamic import the config file
     const module = await import(`file://${path}`);
-    return processModuleDefault(module.default, verbose);
+    return await processModuleDefault(module.default, verbose);
   } catch (err) {
     if (verbose) {
       console.log(`[loader] Error loading config: ${err}`);
@@ -163,12 +197,14 @@ async function loadBuilderConfig(path: string, verbose = false): Promise<ViolaBu
 
 /**
  * Convert builder config to resolved config.
- * 
+ *
  * Note: The new rule-based config uses Condition objects that are evaluated
  * at runtime. This function extracts linter settings but leaves rules
  * in their native format for the new evaluation engine.
  */
-export function resolveBuilderConfig(config: ViolaBuilderConfig): ResolvedConfig {
+export function resolveBuilderConfig(
+  config: ViolaBuilderConfig,
+): ResolvedConfig {
   // Build linter config from settings
   const linterConfig: Record<string, Record<string, unknown>> = {};
 
@@ -205,7 +241,13 @@ async function loadDenoConfig(path: string): Promise<ViolaConfig | null> {
 }
 
 /** Known non-scope fields in viola config */
-const RESERVED_CONFIG_FIELDS = ["plugins", "inherit", "config", "include", "exclude"];
+const RESERVED_CONFIG_FIELDS = [
+  "plugins",
+  "inherit",
+  "config",
+  "include",
+  "exclude",
+];
 
 /**
  * Resolve raw config into parsed patterns.
@@ -214,7 +256,8 @@ function resolveConfig(config: ViolaConfig): ResolvedConfig {
   const scopes: ResolvedScope[] = [];
   const plugins: string[] = config.plugins ?? [];
   const inherit: string[] = config.inherit ?? [];
-  const linterConfig: Record<string, Record<string, unknown>> = config.config ?? {};
+  const linterConfig: Record<string, Record<string, unknown>> = config.config ??
+    {};
 
   for (const [key, value] of Object.entries(config)) {
     // Skip known non-scope fields
@@ -266,7 +309,7 @@ export function resolveIssueSeverity(
   issueKind: string,
   issueCategory: IssueCategory,
   issueImpact: IssueImpact,
-  confidence: number
+  confidence: number,
 ): Severity | null {
   let result: ResolvedPatternValue | null = null;
 
