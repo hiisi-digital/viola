@@ -30,27 +30,28 @@ import type { GrammarDefinition } from "../grammars/types.ts";
 import type { BaseLinter } from "../linters/base.ts";
 import type { ConditionExpr } from "./conditions.ts";
 import type {
-    GrammarRelationshipAction,
-    RuleAction,
+  GrammarRelationshipAction,
+  RuleAction,
 } from "./types/actions.types.ts";
 import type {
-    LinterSetting,
-    PluginInput,
-    Rule,
-    ViolaBuilderConfig,
-    ViolaPlugin,
-    ViolaPluginFn
+  LinterSetting,
+  LintersPlugin,
+  PluginInput,
+  Rule,
+  ViolaBuilderConfig,
+  ViolaPlugin,
+  ViolaPluginFn,
 } from "./types/builder.types.ts";
 
 // Re-export types for convenience
 export type {
-    LinterInput,
-    LinterSetting,
-    PluginInput,
-    Rule,
-    ViolaBuilderConfig,
-    ViolaPlugin,
-    ViolaPluginFn
+  LinterInput,
+  LinterSetting,
+  PluginInput,
+  Rule,
+  ViolaBuilderConfig,
+  ViolaPlugin,
+  ViolaPluginFn,
 } from "./types/builder.types.ts";
 
 // =============================================================================
@@ -102,6 +103,29 @@ function isPluginFn(value: unknown): value is ViolaPluginFn {
 }
 
 /**
+ * The other plugin shape this package publishes.
+ *
+ * `ViolaPlugin` names two different interfaces here: the one in
+ * `config/types/builder.types.ts` has a `build(viola)` method, and the one in
+ * `types/plugin.ts` carries `linters` and `bundles`. Both are documented, both
+ * are exported, and `use()` only ever accepted the first. A plugin written
+ * against the second type-checked at its author's end and threw at the user's,
+ * because the name is identical and nothing compared the two.
+ *
+ * `@hiisi/viola-script-lints` 0.3.0 is exactly that: `viola().use(scriptLints())`
+ * throws "Invalid plugin" against `@hiisi/viola` 0.3.0, and both are published.
+ *
+ * `linters` may be an array or a function returning one, since the script-lints
+ * plugin discovers its linters from the filesystem and cannot build them
+ * synchronously.
+ */
+function isLintersPlugin(value: unknown): value is LintersPlugin {
+  if (value === null || typeof value !== "object") return false;
+  const v = value as { linters?: unknown; bundles?: unknown };
+  return "linters" in v || "bundles" in v;
+}
+
+/**
  * Check if a value is a BaseLinter.
  */
 function isLinter(value: unknown): value is BaseLinter {
@@ -134,7 +158,7 @@ function isGrammarDefinition(value: unknown): value is GrammarDefinition {
  * Check if an action is a grammar relationship action.
  */
 function isGrammarRelationshipAction(
-  action: RuleAction
+  action: RuleAction,
 ): action is GrammarRelationshipAction {
   return action.type === "grammar-relationship";
 }
@@ -151,6 +175,15 @@ function isGrammarRelationshipAction(
  */
 export class ViolaBuilder {
   private _linters: BaseLinter[] = [];
+  /**
+   * Linter sources a plugin supplied as a function rather than an array.
+   *
+   * They cannot be drained in `use()`, which is synchronous because the fluent
+   * API depends on it, nor in `build()` for the same reason. `resolve()` drains
+   * them, and `build()` refuses while any remain rather than returning a config
+   * that is quietly missing them.
+   */
+  private _pendingLinters: Array<() => unknown> = [];
   private _linterAliases = new Map<string, string>(); // alias -> linter id
   private _grammarRegistry = new GrammarRegistry();
   private _rules: Frozen<Rule>[] = [];
@@ -182,13 +215,38 @@ export class ViolaBuilder {
       plugin.build(this);
     } else if (isPluginFn(plugin)) {
       plugin(this);
+    } else if (isLintersPlugin(plugin)) {
+      this.useLintersPlugin(plugin);
     } else {
       throw new Error(
-        "Invalid plugin: expected an object with build() method or a function"
+        "Invalid plugin: expected an object with build() method, a function, " +
+          "or an object carrying linters or bundles",
       );
     }
 
     return this;
+  }
+
+  /**
+   * Adds a plugin written against the `linters`/`bundles` shape.
+   *
+   * A `linters` function is resolved lazily rather than awaited here, because
+   * `use()` is synchronous and the fluent API depends on that. The thunk is
+   * held and drained when the linters are next read, which is the same point a
+   * `build()` plugin's own additions would have taken effect.
+   *
+   * Bundles are added whole. There is no selection syntax at this layer, and
+   * silently dropping them would lose linters the plugin declared.
+   */
+  private useLintersPlugin(plugin: LintersPlugin): void {
+    if (typeof plugin.linters === "function") {
+      this._pendingLinters.push(plugin.linters as () => unknown);
+    } else if (Array.isArray(plugin.linters)) {
+      this.add(plugin.linters as AddInput);
+    }
+    for (const bundle of Object.values(plugin.bundles ?? {})) {
+      if (Array.isArray(bundle)) this.add(bundle as AddInput);
+    }
   }
 
   /**
@@ -232,7 +290,7 @@ export class ViolaBuilder {
       this._lastAddedId = input.meta.id;
     } else {
       throw new Error(
-        "Invalid input: expected a linter, grammar, or array of linters"
+        "Invalid input: expected a linter, grammar, or array of linters",
       );
     }
 
@@ -329,7 +387,7 @@ export class ViolaBuilder {
         deepFreeze({
           action: action as Frozen<GrammarRelationshipAction>,
           condition: condition.condition,
-        })
+        }),
       );
     } else {
       // Regular report rule
@@ -358,6 +416,13 @@ export class ViolaBuilder {
    * in reverse (last to first) so later rules take precedence.
    */
   build(): ViolaBuilderConfigExtended {
+    if (this._pendingLinters.length > 0) {
+      throw new Error(
+        `${this._pendingLinters.length} plugin linter source(s) are still unresolved. ` +
+          "Await resolve() instead of calling build(): a plugin supplied its linters " +
+          "as a function, and returning a config without them would silently lint nothing.",
+      );
+    }
     return {
       linters: this._linters,
       rules: this._rules,
@@ -365,6 +430,23 @@ export class ViolaBuilder {
       grammarRegistry: this._grammarRegistry,
       grammarRules: this._grammarRules,
     };
+  }
+
+  /**
+   * Drains any linter sources supplied as functions, then builds.
+   *
+   * Use this wherever awaiting is possible. `build()` is kept synchronous for
+   * the fluent API and for every plugin that supplies linters directly, and it
+   * refuses rather than dropping what it cannot resolve.
+   */
+  async resolve(): Promise<ViolaBuilderConfigExtended> {
+    const pending = this._pendingLinters;
+    this._pendingLinters = [];
+    for (const source of pending) {
+      const produced = await source();
+      if (Array.isArray(produced)) this.add(produced as AddInput);
+    }
+    return this.build();
   }
 }
 
