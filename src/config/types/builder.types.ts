@@ -91,7 +91,10 @@ export interface ViolaBuilderInterface {
    */
   as(alias: string): ViolaBuilderInterface;
   set(key: string, value: unknown): ViolaBuilderInterface;
-  rule(action: Frozen<RuleAction>, condition: ConditionExprInterface): ViolaBuilderInterface;
+  rule(
+    action: Frozen<RuleAction>,
+    condition: ConditionExprInterface,
+  ): ViolaBuilderInterface;
   readonly grammars: GrammarRegistry;
   build(): ViolaBuilderConfigExtended;
 }
@@ -101,7 +104,9 @@ export interface ViolaBuilderInterface {
  */
 export interface ConditionExprInterface {
   readonly condition: Frozen<Condition>;
-  and(other: ConditionExprInterface | Frozen<Condition>): ConditionExprInterface;
+  and(
+    other: ConditionExprInterface | Frozen<Condition>,
+  ): ConditionExprInterface;
   or(other: ConditionExprInterface | Frozen<Condition>): ConditionExprInterface;
   not(): ConditionExprInterface;
 }
@@ -136,9 +141,33 @@ export interface ViolaPlugin {
 export type ViolaPluginFn = (viola: ViolaBuilderInterface) => void;
 
 /**
+ * The other plugin shape this package publishes, from `types/plugin.ts`.
+ *
+ * Both interfaces are called `ViolaPlugin`, both are exported, and until now
+ * only the `build()` one was assignable to `use()`. A plugin written against
+ * the other type-checked at its author's end and threw at the user's, because
+ * the names are identical and nothing compared them. `@hiisi/viola-script-lints`
+ * 0.3.0 is that case against `@hiisi/viola` 0.3.0, both published.
+ *
+ * `linters` may be a function because a plugin can discover its linters from
+ * the filesystem and cannot produce them synchronously. Such a plugin is
+ * resolved by `ViolaBuilder.resolve()` rather than `build()`.
+ */
+export interface LintersPlugin {
+  /** Identifies the plugin in diagnostics. Not used for resolution. */
+  readonly name?: string;
+  /** Linters this plugin contributes, directly or discovered. */
+  readonly linters?:
+    | BaseLinter[]
+    | (() => BaseLinter[] | Promise<BaseLinter[]>);
+  /** Named bundles. All of them are added; there is no selection at this layer. */
+  readonly bundles?: Record<string, BaseLinter[]>;
+}
+
+/**
  * Something that can be passed to .use() - a plugin object or function.
  */
-export type PluginInput = ViolaPlugin | ViolaPluginFn;
+export type PluginInput = ViolaPlugin | ViolaPluginFn | LintersPlugin;
 
 /**
  * @deprecated Use AddInput instead
