@@ -66,7 +66,17 @@ export abstract class BaseLinter {
    * @param config - Linter configuration
    * @returns Array of issues found
    */
-  abstract lint(data: CodebaseData, config: LinterConfig): Issue[];
+  /**
+   * Find the issues.
+   *
+   * May be synchronous or not. A linter that only reads the codebase model returns an
+   * array and costs nothing extra; one that has to reach outside it, to a subprocess, a
+   * manifest on disk or a registry, returns a promise. The doctest linter is the case that
+   * forced the choice: checking that an example still works means running it, and running
+   * it means spawning `deno test --doc` or `node --test`, which no synchronous signature
+   * can express.
+   */
+  abstract lint(data: CodebaseData, config: LinterConfig): Issue[] | Promise<Issue[]>;
 
   /**
    * Run the linter with timing and error handling.
@@ -75,11 +85,13 @@ export abstract class BaseLinter {
    * @param config - Linter configuration
    * @returns Linter result with issues and timing
    */
-  run(data: CodebaseData, config: LinterConfig): LinterResult {
+  async run(data: CodebaseData, config: LinterConfig): Promise<LinterResult> {
     const startTime = performance.now();
 
     try {
-      const issues = this.lint(data, config);
+      // `await` on a plain array is a microtask and nothing more, so a synchronous linter
+      // pays a tick rather than a scheduler.
+      const issues = await this.lint(data, config);
       const durationMs = performance.now() - startTime;
 
       return {
