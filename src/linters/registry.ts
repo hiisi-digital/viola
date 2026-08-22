@@ -160,7 +160,7 @@ export async function runLinters(
   const results: LinterResult[] = [];
 
   // Determine which linters to run
-  let lintersToRun = registry.getAll();
+  let lintersToRun = (options.registry ?? registry).getAll();
 
   if (options.only && options.only.length > 0) {
     lintersToRun = lintersToRun.filter((l) => options.only!.includes(l.meta.id));
