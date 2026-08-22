@@ -191,7 +191,7 @@ export async function runLinters(
       if (options.verbose) {
         console.log(`Running linter: ${linter.meta.id}...`);
       }
-      const result = linter.run(data, config);
+      const result = await linter.run(data, config);
       results.push(result);
       if (options.verbose) {
         console.log(
@@ -226,17 +226,17 @@ export function runLinter(
   id: string,
   data: Readonly<CodebaseData>,
   config: LinterConfig = DEFAULT_LINTER_CONFIG
-): LinterResult {
+): Promise<LinterResult> {
   const linter = registry.get(id);
 
   if (!linter) {
-    return {
+    return Promise.resolve({
       linter: id,
       issues: [],
       durationMs: 0,
       success: false,
       error: `Linter "${id}" not found`,
-    };
+    });
   }
 
   return linter.run(data, config);
