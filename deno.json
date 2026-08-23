@@ -54,5 +54,6 @@
       "*>=major": "error",
       "*>=minor": "warn"
     }
-  }
+  },
+  "minimumDependencyAge": "0"
 }

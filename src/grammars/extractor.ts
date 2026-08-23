@@ -19,7 +19,7 @@ import type {
     TypeField,
     TypeInfo,
 } from "../data/types.ts";
-import type { Language, Tree } from "./loader.ts";
+import type { Language, SyntaxNode, Tree } from "./loader.ts";
 import { runQuery } from "./query.ts";
 import type { GrammarDefinition } from "./types.ts";
 import { hashCodeBody } from "../utils/hash.ts";

@@ -100,6 +100,10 @@ export interface SyntaxNode {
   readonly startIndex: number;
   readonly endIndex: number;
   readonly parent: SyntaxNode | null;
+  /** The node before this one, skipping anonymous nodes. */
+  readonly previousNamedSibling: SyntaxNode | null;
+  /** The node after this one, skipping anonymous nodes. */
+  readonly nextNamedSibling: SyntaxNode | null;
   readonly children: SyntaxNode[];
   readonly namedChildren: SyntaxNode[];
   readonly childCount: number;
