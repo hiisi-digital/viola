@@ -422,6 +422,8 @@ function extractTypes(
     types.push({
       name: nameCapture.text,
       location: nodeToLocation(node, filePath),
+
+      jsDoc: docCommentFor(node, grammar, sourceCode),
       kind,
       isExported:
         transforms?.isExported?.(node, captures) ??
