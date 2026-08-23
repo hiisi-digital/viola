@@ -19,7 +19,7 @@ import type {
     TypeField,
     TypeInfo,
 } from "../data/types.ts";
-import type { Language, Tree } from "./loader.ts";
+import type { Language, SyntaxNode, Tree } from "./loader.ts";
 import { runQuery } from "./query.ts";
 import type { GrammarDefinition } from "./types.ts";
 import { hashCodeBody } from "../utils/hash.ts";
@@ -114,6 +114,41 @@ function defaultNormalizeBody(body: string): string {
 /**
  * Extract function information from query captures.
  */
+/**
+ * The doc comment attached to a declaration, if it has one.
+ *
+ * Nothing populated `jsDoc` anywhere in this package. The field was declared on
+ * three interfaces, read by the missing-docs lint, and set by hand in that
+ * lint's fixtures, so its 218 tests passed while the extractor never wrote it
+ * once. Against real source the lint could only ever report every exported
+ * symbol as undocumented, which is what it did.
+ *
+ * A doc comment is the comment immediately above the declaration. `export`
+ * wraps the declaration in a statement, so the comment is a sibling of the
+ * wrapper rather than of the function, and both are checked. Anything that is
+ * not a `/** ... *\/` block is not documentation: a `//` note above a function
+ * is a remark to the next reader, not an api description.
+ */
+function docCommentFor(
+  node: SyntaxNode | undefined,
+  grammar: GrammarDefinition,
+  sourceCode: string,
+): string | undefined {
+  let at: SyntaxNode | null | undefined = node;
+  for (let hop = 0; at && hop < 3; hop++) {
+    const prev = at.previousNamedSibling;
+    if (prev?.type === "comment" && prev.text.startsWith("/**")) {
+      return grammar.transforms?.parseDocComment
+        ? grammar.transforms.parseDocComment(prev, sourceCode)
+        : prev.text;
+    }
+    // an exported declaration sits inside an export statement, and the comment
+    // is above that, so climb before giving up.
+    at = at.parent;
+  }
+  return undefined;
+}
+
 function extractFunctions(
   tree: Tree,
   language: Language,
@@ -170,6 +205,7 @@ function extractFunctions(
       isGenerator: transforms?.isGenerator?.(node, captures) ?? captures.has("function.generator"),
       isExported: transforms?.isExported?.(node, captures) ?? captures.has("function.export"),
       isDefaultExport: transforms?.isDefaultExport?.(node, captures) ?? captures.has("function.default"),
+      jsDoc: docCommentFor(node, grammar, sourceCode),
       kind: "function" as const,
     });
   }
@@ -209,6 +245,8 @@ function extractStrings(
       : isRaw
         ? "raw" as const
         : inferQuoteStyle(valueCapture.text);
+
+    if (inTypePosition(valueCapture.node)) continue;
 
     strings.push({
       value: stripQuotes(valueCapture.text),
@@ -386,6 +424,8 @@ function extractTypes(
     types.push({
       name: nameCapture.text,
       location: nodeToLocation(node, filePath),
+
+      jsDoc: docCommentFor(node, grammar, sourceCode),
       kind,
       isExported:
         transforms?.isExported?.(node, captures) ??
@@ -430,6 +470,36 @@ function extractTypes(
  * console.log(`Found ${data.functions.length} functions`);
  * ```
  */
+/**
+ * Whether a string literal sits in a type rather than in code.
+ *
+ * `Pick<Target, "runtime" | "platform" | "architecture">` holds three string
+ * literals that tree-sitter reports as ordinary strings, so duplicate-strings
+ * counted them and advised extracting them to a constant. A `Pick` needs
+ * literal types and cannot take one, so the advice could not be followed.
+ *
+ * A type-position literal is not a string the program ever holds. It is part
+ * of a type's spelling, and deduplicating it is a different question with a
+ * different answer.
+ */
+function inTypePosition(node: SyntaxNode | undefined): boolean {
+  let at: SyntaxNode | null | undefined = node;
+  while (at) {
+    if (
+      at.type === "type_annotation" ||
+      at.type === "type_arguments" ||
+      at.type === "type_alias_declaration" ||
+      at.type === "literal_type" ||
+      at.type === "union_type" ||
+      at.type === "interface_declaration"
+    ) {
+      return true;
+    }
+    at = at.parent;
+  }
+  return false;
+}
+
 export function extractFileData(
   tree: Tree,
   language: Language,

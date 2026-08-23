@@ -24,32 +24,16 @@ import type {
  * This mirrors the tree-sitter Node type but is defined here to avoid
  * direct dependency on web-tree-sitter in type definitions.
  */
-export interface SyntaxNode {
-  /** Node type (e.g., "function_definition", "string") */
-  readonly type: string;
-  /** Full text of this node */
-  readonly text: string;
-  /** Start position in the source */
-  readonly startPosition: { row: number; column: number };
-  /** End position in the source */
-  readonly endPosition: { row: number; column: number };
-  /** Start byte offset */
-  readonly startIndex: number;
-  /** End byte offset */
-  readonly endIndex: number;
-  /** Parent node, if any */
-  readonly parent: SyntaxNode | null;
-  /** All child nodes */
-  readonly children: readonly SyntaxNode[];
-  /** Named child nodes only */
-  readonly namedChildren: readonly SyntaxNode[];
-  /** Get child by field name */
-  childForFieldName(name: string): SyntaxNode | null;
-  /** Check if node has errors */
-  readonly hasError: boolean;
-  /** Check if node is missing (error recovery) */
-  readonly isMissing: boolean;
-}
+/**
+ * Re-exported so there is one description of a tree-sitter node, not two.
+ *
+ * This module carried its own copy: thinner, missing the sibling and cursor
+ * accessors, and disagreeing on whether `children` is readonly. Nothing
+ * imported it, so the two drifted quietly and a function typed against one
+ * would not accept a node from the other.
+ */
+import type { SyntaxNode } from "./loader.ts";
+export type { SyntaxNode };
 
 /**
  * Query captures from a tree-sitter query match.
