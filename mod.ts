@@ -568,6 +568,24 @@ export async function runProject(
   const { options: runOptions } = await resolveRun(options);
   const results = await runViola(runOptions);
   console.log(formatResults(results));
+
+  // A run that read nothing is not a clean run. It is a project whose include
+  // list points somewhere empty, or whose grammar never matched a file, or
+  // whose config registered a grammar into a different copy of viola than the
+  // one crawling. Every one of those prints "All clear", which is the worst
+  // possible thing to say about a package nobody checked.
+  if (results.filesScanned === 0 && options.allowEmpty !== true) {
+    console.error(
+      "\nRefusing to pass: no files were read.\n" +
+        "  A run that scanned nothing cannot say a package is clean.\n" +
+        "  Check that the include list points at files that exist, that a\n" +
+        "  grammar claims their extensions, and that the config imports the\n" +
+        "  same viola that is running. Pass `allowEmpty` if a project really\n" +
+        "  has nothing to lint yet.",
+    );
+    return 1;
+  }
+
   return results.hasErrors && options.reportOnly !== true ? 1 : 0;
 }
 

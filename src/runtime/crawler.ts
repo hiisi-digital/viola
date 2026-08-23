@@ -219,12 +219,23 @@ export async function crawlCodebase(
       for await (
         const entry of walk(fullPath, {
           exts: extensions.map((e) => e.replace(/^\./, "")),
-          skip: excludePatterns,
+          // Only the two directories it is worth not descending into, and
+          // both anchored on separators.
+          //
+          // The exclude patterns cannot go here. `walk` tests them against the
+          // absolute path, and a pattern like `dist` then matches any
+          // *ancestor* directory of the project as readily as a directory
+          // inside it: `deno-dist` excluded its own entire tree, reported
+          // "Files scanned: 0", and said "All clear". A checkout under
+          // `~/build/` would have done the same to any project.
+          //
+          // They are applied below instead, against the path relative to the
+          // project root, which is the only path the project has any say over.
+          skip: [/[/\\]node_modules[/\\]/, /[/\\]\.git[/\\]/],
         })
       ) {
         if (!entry.isFile) continue;
 
-        // Additional exclusion check
         const relativePath = relative(config.projectRoot, entry.path);
         if (excludePatterns.some((p) => p.test(relativePath))) continue;
 

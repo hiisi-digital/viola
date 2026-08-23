@@ -48,6 +48,14 @@ export interface ProjectRunOptions {
   readonly preloadedConfig?: unknown;
   /** The environment, for conditions that ask about it. */
   readonly env?: Readonly<Record<string, string | undefined>>;
+  /**
+   * Let a run that read no files pass.
+   *
+   * Off by default, because a run that scanned nothing reports "All clear" and
+   * that is a false clean bill on a package nobody checked. Only a project
+   * that genuinely has nothing to lint yet should say so out loud.
+   */
+  readonly allowEmpty?: boolean;
 }
 
 /**
