@@ -29,7 +29,9 @@
     "@std/assert": "jsr:@std/assert@^1",
     "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1.1",
     "web-tree-sitter": "npm:web-tree-sitter@0.22.6",
-    "tree-sitter-typescript": "npm:tree-sitter-typescript@0.23.2"
+    "tree-sitter-typescript": "npm:tree-sitter-typescript@0.23.2",
+    "@hiisi/viola-default-lints": "jsr:@hiisi/viola-default-lints@^0.3.1",
+    "@hiisi/viola-grammar-ts": "jsr:@hiisi/viola-grammar-ts@^0.3.1"
   },
   "compilerOptions": {
     "strict": true,
@@ -41,7 +43,8 @@
     "check": "deno check mod.ts",
     "test": "deno test --allow-env --allow-read --allow-write --allow-ffi src/",
     "viola": "deno run -A scripts/viola.ts",
-    "viola:strict": "deno run -A scripts/viola.ts --strict"
+    "viola:strict": "deno run -A scripts/viola.ts --strict",
+    "lint": "deno run -A --min-dep-age=0 jsr:@hiisi/viola-cli@^0.3.1 --project . --include src,mod.ts"
   },
   "viola": {
     "plugins": [],
@@ -55,5 +58,5 @@
       "*>=minor": "warn"
     }
   },
-  "minimumDependencyAge": "0"
+  "minimumDependencyAge": 0
 }
