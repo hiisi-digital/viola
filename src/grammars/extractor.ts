@@ -246,6 +246,8 @@ function extractStrings(
         ? "raw" as const
         : inferQuoteStyle(valueCapture.text);
 
+    if (inTypePosition(valueCapture.node)) continue;
+
     strings.push({
       value: stripQuotes(valueCapture.text),
       location: nodeToLocation(valueCapture.node, filePath),
