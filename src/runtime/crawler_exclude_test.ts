@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * What an exclude pattern is matched against.
  *

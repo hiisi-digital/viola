@@ -48,5 +48,12 @@
   "links": [
     "../viola-default-lints",
     "../viola-grammar-ts"
-  ]
+  ],
+  "ante": {
+    "width": 100,
+    "maxContributors": 3,
+    "contributorSelection": "commits",
+    "spdxLicense": "MPL-2.0",
+    "licenseUrl": "https://mozilla.org/MPL/2.0"
+  }
 }

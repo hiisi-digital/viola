@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * What a glob matches, including the case the placeholder exists for.
  */

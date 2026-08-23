@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Conditions: the vocabulary an issue is classified in, the comparisons that
  * ask about it, the `when` builder that writes them, and the one evaluator
