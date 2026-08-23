@@ -83,7 +83,7 @@
     "dependencies": [
       "jsr:@hiisi/flash-freeze@~0.1.1",
       "jsr:@hiisi/viola-default-lints@~0.3.1",
-      "jsr:@hiisi/viola-grammar-ts@~0.3.1",
+      "jsr:@hiisi/viola-grammar-ts@~0.3.2",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",
       "jsr:@std/path@1",

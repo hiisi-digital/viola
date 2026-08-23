@@ -31,7 +31,7 @@
     "web-tree-sitter": "npm:web-tree-sitter@0.22.6",
     "tree-sitter-typescript": "npm:tree-sitter-typescript@0.23.2",
     "@hiisi/viola-default-lints": "jsr:@hiisi/viola-default-lints@^0.3.1",
-    "@hiisi/viola-grammar-ts": "jsr:@hiisi/viola-grammar-ts@^0.3.1"
+    "@hiisi/viola-grammar-ts": "jsr:@hiisi/viola-grammar-ts@^0.3.2"
   },
   "compilerOptions": {
     "strict": true,
