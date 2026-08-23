@@ -135,15 +135,29 @@ function defaultNormalizeBody(body: string): string {
  * not a `/** ... *\/` block is not documentation: a `//` note above a function
  * is a remark to the next reader, not an api description.
  */
+/** The node type a doc comment arrives as. */
+const COMMENT_NODE = "comment";
+
 function docCommentFor(
   node: SyntaxNode | undefined,
   grammar: GrammarDefinition,
   sourceCode: string,
+  name?: string,
 ): string | undefined {
   let at: SyntaxNode | null | undefined = node;
   for (let hop = 0; at && hop < 3; hop++) {
-    const prev = at.previousNamedSibling;
-    if (prev?.type === "comment" && prev.text.startsWith("/**")) {
+    let prev = at.previousNamedSibling;
+
+    // An overloaded function is documented once, above the first signature,
+    // and only the implementation is extracted. Stepping back over the
+    // signatures that belong to it is what finds that comment: without this
+    // every overloaded function in a codebase reads as undocumented, however
+    // carefully it was documented.
+    while (prev !== null && isOverloadOf(prev, name)) {
+      prev = prev.previousNamedSibling;
+    }
+
+    if (prev?.type === COMMENT_NODE && prev.text.startsWith("/**")) {
       return grammar.transforms?.parseDocComment
         ? grammar.transforms.parseDocComment(prev, sourceCode)
         : prev.text;
@@ -153,6 +167,29 @@ function docCommentFor(
     at = at.parent;
   }
   return undefined;
+}
+
+/**
+ * Whether a node is another signature of the same function.
+ *
+ * Two things together, and both are needed. It has no body, which is what
+ * separates a signature from the implementation. And it declares the same
+ * name, which is what separates it from whatever else happens to sit above.
+ *
+ * Without the name an `export const other = 1;` above the set qualifies, since
+ * it also ends in a semicolon with no brace, and the comment documenting *it*
+ * is handed to the function below.
+ */
+function isOverloadOf(node: SyntaxNode, name: string | undefined): boolean {
+  if (node.type === COMMENT_NODE || name === undefined) return false;
+  const text = node.text.trimEnd();
+  if (!text.endsWith(";") || text.includes("{")) return false;
+  return new RegExp(`\\bfunction\\s+${escapeForPattern(name)}\\b`).test(text);
+}
+
+/** A name, made safe to put inside a pattern. */
+function escapeForPattern(name: string): string {
+  return name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function extractFunctions(
@@ -218,7 +255,7 @@ function extractFunctions(
         captures.has("function.export"),
       isDefaultExport: transforms?.isDefaultExport?.(node, captures) ??
         captures.has("function.default"),
-      jsDoc: docCommentFor(node, grammar, sourceCode),
+      jsDoc: docCommentFor(node, grammar, sourceCode, name),
       // A method is named for what it does to its own type, so `get` on a
       // registry is not `get` on a cache. Without this every class with a
       // `build` looked like a duplicate of every other one: the field existed
