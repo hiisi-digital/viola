@@ -147,7 +147,17 @@ function confidenceCond(min?: number, max?: number): ConditionExpr {
 /**
  * Impact condition builder.
  */
-const impactBuilder = deepFreeze({
+/** Comparisons available on an issue's impact. */
+export interface ImpactConditions {
+  readonly atLeast: (value: Impact) => ConditionExpr;
+  readonly atMost: (value: Impact) => ConditionExpr;
+  readonly above: (value: Impact) => ConditionExpr;
+  readonly below: (value: Impact) => ConditionExpr;
+  readonly is: (value: Impact) => ConditionExpr;
+  readonly not: (value: Impact) => ConditionExpr;
+}
+
+const impactBuilder: Frozen<ImpactConditions> = deepFreeze({
   /** Impact >= value */
   atLeast: (value: Impact): ConditionExpr => impactCond(">=", value),
   /** Impact <= value */
@@ -165,7 +175,15 @@ const impactBuilder = deepFreeze({
 /**
  * Category condition builder.
  */
-const categoryBuilder = deepFreeze({
+/** Membership tests against an issue's category. */
+export interface CategoryConditions {
+  readonly is: (value: Category) => ConditionExpr;
+  readonly not: (value: Category) => ConditionExpr;
+  readonly in: (...values: Category[]) => ConditionExpr;
+  readonly notIn: (...values: Category[]) => ConditionExpr;
+}
+
+const categoryBuilder: Frozen<CategoryConditions> = deepFreeze({
   /** Category == value */
   is: (value: Category): ConditionExpr => categoryCond([value], undefined),
   /** Category != value */
@@ -179,7 +197,14 @@ const categoryBuilder = deepFreeze({
 /**
  * Confidence condition builder.
  */
-const confidenceBuilder = deepFreeze({
+/** Ranges over a linter's stated confidence. */
+export interface ConfidenceConditions {
+  readonly atLeast: (value: number) => ConditionExpr;
+  readonly below: (value: number) => ConditionExpr;
+  readonly between: (min: number, max: number) => ConditionExpr;
+}
+
+const confidenceBuilder: Frozen<ConfidenceConditions> = deepFreeze({
   /** Confidence >= value */
   atLeast: (value: number): ConditionExpr => confidenceCond(value, undefined),
   /** Confidence < value */
@@ -220,7 +245,19 @@ const confidenceBuilder = deepFreeze({
  *   .and(when.impact.atLeast(Impact.Major).or(when.category.is(Category.Correctness)))
  * ```
  */
-export const when = deepFreeze({
+/** Everything a rule condition can be built from. */
+export interface Conditions {
+  readonly impact: Frozen<ImpactConditions>;
+  readonly category: Frozen<CategoryConditions>;
+  readonly confidence: Frozen<ConfidenceConditions>;
+  readonly in: (...patterns: string[]) => ConditionExpr;
+  readonly linter: (...patterns: string[]) => ConditionExpr;
+  readonly not: (condition: ConditionExpr) => ConditionExpr;
+  readonly all: (...conditions: ConditionExpr[]) => ConditionExpr;
+  readonly any: (...conditions: ConditionExpr[]) => ConditionExpr;
+}
+
+export const when: Frozen<Conditions> = deepFreeze({
   /** Impact condition builder */
   impact: impactBuilder,
 

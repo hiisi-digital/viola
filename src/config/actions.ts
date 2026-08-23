@@ -40,7 +40,23 @@ function createReportAction(level: ReportLevel): Frozen<ReportAction> {
  *   .rule(report.off, when.in("**\/*_test.ts"));
  * ```
  */
-export const report = deepFreeze({
+/**
+ * The six report levels, as actions a rule can carry.
+ *
+ * Written out rather than inferred because jsr refuses an inferred type on a
+ * public export: a consumer's type checker would otherwise have to evaluate
+ * this module to learn the shape.
+ */
+export interface ReportActions {
+  readonly error: Frozen<ReportAction>;
+  readonly warn: Frozen<ReportAction>;
+  readonly info: Frozen<ReportAction>;
+  readonly hint: Frozen<ReportAction>;
+  readonly off: Frozen<ReportAction>;
+  readonly skip: Frozen<ReportAction>;
+}
+
+export const report: Frozen<ReportActions> = deepFreeze({
   /** Fails build, exits non-zero */
   error: createReportAction(ReportLevel.Error),
   /** Yellow output, doesn't fail */
