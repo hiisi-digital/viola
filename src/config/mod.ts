@@ -4,26 +4,24 @@
  * @module
  */
 
-// Legacy types (to be deprecated)
+// The shapes a config resolves into, which every linter and the runtime both
+// read. These were labelled legacy and are not: `IssueCatalog` is on every
+// linter and `ResolvedConfig` is what the builder produces.
 export type {
   ConfigSource,
   IssueCatalog,
-  IssueCategory,
   IssueDef,
-  IssueImpact,
   ParsedPattern,
   PatternValue,
   ResolvedConfig,
   ResolvedPatternValue,
   ResolvedScope,
   ScopeConfig,
-  Severity,
   ViolaConfig,
 } from "./types.ts";
 
 export {
   loadConfig,
-  matchesFilePattern,
   matchesIssuePattern,
   resolveBuilderConfig,
   resolveIssueSeverity,
@@ -46,15 +44,9 @@ export { formatValidationErrors, validateLinterConfig } from "./validate.ts";
 // New Builder API
 // =============================================================================
 
-// Enums
-export {
-  Category,
-  compareImpact,
-  Impact,
-  IMPACT_ORDER,
-  impactValue,
-  ReportLevel,
-} from "./enums.ts";
+// The vocabulary and the conditions live in `src/conditions/`. Config does not
+// re-export them: one owner, one import path, and a consumer that wants a
+// condition asks the module that defines one.
 
 // Actions
 export type {
@@ -68,31 +60,6 @@ export {
   isReportAction,
   report,
 } from "./actions.ts";
-
-// Conditions
-export type {
-  CategoryCondition,
-  CompoundCondition,
-  Condition,
-  ConditionOperator,
-  ConfidenceCondition,
-  FileCondition,
-  ImpactCondition,
-  LinterCondition,
-  NotCondition,
-} from "./conditions.ts";
-
-export {
-  ConditionExpr,
-  isCategoryCondition,
-  isCompoundCondition,
-  isConfidenceCondition,
-  isFileCondition,
-  isImpactCondition,
-  isLinterCondition,
-  isNotCondition,
-  when,
-} from "./conditions.ts";
 
 // Builder
 export type {
@@ -117,12 +84,11 @@ export type { GrammarRelationshipBuilder } from "./grammar-ref.ts";
 export { grammar, isGrammarRelationship } from "./grammar-ref.ts";
 
 // Evaluator
-export type { EvaluatedIssue, EvaluationContext } from "./evaluator.ts";
+export type { EvaluatedIssue, RunContext } from "./evaluator.ts";
 
 export {
   countByLevel,
   createEvaluationContext,
-  evaluateCondition,
   evaluateIssue,
   evaluateIssues,
   filterReportableIssues,

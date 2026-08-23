@@ -34,6 +34,7 @@ const EMPTY_DATA: CodebaseData = {
   allStrings: [],
   allExports: [],
   allImports: [],
+  literalVocabulary: new Set<string>(),
 };
 
 const ENABLED: LinterConfig = { enabled: true };

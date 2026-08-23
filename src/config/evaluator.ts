@@ -1,272 +1,42 @@
 /**
- * Rule evaluator for viola configuration.
+ * Picking a report level for an issue.
  *
- * Evaluates conditions against issues to determine the appropriate report level.
- * Uses "last wins" semantics - rules are evaluated in reverse order, so later
- * rules take precedence over earlier ones (like CSS).
+ * Rules are read last to first and the first that matches decides, so a later
+ * rule overrides an earlier one the way a later CSS rule does.
+ *
+ * Whether a rule matches is not decided here. That is one condition evaluator
+ * in `src/conditions/`, and this module's job is only to turn an issue plus a
+ * catalog into the context that evaluator reads, and then to walk the rules.
+ * There used to be a second evaluator here, with its own opinion about what
+ * `Impact` and `Category` were.
  *
  * @module
  */
 
 import type { Frozen } from "@hiisi/flash-freeze";
+import { evaluateCondition } from "../conditions/evaluate.ts";
+import type {
+  Condition,
+  EvaluationContext,
+  IssueContext,
+} from "../conditions/types.ts";
+import { Category, Impact, ReportLevel } from "../conditions/vocabulary.ts";
 import type { Issue } from "../data/types.ts";
 import { isReportAction } from "./actions.ts";
-import {
-  isCategoryCondition,
-  isCompoundCondition,
-  isConfidenceCondition,
-  isFileCondition,
-  isImpactCondition,
-  isLinterCondition,
-  isNotCondition,
-} from "./conditions.ts";
-import { Category, Impact, impactValue, ReportLevel } from "./enums.ts";
-import { matchesAnyGlob } from "./pattern.ts";
 import type { IssueCatalog } from "./types.ts";
 import type { Rule } from "./types/builder.types.ts";
 import type {
-  CategoryCondition,
-  CompoundCondition,
-  Condition,
-  ConfidenceCondition,
-  FileCondition,
-  ImpactCondition,
-  LinterCondition,
-  NotCondition,
-} from "./types/conditions.types.ts";
-import type {
   EvaluatedIssue,
-  EvaluationContext,
+  RunContext,
 } from "./types/evaluator.types.ts";
 
-// Re-export types for convenience
 export type {
   EvaluatedIssue,
-  EvaluationContext,
+  RunContext,
 } from "./types/evaluator.types.ts";
 
-// =============================================================================
-// Condition Evaluation
-// =============================================================================
-
-/**
- * Evaluate an impact condition.
- */
-function evaluateImpactCondition(
-  condition: ImpactCondition,
-  context: EvaluationContext,
-): boolean {
-  const issueDef = context.issueDef;
-  if (!issueDef) {
-    // No catalog entry, can't evaluate impact
-    return false;
-  }
-
-  // Convert string impact to enum for comparison
-  const issueImpact = stringToImpact(issueDef.impact);
-  if (issueImpact === null) return false;
-
-  const issueValue = impactValue(issueImpact);
-  const conditionValue = impactValue(condition.value);
-
-  switch (condition.operator) {
-    case "=":
-      return issueValue === conditionValue;
-    case "!=":
-      return issueValue !== conditionValue;
-    case ">=":
-      // >= means at least as severe (lower value = more severe)
-      return issueValue <= conditionValue;
-    case "<=":
-      // <= means at most as severe (higher value = less severe)
-      return issueValue >= conditionValue;
-    case ">":
-      // > means more severe (lower value)
-      return issueValue < conditionValue;
-    case "<":
-      // < means less severe (higher value)
-      return issueValue > conditionValue;
-    default:
-      return false;
-  }
-}
-
-/**
- * Convert string impact to Impact enum.
- */
-function stringToImpact(impact: string): Impact | null {
-  switch (impact) {
-    case "critical":
-      return Impact.Critical;
-    case "major":
-      return Impact.Major;
-    case "minor":
-      return Impact.Minor;
-    case "trivial":
-      return Impact.Trivial;
-    default:
-      return null;
-  }
-}
-
-/**
- * Convert string category to Category enum.
- */
-function stringToCategory(category: string): Category | null {
-  switch (category) {
-    case "correctness":
-      return Category.Correctness;
-    case "maintainability":
-      return Category.Maintainability;
-    case "consistency":
-      return Category.Consistency;
-    case "performance":
-      return Category.Performance;
-    case "style":
-      return Category.Style;
-    default:
-      return null;
-  }
-}
-
-/**
- * Evaluate a category condition.
- */
-function evaluateCategoryCondition(
-  condition: CategoryCondition,
-  context: EvaluationContext,
-): boolean {
-  const issueDef = context.issueDef;
-  if (!issueDef) {
-    // No catalog entry, can't evaluate category
-    return false;
-  }
-
-  const issueCategory = stringToCategory(issueDef.category);
-  if (issueCategory === null) return false;
-
-  // Check include list
-  if (condition.include && condition.include.length > 0) {
-    if (!condition.include.includes(issueCategory)) {
-      return false;
-    }
-  }
-
-  // Check exclude list
-  if (condition.exclude && condition.exclude.length > 0) {
-    if (condition.exclude.includes(issueCategory)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-/**
- * Evaluate a file condition.
- */
-function evaluateFileCondition(
-  condition: FileCondition,
-  context: EvaluationContext,
-): boolean {
-  const file = context.issue.location.file;
-  return matchesAnyGlob(file, condition.patterns);
-}
-
-/**
- * Evaluate a linter condition.
- */
-function evaluateLinterCondition(
-  condition: LinterCondition,
-  context: EvaluationContext,
-): boolean {
-  // Match against linter ID or full issue kind
-  return (
-    matchesAnyGlob(context.linterId, condition.patterns) ||
-    matchesAnyGlob(context.issue.kind, condition.patterns)
-  );
-}
-
-/**
- * Evaluate a confidence condition.
- */
-function evaluateConfidenceCondition(
-  condition: ConfidenceCondition,
-  context: EvaluationContext,
-): boolean {
-  const confidence = context.issue.confidence;
-
-  if (condition.min !== undefined && confidence < condition.min) {
-    return false;
-  }
-
-  if (condition.max !== undefined && confidence > condition.max) {
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Evaluate a compound condition (AND/OR).
- */
-function evaluateCompoundCondition(
-  condition: CompoundCondition,
-  context: EvaluationContext,
-): boolean {
-  if (condition.operator === "and") {
-    return condition.conditions.every((c) => evaluateCondition(c, context));
-  } else {
-    // "or"
-    return condition.conditions.some((c) => evaluateCondition(c, context));
-  }
-}
-
-/**
- * Evaluate a NOT condition.
- */
-function evaluateNotCondition(
-  condition: NotCondition,
-  context: EvaluationContext,
-): boolean {
-  return !evaluateCondition(condition.condition, context);
-}
-
-/**
- * Evaluate any condition type.
- */
-export function evaluateCondition(
-  condition: Condition | Frozen<Condition>,
-  context: EvaluationContext,
-): boolean {
-  // Cast away Frozen for evaluation (it's just readonly)
-  const cond = condition as Condition;
-
-  if (isImpactCondition(cond)) {
-    return evaluateImpactCondition(cond, context);
-  }
-  if (isCategoryCondition(cond)) {
-    return evaluateCategoryCondition(cond, context);
-  }
-  if (isFileCondition(cond)) {
-    return evaluateFileCondition(cond, context);
-  }
-  if (isLinterCondition(cond)) {
-    return evaluateLinterCondition(cond, context);
-  }
-  if (isConfidenceCondition(cond)) {
-    return evaluateConfidenceCondition(cond, context);
-  }
-  if (isCompoundCondition(cond)) {
-    return evaluateCompoundCondition(cond, context);
-  }
-  if (isNotCondition(cond)) {
-    return evaluateNotCondition(cond, context);
-  }
-
-  // Unknown condition type
-  return false;
-}
+/** A run that asked about neither the environment nor the project root. */
+const NO_RUN_CONTEXT: RunContext = { env: {}, projectRoot: "" };
 
 // =============================================================================
 // Rule Evaluation
@@ -287,24 +57,51 @@ function parseIssueKind(kind: string): { linterId: string; issueName: string } {
 }
 
 /**
- * Create evaluation context for an issue.
+ * Turn an issue into something a condition can read.
+ *
+ * Impact and category live in the reporting linter's catalog rather than on
+ * the issue, and looking them up is done once here so no condition has to know
+ * that. A kind with no catalog entry leaves them absent, which every condition
+ * over them then reads as false rather than as a match.
  */
 export function createEvaluationContext(
   issue: Issue,
   catalogs: Map<string, IssueCatalog>,
+  run: RunContext = NO_RUN_CONTEXT,
 ): EvaluationContext {
   const { linterId, issueName } = parseIssueKind(issue.kind);
+  const issueDef = catalogs.get(linterId)?.[issue.kind];
 
-  // Look up issue definition from catalog
-  const catalog = catalogs.get(linterId);
-  const issueDef = catalog?.[issue.kind];
+  const context: IssueContext = {
+    by: linterId,
+    kind: issue.kind,
+    name: issueName,
+    impact: issueDef?.impact as Impact | undefined,
+    category: issueDef?.category as Category | undefined,
+    confidence: issue.confidence,
+    line: issue.location.line,
+    ...(issue.location.column === undefined
+      ? {}
+      : { column: issue.location.column }),
+  };
 
   return {
-    issue,
-    issueDef,
-    linterId,
-    issueName,
+    issue: context,
+    file: {
+      path: issue.location.file,
+      extension: extensionOf(issue.location.file),
+      grammarId: "",
+    },
+    env: run.env,
+    projectRoot: run.projectRoot,
   };
+}
+
+/** The extension including its dot, or empty when the name carries none. */
+function extensionOf(path: string): string {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot <= 0 ? "" : name.slice(dot);
 }
 
 /**
@@ -325,8 +122,9 @@ export function evaluateIssue(
   rules: readonly Frozen<Rule>[],
   catalogs: Map<string, IssueCatalog>,
   defaultLevel: ReportLevel = ReportLevel.Warn,
+  run: RunContext = NO_RUN_CONTEXT,
 ): EvaluatedIssue {
-  const context = createEvaluationContext(issue, catalogs);
+  const context = createEvaluationContext(issue, catalogs, run);
 
   // Iterate in reverse order - last matching rule wins
   for (let i = rules.length - 1; i >= 0; i--) {
@@ -366,9 +164,10 @@ export function evaluateIssues(
   rules: readonly Frozen<Rule>[],
   catalogs: Map<string, IssueCatalog>,
   defaultLevel: ReportLevel = ReportLevel.Warn,
+  run: RunContext = NO_RUN_CONTEXT,
 ): EvaluatedIssue[] {
   return issues.map((issue) =>
-    evaluateIssue(issue, rules, catalogs, defaultLevel)
+    evaluateIssue(issue, rules, catalogs, defaultLevel, run)
   );
 }
 

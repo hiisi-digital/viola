@@ -20,4 +20,4 @@ export {
 } from "./plugins.ts";
 
 // Re-export config type from data for convenience
-export type { ViolaConfig } from "../data/types.ts";
+export type { CrawlConfig } from "../data/types.ts";

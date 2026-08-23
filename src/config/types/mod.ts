@@ -18,7 +18,7 @@ export type {
   ImpactCondition,
   LinterCondition,
   NotCondition,
-} from "./conditions.types.ts";
+} from "../../conditions/types.ts";
 
 // Action types
 export type { ReportAction, RuleAction } from "./actions.types.ts";

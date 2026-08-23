@@ -93,7 +93,7 @@ export type {
   StringLiteral,
   TypeField,
   TypeInfo,
-  ViolaConfig,
+  CrawlConfig,
 } from "./src/data/mod.ts";
 
 // =============================================================================
@@ -227,17 +227,20 @@ import {
   hasErrors as hasErrorLevel,
   type IssueCatalog,
   mergeLinterConfig,
-  ReportLevel,
   type Rule,
   validateLinterConfig,
 } from "./src/config/mod.ts";
+import { ReportLevel } from "./src/conditions/mod.ts";
 import type {
   Issue,
   LinterConfig,
   LintResults,
-  ViolaConfig,
+  CrawlConfig,
 } from "./src/data/mod.ts";
-import type { GrammarRegistry } from "./src/grammars/mod.ts";
+import type {
+  GrammarRegistry,
+  GrammarRelationshipRule,
+} from "./src/grammars/mod.ts";
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
@@ -249,7 +252,7 @@ import {
  * Options for running viola.
  */
 export interface ViolaOptions
-  extends Partial<ViolaConfig>, Partial<RunOptions> {
+  extends Partial<CrawlConfig>, Partial<RunOptions> {
   /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
   plugins?: string[];
   /** Preset names to inherit from loaded plugins */
@@ -262,6 +265,18 @@ export interface ViolaOptions
   catalogs?: Map<string, IssueCatalog>;
   /** Grammar registry for tree-sitter based extraction (required) */
   grammarRegistry: GrammarRegistry;
+  /**
+   * Grammar relationship rules, from `grammar("a").overrides("b")` in the
+   * config.
+   *
+   * Without these every grammar matching a file runs as a primary, which is
+   * what happened to every run before this was passed: the rules were
+   * collected by the builder and read by nobody, so the feature was in the
+   * readme and not in the product.
+   */
+  grammarRules?: readonly GrammarRelationshipRule[];
+  /** What the environment is, for conditions that ask about it. */
+  env?: Readonly<Record<string, string | undefined>>;
 }
 
 /**
@@ -285,7 +300,7 @@ export interface EvaluatedResults extends LintResults {
 export async function runViola(options: ViolaOptions): Promise<LintResults> {
   const verbose = options.verbose ?? false;
 
-  const config: ViolaConfig = {
+  const config: CrawlConfig = {
     projectRoot: options.projectRoot ?? Deno.cwd(),
     include: options.include ?? ["packages", "app", "src"],
     exclude: options.exclude ?? DEFAULT_CONFIG.exclude ?? [],
@@ -425,7 +440,12 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     console.log("Crawling codebase...");
   }
 
-  const data = await crawlCodebase(config, options.grammarRegistry);
+  const data = await crawlCodebase(
+    config,
+    options.grammarRegistry,
+    options.grammarRules ?? [],
+    { env: options.env, projectRoot: config.projectRoot },
+  );
 
   if (config.verbose) {
     console.log(`Crawled ${data.files.length} files`);
@@ -547,11 +567,30 @@ function levelPrefix(level: ReportLevel): string {
   }
 }
 
+/** The heading above a finding's other locations, in both formatters. */
+const RELATED_HEADING = "    Related:";
+
+/**
+ * The words a run ends with.
+ *
+ * Both formatters print one of these, and both used to spell them out. That is
+ * not a style point: a caller deciding whether a run was clean reads the
+ * verdict, and two independent spellings of it are two things that can drift.
+ * A publish gate in this workspace searched the output for "All clear" and
+ * passed a package with 222 findings, because the phrase also appears in this
+ * file's own source and the linter quotes source in its findings.
+ */
+const VERDICT = {
+  clean: "All clear.",
+  dirty: "Issues found. Review and address as needed.",
+  blocked: "Errors found. Fix before continuing.",
+} as const;
+
 /**
  * Format check results for console output.
  *
- * If results include evaluated issues (from rule evaluation), formats with
- * report levels. Otherwise, formats raw issues.
+ * Results carrying evaluated issues are formatted with their report levels;
+ * anything else is formatted as raw issues.
  *
  * @param results - Check results to format
  * @returns Formatted string
@@ -587,7 +626,7 @@ function formatEvaluatedResults(
   const reportable = filterReportableIssues(results.evaluatedIssues);
 
   if (reportable.length === 0) {
-    lines.push("All clear.");
+    lines.push(VERDICT.clean);
     lines.push("");
     return lines.join("\n");
   }
@@ -653,7 +692,7 @@ function formatEvaluatedResults(
 
       if (issue.relatedLocations && issue.relatedLocations.length > 0) {
         lines.push("");
-        lines.push("    Related:");
+        lines.push(RELATED_HEADING);
         for (const loc of issue.relatedLocations.slice(0, 3)) {
           lines.push(`      - ${loc.file}:${loc.line}`);
         }
@@ -669,9 +708,9 @@ function formatEvaluatedResults(
   lines.push("=".repeat(80));
 
   if (results.hasErrorLevel) {
-    lines.push("Errors found. Fix before continuing.");
+    lines.push(VERDICT.blocked);
   } else if (reportable.length > 0) {
-    lines.push("Issues found. Review and address as needed.");
+    lines.push(VERDICT.dirty);
   }
 
   lines.push("=".repeat(80));
@@ -685,7 +724,7 @@ function formatEvaluatedResults(
  */
 function formatRawResults(results: LintResults, lines: string[]): string {
   if (results.totalIssues === 0) {
-    lines.push("All clear.");
+    lines.push(VERDICT.clean);
     lines.push("");
     return lines.join("\n");
   }
@@ -717,7 +756,7 @@ function formatRawResults(results: LintResults, lines: string[]): string {
 
       if (issue.relatedLocations && issue.relatedLocations.length > 0) {
         lines.push("");
-        lines.push("    Related:");
+        lines.push(RELATED_HEADING);
         for (const loc of issue.relatedLocations.slice(0, 3)) {
           lines.push(`      - ${loc.file}:${loc.line}`);
         }
@@ -735,7 +774,7 @@ function formatRawResults(results: LintResults, lines: string[]): string {
   if (results.hasErrors) {
     lines.push("Some linters failed to run.");
   } else if (results.totalIssues > 0) {
-    lines.push("Issues found. Review and address as needed.");
+    lines.push(VERDICT.dirty);
   }
 
   lines.push("=".repeat(80));
@@ -751,54 +790,36 @@ function formatRawResults(results: LintResults, lines: string[]): string {
 export type {
   ConfigSource,
   IssueCatalog,
-  IssueCategory,
   IssueDef,
-  IssueImpact,
   ParsedPattern,
   PatternValue,
   ResolvedConfig,
   ResolvedPatternValue,
   ResolvedScope,
   ScopeConfig,
-  Severity,
-  ViolaConfig as ViolaFileConfig,
+  ViolaConfig,
 } from "./src/config/mod.ts";
 
 export {
-  // New API
-  Category,
-  // Legacy
-  compareImpact,
-  ConditionExpr,
   formatValidationErrors,
-  // Grammar reference helper
   grammar,
-  Impact,
-  IMPACT_ORDER,
-  impactValue,
   isGrammarRelationship,
   isGrammarRelationshipAction,
   isReportAction,
   loadConfig,
-  matchesFilePattern,
   matchesIssuePattern,
   plugin,
   report,
-  ReportLevel,
   resolveIssueSeverity,
   validateLinterConfig,
   viola,
   ViolaBuilder,
-  when,
 } from "./src/config/mod.ts";
 
 export type {
-  // New API
   AddInput,
   AddResult,
-  Condition,
   EvaluatedIssue,
-  EvaluationContext,
   GrammarRelationshipAction,
   GrammarRelationshipBuilder,
   LinterInput,
@@ -807,7 +828,7 @@ export type {
   ReportAction,
   Rule,
   RuleAction,
-  // Legacy
+  RunContext,
   ValidationError,
   ValidationResult,
   ViolaBuilderConfig,
@@ -820,7 +841,6 @@ export {
   // Rule evaluation
   countByLevel,
   createEvaluationContext,
-  evaluateCondition,
   evaluateIssue,
   evaluateIssues,
   filterReportableIssues,
@@ -829,42 +849,65 @@ export {
 } from "./src/config/mod.ts";
 
 // =============================================================================
-// Conditions (new condition API)
+// Conditions
 // =============================================================================
+//
+// One vocabulary, one comparison, one `when`, one evaluator. These used to be
+// exported twice under aliases (`whenCondition`, `ConditionImpact`,
+// `alwaysMatch`) because there were two of each and neither could be given the
+// plain name.
 
 export type {
-  Category as ConditionCategory,
-  Condition as ConditionInterface,
-  EnvConditionBuilder,
-  EvaluationContext as ConditionEvaluationContext,
+  CategoryCondition,
+  Comparison,
+  ComparisonData,
+  CompoundCondition,
+  Condition,
+  ConfidenceCondition,
+  ConstantCondition,
+  EnvCondition,
+  EnvConditions,
+  EvaluationContext,
+  FileCondition,
   FileContext,
-  Impact as ConditionImpact,
-  IssueConditions,
+  GrammarCondition,
+  ImpactCondition,
   IssueContext,
+  KindCondition,
+  LinterCondition,
+  NotCondition,
+  Ordered,
   WhenBuilder,
 } from "./src/conditions/mod.ts";
 
-export type { Comparison } from "./src/conditions/mod.ts";
-
 export {
-  // The when builder and condition helpers
-  always as alwaysCondition,
-  alwaysMatch,
+  always,
   atLeast,
   atMost,
   between,
+  Category,
+  compareImpact,
+  ConditionExpr,
   contains,
+  describe,
   endsWith,
   equals,
+  evaluateComparison,
+  evaluateCondition,
+  glob,
+  Impact,
+  IMPACT_ORDER,
+  impactValue,
   lessThan,
   matches,
   moreThan,
-  never as neverCondition,
-  neverMatch,
+  never,
   noneOf,
+  notEquals,
   oneOf,
+  ReportLevel,
   startsWith,
-  when as whenCondition,
+  when,
 } from "./src/conditions/mod.ts";
 
 // =============================================================================

@@ -6,9 +6,10 @@
 
 import { assertEquals } from "@std/assert";
 import type { Issue } from "../../data/types.ts";
-import { ConditionExpr, when } from "../conditions.ts";
-import { Category, Impact } from "../enums.ts";
-import { createEvaluationContext, evaluateCondition } from "../evaluator.ts";
+import { ConditionExpr, when } from "../../conditions/when.ts";
+import { Category, Impact } from "../../conditions/vocabulary.ts";
+import { evaluateCondition } from "../../conditions/evaluate.ts";
+import { createEvaluationContext } from "../evaluator.ts";
 import type { IssueCatalog } from "../types.ts";
 
 // =============================================================================
@@ -408,11 +409,11 @@ Deno.test("when.confidence.below() matches < value", () => {
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 59),
     true,
   );
-  // Note: below uses max which is exclusive (<), so 60 should not match
-  // But the implementation checks confidence > max, so 60 does NOT match
+  // The boundary. `below` used to accept it, which is what `atMost` means,
+  // and the test that pinned it carried a comment arguing with its own name.
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 60),
-    true, // confidence 60 is NOT below 60's max (implementation checks > max)
+    false,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 61),

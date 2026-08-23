@@ -13,7 +13,7 @@ import type { GrammarDefinition } from "../grammars/types.ts";
 import { BaseLinter } from "../linters/base.ts";
 import { report } from "./actions.ts";
 import { viola } from "./builder.ts";
-import { when } from "./conditions.ts";
+import { when } from "../conditions/when.ts";
 import { grammar } from "./grammar-ref.ts";
 
 // =============================================================================

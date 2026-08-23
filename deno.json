@@ -40,21 +40,7 @@
   "tasks": {
     "check": "deno check mod.ts",
     "test": "deno test --allow-env --allow-read --allow-write --allow-ffi src/",
-    "viola": "deno run -A scripts/viola.ts",
-    "viola:strict": "deno run -A scripts/viola.ts --strict",
-    "lint": "deno run -A --min-dep-age=0 jsr:@hiisi/viola-cli@^0.3.1 --project . --include ."
-  },
-  "viola": {
-    "plugins": [],
-    "include": [
-      "src"
-    ],
-    "**/*.ts": {
-      "type-location/*": "off",
-      "duplicate-strings/*": "warn",
-      "*>=major": "error",
-      "*>=minor": "warn"
-    }
+    "lint": "deno run -A --min-dep-age=0 ../viola-cli/mod.ts --project . --include mod.ts,src,viola.config.ts"
   },
   "minimumDependencyAge": 0
 }

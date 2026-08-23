@@ -90,24 +90,34 @@ export interface GrammarRelationshipBuilder {
  * ```
  */
 export function grammar(primaryAlias: string): GrammarRelationshipBuilder {
-  return {
-    overrides(secondary: string): Frozen<GrammarRelationshipAction> {
-      return deepFreeze({
-        type: "grammar-relationship" as const,
-        relationship: "overrides" as const,
-        primary: primaryAlias,
-        secondary,
-      });
-    },
+  /** The half of both relationships that is not the relationship. */
+  const relate = (
+    relationship: GrammarRelationshipAction["relationship"],
+    secondary: string,
+  ): Frozen<GrammarRelationshipAction> =>
+    deepFreeze({
+      type: "grammar-relationship" as const,
+      relationship,
+      primary: primaryAlias,
+      secondary,
+    });
 
-    supplements(secondary: string): Frozen<GrammarRelationshipAction> {
-      return deepFreeze({
-        type: "grammar-relationship" as const,
-        relationship: "supplements" as const,
-        primary: primaryAlias,
-        secondary,
-      });
-    },
+  return {
+    /**
+     * The primary wins and the secondary is dropped for that file.
+     *
+     * Use it where two grammars both match and one of them is simply the
+     * better answer, so the other has nothing left to say.
+     */
+    overrides: (secondary) => relate("overrides", secondary),
+
+    /**
+     * The secondary runs first and the primary fills whatever it left out.
+     *
+     * Both are kept, so this is the one to reach for when the grammars
+     * disagree about coverage rather than about correctness.
+     */
+    supplements: (secondary) => relate("supplements", secondary),
   };
 }
 

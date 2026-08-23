@@ -201,6 +201,7 @@ function extractFunctions(
       ? transforms.normalizeBody(body, grammar.meta.id)
       : defaultNormalizeBody(body);
 
+    const parentCapture = captures.get("function.parent");
     functions.push({
       name,
       location: nodeToLocation(node, filePath),
@@ -218,11 +219,52 @@ function extractFunctions(
       isDefaultExport: transforms?.isDefaultExport?.(node, captures) ??
         captures.has("function.default"),
       jsDoc: docCommentFor(node, grammar, sourceCode),
-      kind: "function" as const,
+      // A method is named for what it does to its own type, so `get` on a
+      // registry is not `get` on a cache. Without this every class with a
+      // `build` looked like a duplicate of every other one: the field existed
+      // on `FunctionInfo` all along and nothing ever set it.
+      kind: captures.has("function.method")
+        ? "method" as const
+        : "function" as const,
+      ...(parentCapture === undefined
+        ? {}
+        : { parent: parentCapture.text }),
     });
   }
 
-  return functions;
+  return foldFunctions(functions);
+}
+
+/**
+ * One declaration is one function, however many patterns matched it.
+ *
+ * A method inside a named class matches both the pattern that reaches it
+ * through the class and the one that matches a method anywhere, so it arrived
+ * twice: once knowing its owner and once not. Keyed on position, and the
+ * record that knows the owner wins, since the other one is the same method
+ * seen with less context.
+ */
+function foldFunctions(functions: readonly FunctionInfo[]): FunctionInfo[] {
+  const byKey = new Map<string, FunctionInfo>();
+
+  for (const next of functions) {
+    const key = `${next.location.line}\u0000${next.location.column ?? ""}` +
+      `\u0000${next.name}`;
+    const seen = byKey.get(key);
+    if (seen === undefined) {
+      byKey.set(key, next);
+      continue;
+    }
+    byKey.set(key, {
+      ...seen,
+      kind: seen.kind === "function" ? next.kind : seen.kind,
+      ...(seen.parent ?? next.parent) === undefined
+        ? {}
+        : { parent: seen.parent ?? next.parent },
+    });
+  }
+
+  return [...byKey.values()];
 }
 
 /**
@@ -332,7 +374,7 @@ function extractImports(
     }
   }
 
-  return imports;
+  return foldImports(imports);
 }
 
 /**
@@ -383,11 +425,30 @@ function extractExports(
       if (nameCapture) {
         const kindCapture = captures.get("export.kind");
         const fromCapture = captures.get("export.from");
+        const aliasCapture = captures.get("export.alias");
 
+        // A source module means this is a re-export, whatever the grammar
+        // chose to call it. Deriving it here rather than making every grammar
+        // remember an `@export.kind` capture is why it now happens at all: no
+        // grammar in this estate emits one, so `kind` was always "unknown",
+        // and `orphaned-code` tests for exactly "re-export" before counting a
+        // re-export as a use. It therefore never counted one, anywhere, and
+        // every layered module tree reported its whole public surface as dead.
+        const kind: ExportInfo["kind"] = kindCapture
+          ? kindCapture.text as ExportInfo["kind"]
+          : fromCapture
+          ? "re-export"
+          : "unknown";
+
+        // `export { foo as bar }` exports `bar`; `foo` is the local name. The
+        // query captures the local under `name:` and the exported name under
+        // `alias:`, so reading only the first got both backwards whenever an
+        // export was renamed.
         exports.push({
-          name: nameCapture.text,
+          name: aliasCapture ? aliasCapture.text : nameCapture.text,
+          ...(aliasCapture ? { localName: nameCapture.text } : {}),
           location: nodeToLocation(nameCapture.node, filePath),
-          kind: (kindCapture?.text as ExportInfo["kind"]) ?? "unknown",
+          kind,
           isTypeOnly: captures.has("export.type_only"),
           from: fromCapture ? stripQuotes(fromCapture.text) : undefined,
         });
@@ -395,7 +456,92 @@ function extractExports(
     }
   }
 
-  return exports;
+  return foldExports(exports);
+}
+
+/**
+ * One export statement is one export, however many query patterns matched it.
+ *
+ * A grammar's export patterns overlap by nature: `export type { T } from "./x"`
+ * is a named export, a type-only export and a re-export all at once, and a
+ * query written to catch each shape matches it three times. Each match then
+ * became its own record, carrying whichever fields its own pattern captured,
+ * so the same symbol appeared as three exports of which only one knew where it
+ * came from. Anything counting exports counted three, and `orphaned-code` saw
+ * both a used record and an unused one for the same name.
+ *
+ * Folding keeps the most specific answer for each field: a source makes it a
+ * re-export, a named kind beats "unknown", and type-only holds if any match
+ * said so.
+ */
+function foldExports(exports: readonly ExportInfo[]): ExportInfo[] {
+  const byKey = new Map<string, ExportInfo>();
+
+  for (const next of exports) {
+    // Keyed on position alone, because one export specifier is one export and
+    // the matches disagree about its name: the re-export pattern captures no
+    // alias, so `export { a as b } from "./y"` arrives as `b` from the named
+    // pattern and as `a` from the re-export one. Keying on the name kept both.
+    const key = `${next.location.line}\u0000${next.location.column ?? ""}`;
+    const seen = byKey.get(key);
+    if (seen === undefined) {
+      byKey.set(key, next);
+      continue;
+    }
+    // A record that knows a local name is the one that saw the alias, so its
+    // idea of what this export is called is the correct one.
+    const named = seen.localName !== undefined
+      ? seen
+      : next.localName !== undefined
+      ? next
+      : seen;
+    byKey.set(key, {
+      ...seen,
+      name: named.name,
+      ...(named.localName === undefined ? {} : { localName: named.localName }),
+      kind: seen.kind === "unknown" ? next.kind : seen.kind,
+      isTypeOnly: seen.isTypeOnly || next.isTypeOnly,
+      from: seen.from ?? next.from,
+    });
+  }
+
+  // A source seen on any match makes the whole export a re-export, even where
+  // the match that carried the source was not the one that set the kind.
+  return [...byKey.values()].map((e) =>
+    e.from !== undefined && e.kind === "unknown" ? { ...e, kind: "re-export" } : e
+  );
+}
+
+/**
+ * One import specifier is one import, however many patterns matched it.
+ *
+ * The same overlap as `foldExports`: a type-only named import is a named
+ * import and a type-only import and an import-with-a-source all at once, and
+ * a query written to catch each shape matches it three times. Anything
+ * counting imports counted three.
+ *
+ * Keyed on name and position together, because one statement legitimately
+ * carries several names at distinct positions and those are distinct imports.
+ */
+function foldImports(imports: readonly ImportInfo[]): ImportInfo[] {
+  const byKey = new Map<string, ImportInfo>();
+
+  for (const next of imports) {
+    const key = `${next.name}\u0000${next.from}\u0000${next.location.line}` +
+      `\u0000${next.location.column ?? ""}`;
+    const seen = byKey.get(key);
+    if (seen === undefined) {
+      byKey.set(key, next);
+      continue;
+    }
+    byKey.set(key, {
+      ...seen,
+      isTypeOnly: seen.isTypeOnly || next.isTypeOnly,
+      isNamespace: seen.isNamespace || next.isNamespace,
+    });
+  }
+
+  return [...byKey.values()];
 }
 
 /**
@@ -518,13 +664,24 @@ function inTypePosition(node: SyntaxNode | undefined): boolean {
   return false;
 }
 
+/**
+ * Run every query a grammar declares against one parsed file.
+ *
+ * Each category is extracted on its own and a failure in one does not stop
+ * the rest, so a grammar with a broken types query still yields its exports.
+ * What comes back is everything about a file that the parse can answer;
+ * the caller supplies the rest of `FileInfo`, which is filesystem facts.
+ */
 export function extractFileData(
   tree: Tree,
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
   sourceCode: string,
-): Omit<FileInfo, "path" | "extension" | "lineCount" | "content"> {
+): Omit<
+  FileInfo,
+  "path" | "extension" | "grammarId" | "lineCount" | "content"
+> {
   // Each extraction is wrapped in try-catch so a bad query in one category
   // (e.g., types) doesn't prevent extraction of others (e.g., exports).
   let functions: FunctionInfo[] = [];
@@ -580,6 +737,7 @@ export function extractCompleteFileInfo(
   filePath: string,
   extension: string,
   sourceCode: string,
+  grammarId: string = "",
 ): FileInfo {
   const extracted = extractFileData(
     tree,
@@ -590,10 +748,11 @@ export function extractCompleteFileInfo(
   );
 
   return {
+    ...extracted,
     path: filePath,
     extension,
+    grammarId,
     lineCount: sourceCode.split("\n").length,
     content: sourceCode,
-    ...extracted,
   };
 }

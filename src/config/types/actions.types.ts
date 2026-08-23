@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { ReportLevel } from "../enums.ts";
+import type { ReportLevel } from "../../conditions/vocabulary.ts";
 
 // =============================================================================
 // Action Types

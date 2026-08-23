@@ -83,3 +83,5 @@ export {
   // Validation
   isFrozen,
 } from "@hiisi/flash-freeze";
+
+export { globToRegex, matchesAnyGlob, matchesGlob } from "./glob.ts";

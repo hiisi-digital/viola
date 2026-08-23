@@ -11,8 +11,8 @@ import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
 import { plugin, viola, type ViolaPlugin } from "../builder.ts";
-import { when } from "../conditions.ts";
-import { Category, Impact, ReportLevel } from "../enums.ts";
+import { when } from "../../conditions/when.ts";
+import { Category, Impact, ReportLevel } from "../../conditions/vocabulary.ts";
 import {
   countByLevel,
   type EvaluatedIssue,

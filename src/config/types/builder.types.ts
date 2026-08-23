@@ -11,7 +11,7 @@ import type { GrammarRegistry } from "../../grammars/registry.ts";
 import type { GrammarDefinition } from "../../grammars/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import type { GrammarRelationshipAction, RuleAction } from "./actions.types.ts";
-import type { Condition } from "./conditions.types.ts";
+import type { Condition } from "../../conditions/types.ts";
 
 // =============================================================================
 // Builder Types

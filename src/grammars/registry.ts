@@ -17,13 +17,17 @@ import type { GrammarDefinition, RegisteredGrammar } from "./types.ts";
 /**
  * A registered grammar entry with its resolved alias.
  */
-export interface GrammarEntry {
-  /** The grammar definition */
-  readonly definition: GrammarDefinition;
-  /** The alias used to reference this grammar (defaults to grammar id) */
+export interface GrammarEntry extends Omit<RegisteredGrammar, "alias"> {
+  /**
+   * The alias this grammar is referenced by.
+   *
+   * Required here and optional on `RegisteredGrammar`, which is the whole
+   * difference between the two: a registration may leave the alias out and an
+   * entry is what it becomes once the registry has filled it in with the
+   * grammar's own id. Written out in full it read as a near-copy, which it
+   * was; stating the relationship says which of the two is the resolved one.
+   */
   readonly alias: string;
-  /** Pattern overrides from registration */
-  readonly matchOverrides?: RegisteredGrammar["matchOverrides"];
 }
 
 /**

@@ -522,6 +522,32 @@ export async function loadPlugins(
 // =============================================================================
 
 /**
+ * Resolve a name against a map keyed by qualified name.
+ *
+ * A qualified name is a direct lookup. A short one is searched for, and is
+ * refused where more than one plugin offers it, since guessing which was meant
+ * is how a config silently gets the wrong lint set.
+ *
+ * Bundles and presets resolve identically and were written out twice.
+ */
+function resolveByName<T extends { readonly name: string }>(
+  name: string,
+  known: ReadonlyMap<string, T>,
+  collisions: readonly string[],
+): T | null {
+  if (name.includes("/")) {
+    return known.get(name) ?? null;
+  }
+  if (collisions.includes(name)) {
+    return null;
+  }
+  for (const candidate of known.values()) {
+    if (candidate.name === name) return candidate;
+  }
+  return null;
+}
+
+/**
  * Resolve a bundle name to a DiscoveredBundle.
  *
  * @param name - Bundle name (short or qualified)
@@ -532,24 +558,7 @@ export function resolveBundle(
   name: string,
   discovery: PluginsDiscoveryResult,
 ): DiscoveredBundle | null {
-  // Check if it's a qualified name
-  if (name.includes("/")) {
-    return discovery.allBundles.get(name) ?? null;
-  }
-
-  // Check for collision
-  if (discovery.bundleCollisions.includes(name)) {
-    return null; // Ambiguous, caller must use qualified name
-  }
-
-  // Find the bundle by short name
-  for (const [fullName, bundle] of discovery.allBundles) {
-    if (bundle.name === name) {
-      return bundle;
-    }
-  }
-
-  return null;
+  return resolveByName(name, discovery.allBundles, discovery.bundleCollisions);
 }
 
 /**
@@ -563,24 +572,7 @@ export function resolvePreset(
   name: string,
   discovery: PluginsDiscoveryResult,
 ): DiscoveredPreset | null {
-  // Check if it's a qualified name
-  if (name.includes("/")) {
-    return discovery.allPresets.get(name) ?? null;
-  }
-
-  // Check for collision
-  if (discovery.presetCollisions.includes(name)) {
-    return null; // Ambiguous, caller must use qualified name
-  }
-
-  // Find the preset by short name
-  for (const [fullName, preset] of discovery.allPresets) {
-    if (preset.name === name) {
-      return preset;
-    }
-  }
-
-  return null;
+  return resolveByName(name, discovery.allPresets, discovery.presetCollisions);
 }
 
 // =============================================================================

@@ -1,37 +1,45 @@
 /**
  * Configuration loader.
  *
- * Loads viola configuration from viola.config.ts or deno.json.
+ * Loads viola configuration from viola.config.ts, and from nowhere else.
  */
 
 import { resolve } from "@std/path";
+import {
+  type Category,
+  type Impact,
+  ReportLevel,
+  type ReportLevelName,
+} from "../conditions/vocabulary.ts";
 import type {
   ViolaBuilderConfig,
   ViolaBuilderConfigExtended,
 } from "./builder.ts";
-import {
-  matchesFilePattern,
-  matchesIssuePattern,
-  parsePattern,
-  resolvePatternValue,
-} from "./pattern.ts";
+import { matchesIssuePattern } from "./pattern.ts";
+import { matchesGlob } from "../utils/glob.ts";
 import type {
   ConfigSource,
-  IssueCategory,
-  IssueImpact,
   ResolvedConfig,
   ResolvedPatternValue,
-  ResolvedScope,
-  ScopeConfig,
-  Severity,
-  ViolaConfig,
 } from "./types.ts";
+
+/** The method that says an object is a builder rather than a plain config. */
+const BUILDER_MARKER = "build";
+
+/** The field that says an object is a plugin rather than a builder. */
+const PLUGIN_MARKER = "linters";
 
 const DEFAULT_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"];
 const DEFAULT_EXCLUDE = ["node_modules", ".git", "dist", "build", "coverage"];
 
 /**
- * Load configuration, preferring viola.config.ts over deno.json.
+ * Load configuration.
+ *
+ * `viola.config.ts` is the only config, so a project without one gets the
+ * defaults rather than a second format's answer. Reading a `viola` block out
+ * of `deno.json` used to be the fallback and is gone: it was a second way to
+ * say the same thing, it could not express a rule or a condition, and a
+ * project carrying both had no way to tell which one was in force.
  */
 export async function loadConfig(
   dir: string,
@@ -76,23 +84,30 @@ export async function loadConfig(
     return { config: resolved, sources, builderConfig };
   }
 
-  // Fall back to deno.json (deprecated)
-  const denoPath = resolve(dir, "deno.json");
-  const violaConfig = await loadDenoConfig(denoPath);
-
-  if (violaConfig) {
-    sources.push({ path: denoPath, type: "deno.json" });
-
-    if (options.verbose) {
-      console.log("Config sources:");
-      console.log(
-        `  - ${denoPath} (deno.json) [deprecated: use viola.config.ts]`,
-      );
-    }
+  if (options.verbose) {
+    console.log(`[loader] No config at ${configTsPath}, using defaults`);
   }
 
-  const resolved = resolveConfig(violaConfig ?? {});
-  return { config: resolved, sources };
+  return { config: defaultConfig(), sources };
+}
+
+/**
+ * What a project without a config gets.
+ *
+ * Every linter on, nothing excluded beyond the usual build output. It reports
+ * rather than refuses, since a project that has not written a config has not
+ * said what it wants refused.
+ */
+function defaultConfig(): ResolvedConfig {
+  return {
+    plugins: [],
+    inherit: [],
+    linterConfig: {},
+    scopes: [],
+    include: [],
+    exclude: [...DEFAULT_EXCLUDE],
+    extensions: [...DEFAULT_EXTENSIONS],
+  };
 }
 
 /**
@@ -108,7 +123,7 @@ function isViolaBuilder(obj: unknown): boolean {
     "_linters" in obj &&
     "_rules" in obj &&
     "_settings" in obj &&
-    "build" in obj &&
+    BUILDER_MARKER in obj &&
     typeof (obj as unknown as { build: unknown }).build === "function"
   );
 }
@@ -154,7 +169,7 @@ async function processModuleDefault(
 
   // If it's already a built config object
   if (
-    typeof defaultExport === "object" && "linters" in defaultExport &&
+    typeof defaultExport === "object" && PLUGIN_MARKER in defaultExport &&
     "rules" in defaultExport
   ) {
     if (verbose) {
@@ -227,78 +242,10 @@ export function resolveBuilderConfig(
   };
 }
 
-/**
- * Load viola config from deno.json.
- */
-async function loadDenoConfig(path: string): Promise<ViolaConfig | null> {
-  try {
-    const text = await Deno.readTextFile(path);
-    const deno = JSON.parse(text) as { viola?: ViolaConfig };
-    return deno.viola ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/** Known non-scope fields in viola config */
-const RESERVED_CONFIG_FIELDS = [
-  "plugins",
-  "inherit",
-  "config",
-  "include",
-  "exclude",
-];
-
-/**
- * Resolve raw config into parsed patterns.
- */
-function resolveConfig(config: ViolaConfig): ResolvedConfig {
-  const scopes: ResolvedScope[] = [];
-  const plugins: string[] = config.plugins ?? [];
-  const inherit: string[] = config.inherit ?? [];
-  const linterConfig: Record<string, Record<string, unknown>> = config.config ??
-    {};
-
-  for (const [key, value] of Object.entries(config)) {
-    // Skip known non-scope fields
-    if (RESERVED_CONFIG_FIELDS.includes(key)) {
-      continue;
-    }
-
-    // Skip non-object entries (shouldn't happen with proper config)
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
-      continue;
-    }
-
-    // Check if this looks like a scope config (has pattern-like keys)
-    // vs a linter config object (which would have been in the config field)
-    const scopeConfig = value as ScopeConfig;
-    const patterns: ResolvedScope["patterns"] = [];
-
-    for (const [patternStr, patternValue] of Object.entries(scopeConfig)) {
-      const pattern = parsePattern(patternStr);
-      if (!pattern) continue;
-
-      const resolvedValue = resolvePatternValue(patternValue);
-      patterns.push({ pattern, value: resolvedValue });
-    }
-
-    scopes.push({ filePattern: key, patterns });
-  }
-
-  return {
-    plugins,
-    inherit,
-    linterConfig,
-    scopes,
-    include: [],
-    exclude: [...DEFAULT_EXCLUDE],
-    extensions: [...DEFAULT_EXTENSIONS],
-  };
-}
-
-// Re-export shared pattern utilities for backwards compatibility
-export { matchesFilePattern, matchesIssuePattern } from "./pattern.ts";
+// Re-exported because a config's own pattern matching is what a consumer
+// reaching for `resolveIssueSeverity` needs alongside it. Glob matching is
+// not here: it lives in `src/utils/glob.ts`, which is the only copy.
+export { matchesIssuePattern } from "./pattern.ts";
 
 /**
  * Resolve the severity for an issue given a config and file path.
@@ -307,15 +254,15 @@ export function resolveIssueSeverity(
   config: ResolvedConfig,
   filePath: string,
   issueKind: string,
-  issueCategory: IssueCategory,
-  issueImpact: IssueImpact,
+  issueCategory: Category,
+  issueImpact: Impact,
   confidence: number,
-): Severity | null {
+): ReportLevelName | null {
   let result: ResolvedPatternValue | null = null;
 
   // Find matching scopes
   for (const scope of config.scopes) {
-    if (!matchesFilePattern(filePath, scope.filePattern)) {
+    if (!matchesGlob(filePath, scope.filePattern)) {
       continue;
     }
 
@@ -329,7 +276,7 @@ export function resolveIssueSeverity(
 
   // No match - default to warn
   if (!result) {
-    return "warn";
+    return ReportLevel.Warn;
   }
 
   // Check confidence threshold

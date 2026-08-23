@@ -10,12 +10,11 @@
  * @module
  */
 
+import type { IssueCatalog, IssueDef } from "../config/types.ts";
 import type {
-  IssueCatalog,
-  IssueCategory,
-  IssueDef,
-  IssueImpact,
-} from "../config/types.ts";
+  CategoryName,
+  ImpactName,
+} from "../conditions/vocabulary.ts";
 import type {
   CodebaseData,
   Issue,
@@ -126,14 +125,14 @@ export abstract class BaseLinter {
   /**
    * Get category for an issue kind.
    */
-  getCategory(kind: string): IssueCategory {
+  getCategory(kind: string): CategoryName {
     return this.catalog[kind]?.category ?? "consistency";
   }
 
   /**
    * Get impact for an issue kind.
    */
-  getImpact(kind: string): IssueImpact {
+  getImpact(kind: string): ImpactName {
     return this.catalog[kind]?.impact ?? "minor";
   }
 

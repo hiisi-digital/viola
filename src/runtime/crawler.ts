@@ -17,15 +17,82 @@ import type {
   CodebaseData,
   FileInfo,
   SchemaInfo,
-  ViolaConfig,
+  CrawlConfig,
 } from "../data/types.ts";
 import {
   createParser,
   extractCompleteFileInfo,
   type GrammarRegistry,
+  type GrammarRelationshipRule,
+  type GrammarRole,
+  GrammarResolver,
   initTreeSitter,
   loadGrammar,
+  mergeExtractionResults,
 } from "../grammars/mod.ts";
+
+/**
+ * Fold several grammars' readings of one file into one.
+ *
+ * The first extraction is the file itself: its path, its size, its content,
+ * and the grammar that is answering for it. Everything a grammar found is
+ * merged by position, so a supplement contributes what the grammar it
+ * supplements did not find at that line and never a second copy of what it
+ * did. That rule lives in `mergeExtractionResults` because the resolver is
+ * what knows what a role means.
+ */
+function mergeFileInfo(
+  extractions: ReadonlyArray<{ data: FileInfo; role: GrammarRole }>,
+): FileInfo {
+  const first = extractions[0]!.data;
+  if (extractions.length === 1) return first;
+
+  // Spelled out per field rather than folded over a key union, because each
+  // field carries a different item type and `mergeExtractionResults` is
+  // generic over one of them at a time.
+  const roles = extractions.map(({ role }) => role);
+  const items = <T>(pick: (data: FileInfo) => readonly T[]) =>
+    extractions.map(({ data }, i) => ({ items: pick(data), role: roles[i]! }));
+
+  return {
+    ...first,
+    functions: mergeExtractionResults(items((d) => d.functions)),
+    types: mergeExtractionResults(items((d) => d.types)),
+    strings: mergeExtractionResults(items((d) => d.strings)),
+    exports: mergeExtractionResults(items((d) => d.exports)),
+    imports: mergeExtractionResults(items((d) => d.imports)),
+  };
+}
+
+/** A quoted string in a type body, single or double quoted. */
+const QUOTED = /(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)')/g;
+
+/**
+ * Every string the codebase declares as part of a type.
+ *
+ * Read off the raw body of each declaration, which is where a string-literal
+ * union keeps its members and a string enum keeps its values. Reading the text
+ * rather than a parse of it is deliberate: a union member, an enum value, a
+ * literal type and an indexed access all spell the string the same way, and
+ * the question here is only whether the codebase named it, not what shape
+ * named it.
+ *
+ * The cost of being wrong is one direction only. A string wrongly included is
+ * one duplicate-string finding not reported; a string wrongly excluded cannot
+ * happen, since nothing is added that the source did not write inside a type.
+ */
+function declaredVocabulary(
+  types: readonly { readonly body: string }[],
+): ReadonlySet<string> {
+  const vocabulary = new Set<string>();
+  for (const type of types) {
+    for (const match of type.body.matchAll(QUOTED)) {
+      const value = match[1] ?? match[2];
+      if (value !== undefined && value !== "") vocabulary.add(value);
+    }
+  }
+  return vocabulary;
+}
 
 // =============================================================================
 // Schema Extraction
@@ -67,7 +134,7 @@ async function extractSchemaData(filePath: string): Promise<SchemaInfo | null> {
 /**
  * Default configuration for the crawler.
  */
-export const DEFAULT_CONFIG: Partial<ViolaConfig> = {
+export const DEFAULT_CONFIG: Partial<CrawlConfig> = {
   extensions: [".ts", ".tsx", ".js", ".jsx", ".mjs", ".mts"],
   exclude: [
     /node_modules/,
@@ -94,8 +161,10 @@ export const DEFAULT_CONFIG: Partial<ViolaConfig> = {
  * @throws Error if no grammars are registered
  */
 export async function crawlCodebase(
-  config: ViolaConfig,
+  config: CrawlConfig,
   grammarRegistry: GrammarRegistry,
+  grammarRules: readonly GrammarRelationshipRule[] = [],
+  run: { env?: Readonly<Record<string, string | undefined>>; projectRoot?: string } = {},
 ): Promise<Readonly<CodebaseData>> {
   // Validate grammar registration
   if (grammarRegistry.size === 0) {
@@ -105,6 +174,14 @@ export async function crawlCodebase(
         "Register grammars using builder.add(grammar).as(alias) in your config.",
     );
   }
+
+  // What decides which of several matching grammars run, and in what order.
+  // Without the rules this is every match as a primary, which is what the
+  // registry alone would have said, so a project with no relationships pays
+  // nothing for this.
+  const resolver = new GrammarResolver(grammarRegistry, grammarRules);
+  const env = run.env ?? {};
+  const projectRoot = run.projectRoot ?? config.projectRoot;
 
   // Build extension filter from grammar registry
   const baseExtensions = config.extensions.length > 0
@@ -154,13 +231,34 @@ export async function crawlCodebase(
         try {
           const content = await Deno.readTextFile(entry.path);
 
-          // Find matching grammar for this file
-          const matchingGrammars = grammarRegistry.findMatchingGrammars(
-            relativePath,
-          );
+          const ext = extname(entry.path);
 
-          if (matchingGrammars.length === 0) {
-            // No grammar matches this file: skip it
+          // Which grammars run for this file, and in what role. An override
+          // suppresses what it overrides; a supplement runs after the grammar
+          // it supplements and fills in what that one did not find.
+          const resolution = resolver.resolve(relativePath, {
+            file: { path: relativePath, extension: ext, grammarId: "" },
+            env,
+            projectRoot,
+          });
+
+          if (config.verbose && resolution.grammars.length > 0) {
+            // Which grammar answered, and what it suppressed. Debugging a
+            // grammar relationship without this means guessing, and it is the
+            // only place the resolution is observable from outside.
+            const ran = resolution.grammars
+              .map(({ entry: g, role }) => `${g.alias}=${role}`)
+              .join(" ");
+            const gone = resolution.suppressed
+              .map(({ entry: g }) => g.alias)
+              .join(" ");
+            console.log(
+              `grammars for ${relativePath}: ${ran}` +
+                (gone === "" ? "" : ` (suppressed ${gone})`),
+            );
+          }
+
+          if (resolution.grammars.length === 0) {
             skippedCount++;
             if (config.verbose) {
               console.warn(`No grammar matches ${relativePath}, skipping`);
@@ -168,36 +266,54 @@ export async function crawlCodebase(
             continue;
           }
 
-          // Tree-sitter extraction
-          const grammarEntry = matchingGrammars[0]!;
-          const ext = extname(entry.path);
+          const extractions: Array<
+            { data: FileInfo; role: GrammarRole }
+          > = [];
+          for (const { entry: grammarEntry, role } of resolution.grammars) {
+            try {
+              const language = await loadGrammar(
+                grammarEntry.definition.grammar,
+              );
+              const parser = createParser(
+                grammarEntry.definition.grammar,
+                language,
+              );
+              const tree = parser.parse(content);
+              extractions.push({
+                data: extractCompleteFileInfo(
+                  tree,
+                  language,
+                  grammarEntry.definition,
+                  relativePath,
+                  ext,
+                  content,
+                  grammarEntry.alias,
+                ),
+                role,
+              });
+            } catch (grammarErr) {
+              // One grammar failing does not lose the others. That is the
+              // point of resolving several: a supplement can still answer.
+              if (config.verbose) {
+                console.error(
+                  `Grammar ${grammarEntry.alias} failed on ${entry.path}:`,
+                  grammarErr,
+                );
+              }
+            }
+          }
 
-          try {
-            const language = await loadGrammar(grammarEntry.definition.grammar);
-            const parser = createParser(
-              grammarEntry.definition.grammar,
-              language,
-            );
-            const tree = parser.parse(content);
-            const fileData = extractCompleteFileInfo(
-              tree,
-              language,
-              grammarEntry.definition,
-              relativePath,
-              ext,
-              content,
-            );
-            files.push(fileData);
-          } catch (grammarErr) {
-            // Grammar extraction failed: skip this file
+          if (extractions.length === 0) {
             skippedCount++;
             if (config.verbose) {
               console.error(
-                `Grammar extraction failed for ${entry.path}, skipping:`,
-                grammarErr,
+                `Every grammar failed on ${entry.path}, skipping`,
               );
             }
+            continue;
           }
+
+          files.push(mergeFileInfo(extractions));
         } catch (err) {
           if (config.verbose) {
             console.error(`Error reading ${entry.path}:`, err);
@@ -256,6 +372,7 @@ export async function crawlCodebase(
     allStrings,
     allExports,
     allImports,
+    literalVocabulary: declaredVocabulary(allTypes),
   };
 
   // Freeze everything before returning

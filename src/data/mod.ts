@@ -35,5 +35,5 @@ export type {
   // Types/Interfaces
   TypeField,
   TypeInfo,
-  ViolaConfig,
+  CrawlConfig,
 } from "./types.ts";

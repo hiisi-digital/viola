@@ -6,7 +6,7 @@
 
 import { assertEquals } from "@std/assert";
 import { isReportAction, report } from "../actions.ts";
-import { ReportLevel } from "../enums.ts";
+import { ReportLevel } from "../../conditions/vocabulary.ts";
 
 // =============================================================================
 // Report Action Creation Tests

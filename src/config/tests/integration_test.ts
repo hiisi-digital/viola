@@ -20,8 +20,8 @@ import {
   type ViolaBuilderConfig,
   type ViolaPlugin,
 } from "../builder.ts";
-import { when } from "../conditions.ts";
-import { Category, Impact, ReportLevel } from "../enums.ts";
+import { when } from "../../conditions/when.ts";
+import { Category, Impact, ReportLevel } from "../../conditions/vocabulary.ts";
 import {
   countByLevel,
   type EvaluatedIssue,

@@ -1,221 +1,184 @@
 /**
- * Condition Types
+ * What a condition is, and what it is evaluated against.
  *
- * Core types for the condition evaluation system.
- * Conditions are evaluated at runtime against an EvaluationContext
- * to determine whether rules should apply.
+ * One shape. There used to be two: a data union under `src/config/` that the
+ * runtime evaluated, and an interface with `evaluate`/`and`/`or` methods here
+ * that nothing ever ran. They disagreed about `Impact`, about `Category`, and
+ * about what an `EvaluationContext` carries, so a grammar rule written against
+ * one could not be handed to the other. That is why `grammar("ts")
+ * .overrides("js")` was documented and did nothing.
+ *
+ * A condition is data, like a comparison, and for the same reasons: the config
+ * is frozen, an explanation has to be able to print why a rule fired, and a
+ * closure cannot be either of those.
+ *
+ * Every condition that asks about a value asks it through a `ComparisonData`,
+ * so there is one place that knows how to compare and one place that knows how
+ * to reach into a context.
  *
  * @module
  */
 
-import type { Comparison } from "./comparisons.ts";
+import type { ComparisonData } from "./comparison.ts";
+import type { Category, Impact } from "./vocabulary.ts";
+
+// =============================================================================
+// What a condition can be asked about
+// =============================================================================
 
 /**
- * Impact levels for issues.
- * Ordered from lowest to highest severity.
- */
-export enum Impact {
-  Trivial = 0,
-  Minor = 1,
-  Moderate = 2,
-  Major = 3,
-  Critical = 4,
-}
-
-/**
- * Categories for issues.
- */
-export enum Category {
-  /** Code correctness issues */
-  Correctness = "correctness",
-  /** Security vulnerabilities */
-  Security = "security",
-  /** Performance issues */
-  Performance = "performance",
-  /** Code maintainability */
-  Maintainability = "maintainability",
-  /** Code style/formatting */
-  Style = "style",
-  /** Documentation issues */
-  Documentation = "documentation",
-  /** Deprecated code usage */
-  Deprecation = "deprecation",
-}
-
-/**
- * Information about the current file being analyzed.
+ * The file a condition is being evaluated for.
  */
 export interface FileContext {
-  /** File path relative to project root */
+  /** Path relative to the project root */
   readonly path: string;
-  /** File extension (e.g., ".ts", ".sh") */
+  /** Extension including the dot, so `.ts` rather than `ts` */
   readonly extension: string;
-  /** Grammar ID that parsed this file */
+  /** Which grammar parsed it, empty when nothing has yet */
   readonly grammarId: string;
 }
 
 /**
- * Information about an issue being evaluated.
+ * The issue a condition is being evaluated for, flattened.
+ *
+ * Impact and category come from the reporting linter's catalog rather than
+ * from the issue, and a condition should not have to know that. Whoever builds
+ * this context does the lookup once.
  */
 export interface IssueContext {
-  /** ID of the linter/grammar that reported this issue */
+  /** The linter or grammar that reported it */
   readonly by: string;
-  /** Issue kind (e.g., "duplicate", "missing-docs") */
+  /** Full kind, `linter-id/issue-name` */
   readonly kind: string;
-  /** Impact level */
-  readonly impact: Impact;
-  /** Confidence score (0-100) */
+  /** The issue name alone, without the linter id */
+  readonly name: string;
+  /** From the catalog, absent when the catalog has no entry for this kind */
+  readonly impact?: Impact;
+  /** From the catalog, absent when the catalog has no entry for this kind */
+  readonly category?: Category;
+  /** How sure the linter is, 0 to 100 */
   readonly confidence: number;
-  /** Issue category */
-  readonly category: Category;
-  /** Line number where issue was found */
+  /** Where it was found */
   readonly line: number;
-  /** Column number where issue was found */
+  /** Where it was found, when the linter knows */
   readonly column?: number;
 }
 
 /**
- * Context available when evaluating conditions.
- * This is populated at runtime based on what's being evaluated.
+ * Everything a condition may look at.
+ *
+ * `file` and `issue` are both optional because a condition is evaluated in
+ * more than one situation: which grammars run for a file has no issue yet, and
+ * classifying an issue always has both. A condition that asks about something
+ * absent is false rather than an error, so a rule cannot accidentally widen
+ * because it was evaluated too early.
  */
 export interface EvaluationContext {
-  /** Current file context (when evaluating file-level conditions) */
   readonly file?: FileContext;
-  /** Current issue context (when evaluating issue-level conditions) */
   readonly issue?: IssueContext;
-  /** Environment variables */
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** Project root directory */
   readonly projectRoot: string;
 }
 
-/**
- * A condition that can be evaluated against a context.
- * Conditions are composable with .and().
- */
-export interface Condition {
-  /**
-   * Evaluate this condition against a context.
-   */
-  evaluate(context: EvaluationContext): boolean;
+// =============================================================================
+// The conditions
+// =============================================================================
 
-  /**
-   * Create a new condition that requires both this AND the other to pass.
-   *
-   * @example
-   * when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
-   */
-  and(other: Condition): Condition;
+/** How severe the issue is, per the reporting linter's catalog. */
+export interface ImpactCondition {
+  readonly type: "impact";
+  readonly comparison: ComparisonData<Impact>;
+}
 
-  /**
-   * Create a new condition that requires either this OR the other to pass.
-   *
-   * @example
-   * when.in("src/**").or(when.in("lib/**"))
-   */
-  or(other: Condition): Condition;
+/** What kind of problem it is, per the catalog. */
+export interface CategoryCondition {
+  readonly type: "category";
+  readonly comparison: ComparisonData<Category>;
+}
 
-  /**
-   * Negate this condition.
-   *
-   * @example
-   * when.in("**\/tests/**").not()
-   */
-  not(): Condition;
+/** How sure the linter was. */
+export interface ConfidenceCondition {
+  readonly type: "confidence";
+  readonly comparison: ComparisonData<number>;
+}
+
+/** Which linter reported it. Matched against the linter id and the full kind. */
+export interface LinterCondition {
+  readonly type: "linter";
+  readonly comparison: ComparisonData<string>;
+}
+
+/** Which issue it is, by name within its linter. */
+export interface KindCondition {
+  readonly type: "kind";
+  readonly comparison: ComparisonData<string>;
 }
 
 /**
- * Builder for environment variable conditions.
+ * Which file.
+ *
+ * Reads the file context when there is one and falls back to the issue's own
+ * location, so `when.in("src/**")` means the same thing whether it is deciding
+ * which grammars run or how to classify a finding.
  */
-export interface EnvConditionBuilder {
-  /**
-   * Check if the environment variable exists (is set).
-   *
-   * @example
-   * when.env("CI").exists()
-   */
-  exists(): Condition;
+export interface FileCondition {
+  readonly type: "file";
+  readonly comparison: ComparisonData<string>;
+}
 
-  /**
-   * Check the environment variable's value using a comparison.
-   *
-   * @example
-   * when.env("NODE_ENV").is(equals("production"))
-   * when.env("TIMEOUT").is(atLeast(30))
-   */
-  is(comparison: Comparison<string | number>): Condition;
+/** Which grammar parsed the file. */
+export interface GrammarCondition {
+  readonly type: "grammar";
+  readonly comparison: ComparisonData<string>;
 }
 
 /**
- * Namespace for issue-related conditions.
+ * An environment variable.
+ *
+ * With no comparison the condition asks only whether the variable is set,
+ * which is what `when.env("CI").exists()` means.
  */
-export interface IssueConditions {
-  /**
-   * Match issues by their source (linter or grammar ID).
-   *
-   * @example
-   * when.issue.by(similarFunctions)
-   * when.issue.by("similar-functions")
-   */
-  by(source: { meta: { id: string } } | { id: string } | string): Condition;
-
-  /**
-   * Match issues by kind.
-   *
-   * @example
-   * when.issue.kind("duplicate")
-   */
-  kind(issueKind: string): Condition;
-
-  /**
-   * Match issues by impact level.
-   *
-   * @example
-   * when.issue.impact(atLeast(Impact.Major))
-   */
-  impact(comparison: Comparison<Impact>): Condition;
-
-  /**
-   * Match issues by confidence level (0-100).
-   *
-   * @example
-   * when.issue.confidence(atLeast(80))
-   */
-  confidence(comparison: Comparison<number>): Condition;
-
-  /**
-   * Match issues by category.
-   *
-   * @example
-   * when.issue.category(equals(Category.Security))
-   */
-  category(comparison: Comparison<Category>): Condition;
+export interface EnvCondition {
+  readonly type: "env";
+  readonly name: string;
+  readonly comparison?: ComparisonData<string>;
 }
 
 /**
- * The `when` condition builder interface.
+ * Holds for everything, or for nothing.
+ *
+ * Its own arm rather than something contrived out of another condition, so a
+ * reader of a config's data sees what was meant.
  */
-export interface WhenBuilder {
-  /**
-   * Match files by glob patterns.
-   *
-   * @example
-   * when.in("*.ts", "*.tsx")
-   * when.in("**\/tests/**")
-   */
-  in(...patterns: string[]): Condition;
-
-  /**
-   * Issue-related conditions.
-   */
-  readonly issue: IssueConditions;
-
-  /**
-   * Environment variable conditions.
-   *
-   * @example
-   * when.env("CI").exists()
-   * when.env("NODE_ENV").is(equals("production"))
-   */
-  env(varName: string): EnvConditionBuilder;
+export interface ConstantCondition {
+  readonly type: "always" | "never";
 }
+
+/** Several conditions, all of them or any of them. */
+export interface CompoundCondition {
+  readonly type: "compound";
+  readonly operator: "and" | "or";
+  readonly conditions: readonly Condition[];
+}
+
+/** The opposite of a condition. */
+export interface NotCondition {
+  readonly type: "not";
+  readonly condition: Condition;
+}
+
+/**
+ * A condition.
+ */
+export type Condition =
+  | ImpactCondition
+  | CategoryCondition
+  | ConfidenceCondition
+  | LinterCondition
+  | KindCondition
+  | FileCondition
+  | GrammarCondition
+  | EnvCondition
+  | ConstantCondition
+  | CompoundCondition
+  | NotCondition;

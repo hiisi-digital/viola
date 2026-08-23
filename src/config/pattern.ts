@@ -7,9 +7,17 @@
  * @module
  */
 
+import {
+  Category,
+  type CategoryName,
+  Impact,
+  IMPACT_ORDER,
+  type ImpactName,
+} from "../conditions/vocabulary.ts";
+
+import { matchesGlob } from "../utils/glob.ts";
+
 import type {
-  IssueCategory,
-  IssueImpact,
   ParsedPattern,
   PatternValue,
   ResolvedPatternValue,
@@ -19,88 +27,23 @@ import type {
 // Constants
 // =============================================================================
 
-/** Valid issue categories */
-const CATEGORIES: readonly IssueCategory[] = [
-  "correctness",
-  "maintainability",
-  "consistency",
-  "performance",
-  "style",
-] as const;
+/**
+ * Every category a pattern may name.
+ *
+ * Read off the enum rather than listed again, so a category added to the
+ * vocabulary is nameable in a pattern without anybody remembering to come
+ * here. This list had five members where the vocabulary now has eight.
+ */
+const CATEGORIES: readonly CategoryName[] = Object.values(Category);
 
 /** Valid impact levels in order */
-const IMPACTS: readonly IssueImpact[] = [
-  "critical",
-  "major",
-  "minor",
-  "trivial",
-] as const;
-
-// =============================================================================
-// Glob Matching
-// =============================================================================
-
 /**
- * Convert a glob pattern to a regex.
- * Supports: * (any chars except /), ** (any chars including /), ? (single char)
+ * Every impact a pattern may name, most severe first.
  *
- * @param pattern - Glob pattern to convert
- * @returns Regular expression for matching
+ * `IMPACT_ORDER` is the ordering, so this is the same array rather than a
+ * second one that has to agree with it.
  */
-export function globToRegex(pattern: string): RegExp {
-  let regex = pattern
-    // Escape special regex chars (except * and ?)
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    // ** matches anything including /
-    .replace(/\*\*/g, "<<<DOUBLESTAR>>>")
-    // * matches anything except /
-    .replace(/\*/g, "[^/]*")
-    // ? matches single char
-    .replace(/\?/g, ".")
-    // Restore **
-    .replace(/<<<DOUBLESTAR>>>/g, ".*");
-
-  return new RegExp(`^${regex}$`);
-}
-
-/**
- * Check if a string matches a glob pattern.
- *
- * @param value - String to check
- * @param pattern - Glob pattern
- * @returns Whether the string matches the pattern
- */
-export function matchesGlob(value: string, pattern: string): boolean {
-  // Fast path for wildcard
-  if (pattern === "*") return true;
-  return globToRegex(pattern).test(value);
-}
-
-/**
- * Check if a string matches any of the given patterns.
- *
- * @param value - String to check
- * @param patterns - Patterns to match against
- * @returns Whether the string matches any pattern
- */
-export function matchesAnyGlob(
-  value: string,
-  patterns: readonly string[],
-): boolean {
-  return patterns.some((p) => matchesGlob(value, p));
-}
-
-/**
- * Check if a file matches a glob pattern.
- * Supports ** for directory wildcards.
- *
- * @param filePath - File path to check
- * @param pattern - Glob pattern
- * @returns Whether the file matches the pattern
- */
-export function matchesFilePattern(filePath: string, pattern: string): boolean {
-  return matchesGlob(filePath, pattern);
-}
+const IMPACTS: readonly ImpactName[] = IMPACT_ORDER;
 
 // =============================================================================
 // Pattern Parsing
@@ -123,13 +66,13 @@ export function parsePattern(pattern: string): ParsedPattern | null {
   let remaining = pattern;
   let linter = "*";
   let issue = "*";
-  let category: IssueCategory | undefined;
+  let category: Category | undefined;
   let impact: ParsedPattern["impact"];
 
   // Extract category filter (::category)
   const categoryMatch = remaining.match(/::(\w+)/);
   if (categoryMatch) {
-    const cat = categoryMatch[1] as IssueCategory;
+    const cat = categoryMatch[1] as Category;
     if (CATEGORIES.includes(cat)) {
       category = cat;
     }
@@ -144,7 +87,7 @@ export function parsePattern(pattern: string): ParsedPattern | null {
     const operator = impactMatch[1] as NonNullable<
       ParsedPattern["impact"]
     >["operator"];
-    const value = impactMatch[2] as IssueImpact;
+    const value = impactMatch[2] as Impact;
     if (IMPACTS.includes(value)) {
       impact = { operator, value };
     }
@@ -185,8 +128,8 @@ export function parsePattern(pattern: string): ParsedPattern | null {
  */
 export function matchesIssuePattern(
   issueKind: string,
-  issueCategory: IssueCategory,
-  issueImpact: IssueImpact,
+  issueCategory: Category,
+  issueImpact: Impact,
   pattern: ParsedPattern,
 ): boolean {
   // Parse issue kind (linter/issue format)

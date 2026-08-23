@@ -1,67 +1,89 @@
 /**
- * Conditions Module
+ * Conditions: the vocabulary an issue is classified in, the comparisons that
+ * ask about it, the `when` builder that writes them, and the one evaluator
+ * that reads them.
  *
- * Provides the condition API for defining when rules should apply.
- * Includes comparison primitives and the `when` condition builder.
+ * Everything that needs to ask "does this rule apply here" imports from here.
+ * The config module, the grammar resolver and the runtime all did it their own
+ * way before, with two incompatible answers between them.
  *
  * @example
  * ```ts
- * import { when, atLeast, equals, oneOf, Impact, Category } from "@hiisi/viola/conditions";
+ * import { Impact, oneOf, when } from "@hiisi/viola/conditions";
  *
- * // Path matching
- * when.in("*.ts", "*.tsx")
- * when.in("**\/test/**")
- *
- * // Issue properties
- * when.issue.by(similarFunctions)
- * when.issue.impact(atLeast(Impact.Major))
- * when.issue.confidence(atLeast(80))
- * when.issue.category(equals(Category.Security))
- *
- * // Environment
+ * when.in("src/**").and(when.impact.atLeast(Impact.Major))
+ * when.impact(oneOf(Impact.Major, Impact.Trivial))
  * when.env("CI").exists()
- * when.env("NODE_ENV").is(equals("production"))
- *
- * // Composition
- * when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
- * when.env("FOO").is(atLeast(2).or(equals("production")))
  * ```
  *
  * @module
  */
 
-// Comparison primitives
 export {
-  always as alwaysMatch,
+  always,
   atLeast,
   atMost,
   between,
+  type Comparison,
+  type ComparisonData,
   contains,
+  describe,
   endsWith,
   equals,
+  glob,
   lessThan,
   matches,
   moreThan,
-  never as neverMatch,
+  never,
   noneOf,
+  notEquals,
   oneOf,
   startsWith,
-} from "./comparisons.ts";
-export type { Comparison } from "./comparisons.ts";
+  type SubstringOp,
+  type UnaryOp,
+} from "./comparison.ts";
 
-// Condition types
+export { evaluateComparison } from "./evaluate-comparison.ts";
+
 export type {
+  CategoryName,
+  ImpactName,
+  ReportLevelName,
+} from "./vocabulary.ts";
+
+export {
+  Category,
+  compareImpact,
+  Impact,
+  IMPACT_ORDER,
+  impactValue,
+  ReportLevel,
+} from "./vocabulary.ts";
+
+export type {
+  CategoryCondition,
+  CompoundCondition,
   Condition,
-  EnvConditionBuilder,
+  ConfidenceCondition,
+  ConstantCondition,
+  EnvCondition,
   EvaluationContext,
+  FileCondition,
   FileContext,
-  IssueConditions,
+  GrammarCondition,
+  ImpactCondition,
   IssueContext,
-  WhenBuilder,
+  KindCondition,
+  LinterCondition,
+  NotCondition,
 } from "./types.ts";
 
-// Enums
-export { Category, Impact } from "./types.ts";
+export { evaluateCondition } from "./evaluate.ts";
 
-// The when builder
-export { always, never, when } from "./when.ts";
+export {
+  ConditionExpr,
+  type EnvConditions,
+  type Ordered,
+  when,
+  type WhenBuilder,
+} from "./when.ts";

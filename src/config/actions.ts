@@ -7,7 +7,7 @@
  */
 
 import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
-import { ReportLevel } from "./enums.ts";
+import { ReportLevel } from "../conditions/vocabulary.ts";
 import type { ReportAction } from "./types/actions.types.ts";
 import {
   isGrammarRelationshipAction,
@@ -48,7 +48,7 @@ function createReportAction(level: ReportLevel): Frozen<ReportAction> {
  * public export: a consumer's type checker would otherwise have to evaluate
  * this module to learn the shape.
  */
-export interface ReportActions {
+interface ReportActions {
   readonly error: Frozen<ReportAction>;
   readonly warn: Frozen<ReportAction>;
   readonly info: Frozen<ReportAction>;
