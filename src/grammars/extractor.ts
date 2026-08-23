@@ -114,6 +114,41 @@ function defaultNormalizeBody(body: string): string {
 /**
  * Extract function information from query captures.
  */
+/**
+ * The doc comment attached to a declaration, if it has one.
+ *
+ * Nothing populated `jsDoc` anywhere in this package. The field was declared on
+ * three interfaces, read by the missing-docs lint, and set by hand in that
+ * lint's fixtures, so its 218 tests passed while the extractor never wrote it
+ * once. Against real source the lint could only ever report every exported
+ * symbol as undocumented, which is what it did.
+ *
+ * A doc comment is the comment immediately above the declaration. `export`
+ * wraps the declaration in a statement, so the comment is a sibling of the
+ * wrapper rather than of the function, and both are checked. Anything that is
+ * not a `/** ... *\/` block is not documentation: a `//` note above a function
+ * is a remark to the next reader, not an api description.
+ */
+function docCommentFor(
+  node: SyntaxNode | undefined,
+  grammar: GrammarDefinition,
+  sourceCode: string,
+): string | undefined {
+  let at: SyntaxNode | null | undefined = node;
+  for (let hop = 0; at && hop < 3; hop++) {
+    const prev = at.previousNamedSibling;
+    if (prev?.type === "comment" && prev.text.startsWith("/**")) {
+      return grammar.transforms?.parseDocComment
+        ? grammar.transforms.parseDocComment(prev, sourceCode)
+        : prev.text;
+    }
+    // an exported declaration sits inside an export statement, and the comment
+    // is above that, so climb before giving up.
+    at = at.parent;
+  }
+  return undefined;
+}
+
 function extractFunctions(
   tree: Tree,
   language: Language,
@@ -170,6 +205,7 @@ function extractFunctions(
       isGenerator: transforms?.isGenerator?.(node, captures) ?? captures.has("function.generator"),
       isExported: transforms?.isExported?.(node, captures) ?? captures.has("function.export"),
       isDefaultExport: transforms?.isDefaultExport?.(node, captures) ?? captures.has("function.default"),
+      jsDoc: docCommentFor(node, grammar, sourceCode),
       kind: "function" as const,
     });
   }
