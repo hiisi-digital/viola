@@ -11,7 +11,7 @@
  * @module
  */
 
-import defaultLints from "jsr:@hiisi/viola-default-lints@^0.3.1";
+import defaultLints from "jsr:@hiisi/viola-default-lints@^0.3.2";
 import typescript from "jsr:@hiisi/viola-grammar-ts@^0.3.2";
 import { report, viola, when } from "./mod.ts";
 
