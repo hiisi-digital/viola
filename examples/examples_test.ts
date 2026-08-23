@@ -51,7 +51,9 @@ async function runExample(
     new TextDecoder().decode(stderr);
   const findings = output
     .split("\n")
-    .filter((line) => /^\[[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*\] \S+:\d+/.test(line))
+    .filter((line) =>
+      /^\[[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*\] \S+:\d+/.test(line)
+    )
     .map((line) => line.trim());
   return { code, output, findings };
 }
@@ -105,7 +107,11 @@ Deno.test("example 03 - a path rule turns a whole directory off", async () => {
 
 Deno.test("example 03 - the strict bar still applies outside the exemptions", async () => {
   const run = await runExample("03-scoping-by-path");
-  assertEquals(run.findings.length > 0, true, "the library itself is still linted");
+  assertEquals(
+    run.findings.length > 0,
+    true,
+    "the library itself is still linted",
+  );
 });
 
 Deno.test("example 04 - an overriding grammar answers and suppresses the other", async () => {

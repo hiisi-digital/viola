@@ -28,7 +28,10 @@ async function inAwkwardlyNamedDirectory(): Promise<string> {
     "/** A thing. */\nexport function thing(): number {\n  return 1;\n}\n",
   );
   await Deno.mkdir(`${root}/dist`, { recursive: true });
-  await Deno.writeTextFile(`${root}/dist/built.ts`, "export const built = 1;\n");
+  await Deno.writeTextFile(
+    `${root}/dist/built.ts`,
+    "export const built = 1;\n",
+  );
   return root;
 }
 

@@ -205,13 +205,35 @@ function compound(
  * Build a condition.
  */
 export const when: WhenBuilder = {
-  in: (...patterns) => expr({ type: "file", comparison: glob(...patterns).data as ComparisonData<string> }),
-  linter: (...patterns) => expr({ type: "linter", comparison: glob(...patterns).data as ComparisonData<string> }),
-  kind: (...patterns) => expr({ type: "kind", comparison: glob(...patterns).data as ComparisonData<string> }),
-  grammar: (...patterns) => expr({ type: "grammar", comparison: glob(...patterns).data as ComparisonData<string> }),
+  in: (...patterns) =>
+    expr({
+      type: "file",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  linter: (...patterns) =>
+    expr({
+      type: "linter",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  kind: (...patterns) =>
+    expr({
+      type: "kind",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  grammar: (...patterns) =>
+    expr({
+      type: "grammar",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
   impact: ordered<Impact>((comparison) => ({ type: "impact", comparison })),
-  category: ordered<Category>((comparison) => ({ type: "category", comparison })),
-  confidence: ordered<number>((comparison) => ({ type: "confidence", comparison })),
+  category: ordered<Category>((comparison) => ({
+    type: "category",
+    comparison,
+  })),
+  confidence: ordered<number>((comparison) => ({
+    type: "confidence",
+    comparison,
+  })),
   env: (name) => ({
     exists: () => expr({ type: "env", name }),
     is: (comparison) =>

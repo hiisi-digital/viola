@@ -27,10 +27,12 @@ import config from "./viola.config.ts";
 import { runProject } from "./mod.ts";
 
 if (import.meta.main) {
-  Deno.exit(await runProject({
-    projectRoot: new URL(".", import.meta.url).pathname,
-    include: ["mod.ts", "src", "viola.config.ts", "gate.ts"],
-    preloadedConfig: config,
-    env: Deno.env.toObject(),
-  }));
+  Deno.exit(
+    await runProject({
+      projectRoot: new URL(".", import.meta.url).pathname,
+      include: ["mod.ts", "src", "viola.config.ts", "gate.ts"],
+      preloadedConfig: config,
+      env: Deno.env.toObject(),
+    }),
+  );
 }

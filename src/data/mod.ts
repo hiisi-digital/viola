@@ -11,6 +11,7 @@
 export type {
   // Codebase
   CodebaseData,
+  CrawlConfig,
   // Exports/Imports
   ExportInfo,
   // Files
@@ -35,5 +36,4 @@ export type {
   // Types/Interfaces
   TypeField,
   TypeInfo,
-  CrawlConfig,
 } from "./types.ts";

@@ -79,6 +79,7 @@
 
 export type {
   CodebaseData,
+  CrawlConfig,
   ExportInfo,
   FileInfo,
   FunctionInfo,
@@ -93,7 +94,6 @@ export type {
   StringLiteral,
   TypeField,
   TypeInfo,
-  CrawlConfig,
 } from "./src/data/mod.ts";
 
 // =============================================================================
@@ -238,10 +238,10 @@ import {
 } from "./src/config/mod.ts";
 import { ReportLevel } from "./src/conditions/mod.ts";
 import type {
+  CrawlConfig,
   Issue,
   LinterConfig,
   LintResults,
-  CrawlConfig,
 } from "./src/data/mod.ts";
 import type {
   GrammarRegistry,
@@ -262,7 +262,6 @@ import {
   discoverPlugins,
   registerDiscoveredLinters,
 } from "./src/runtime/plugins.ts";
-
 
 /**
  * Extended results with evaluated issues.

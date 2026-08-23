@@ -144,7 +144,8 @@ export async function resolveRun(
         ? {}
         : { rules: builderConfig.rules }),
       grammarRules: builderConfig?.grammarRules ?? [],
-      grammarRegistry: builderConfig?.grammarRegistry ?? createGrammarRegistry(),
+      grammarRegistry: builderConfig?.grammarRegistry ??
+        createGrammarRegistry(),
       ...(options.env === undefined ? {} : { env: options.env }),
     },
   };

@@ -157,6 +157,18 @@ function docCommentFor(
       prev = prev.previousNamedSibling;
     }
 
+    // A line comment between the documentation and the thing it documents is
+    // ordinary: a lint directive, a note, a suppression. The walk stopped at
+    // the first comment of any kind, so a single `// deno-lint-ignore` above a
+    // declaration hid its doc comment and the declaration read as
+    // undocumented.
+    while (
+      prev !== null && prev.type === COMMENT_NODE &&
+      !prev.text.startsWith("/**")
+    ) {
+      prev = prev.previousNamedSibling;
+    }
+
     if (prev?.type === COMMENT_NODE && prev.text.startsWith("/**")) {
       return grammar.transforms?.parseDocComment
         ? grammar.transforms.parseDocComment(prev, sourceCode)
@@ -263,9 +275,7 @@ function extractFunctions(
       kind: captures.has("function.method")
         ? "method" as const
         : "function" as const,
-      ...(parentCapture === undefined
-        ? {}
-        : { parent: parentCapture.text }),
+      ...(parentCapture === undefined ? {} : { parent: parentCapture.text }),
     });
   }
 
@@ -545,7 +555,9 @@ function foldExports(exports: readonly ExportInfo[]): ExportInfo[] {
   // A source seen on any match makes the whole export a re-export, even where
   // the match that carried the source was not the one that set the kind.
   return [...byKey.values()].map((e) =>
-    e.from !== undefined && e.kind === "unknown" ? { ...e, kind: "re-export" } : e
+    e.from !== undefined && e.kind === "unknown"
+      ? { ...e, kind: "re-export" }
+      : e
   );
 }
 

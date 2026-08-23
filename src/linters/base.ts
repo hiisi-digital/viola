@@ -11,10 +11,7 @@
  */
 
 import type { IssueCatalog, IssueDef } from "../config/types.ts";
-import type {
-  CategoryName,
-  ImpactName,
-} from "../conditions/vocabulary.ts";
+import type { CategoryName, ImpactName } from "../conditions/vocabulary.ts";
 import type {
   CodebaseData,
   Issue,

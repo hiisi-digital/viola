@@ -7,10 +7,10 @@
 
 import type {
   Category,
-  Impact,
-  ReportLevel,
   CategoryName,
+  Impact,
   ImpactName,
+  ReportLevel,
   ReportLevelName,
 } from "../conditions/vocabulary.ts";
 

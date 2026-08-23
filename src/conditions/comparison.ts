@@ -78,8 +78,10 @@ function build<T>(data: ComparisonData<T>): Comparison<T> {
   const frozen = deepFreeze(data) as Frozen<ComparisonData<T>>;
   return {
     data: frozen,
-    and: (other) => build<T>({ op: "and", parts: [data, other.data as ComparisonData<T>] }),
-    or: (other) => build<T>({ op: "or", parts: [data, other.data as ComparisonData<T>] }),
+    and: (other) =>
+      build<T>({ op: "and", parts: [data, other.data as ComparisonData<T>] }),
+    or: (other) =>
+      build<T>({ op: "or", parts: [data, other.data as ComparisonData<T>] }),
     not: () => build<T>({ op: "not", part: data }),
     toString: () => describe(data),
   };

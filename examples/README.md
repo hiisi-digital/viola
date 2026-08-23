@@ -10,8 +10,8 @@ That pairing is deliberate. viola shipped a documented feature,
 five hundred lines of passing unit tests over the resolver behind it, and every
 one of them was true: they built a resolver and asked it to resolve. Not one
 asked whether a config's rule ever reached a resolver, because every test lived
-on one side of the gap and the defect was the gap. An example that runs the
-real thing and looks at the answer cannot miss that.
+on one side of the gap and the defect was the gap. An example that runs the real
+thing and looks at the answer cannot miss that.
 
 Run one the way a reader would:
 

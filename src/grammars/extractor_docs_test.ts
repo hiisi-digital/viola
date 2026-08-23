@@ -51,3 +51,25 @@ Deno.test("extractor - a plain function still finds the comment above it", async
   );
   assertEquals(functions[0]?.jsDoc !== undefined, true);
 });
+
+Deno.test("extractor - a lint directive does not hide the doc above it", async () => {
+  // A line comment between the documentation and the thing it documents is
+  // ordinary. The walk stopped at the first comment of any kind, so one
+  // `// deno-lint-ignore` was enough to make a documented function read as
+  // undocumented.
+  const functions = await functionsIn(
+    "/** Documented. */\n" +
+      "// deno-lint-ignore no-explicit-any\n" +
+      "export function t(x: unknown): void {}\n",
+  );
+  assertEquals(functions[0]?.jsDoc !== undefined, true);
+});
+
+Deno.test("extractor - a line comment alone is not documentation", async () => {
+  // The control. Stepping over line comments must not treat one as the doc,
+  // or every function with a note above it becomes documented.
+  const functions = await functionsIn(
+    "// just a note\nexport function t(): void {}\n",
+  );
+  assertEquals(functions[0]?.jsDoc, undefined);
+});

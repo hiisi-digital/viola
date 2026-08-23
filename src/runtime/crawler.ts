@@ -15,17 +15,17 @@ import { walk } from "@std/fs/walk";
 import { basename, extname, join, relative } from "@std/path";
 import type {
   CodebaseData,
+  CrawlConfig,
   FileInfo,
   SchemaInfo,
-  CrawlConfig,
 } from "../data/types.ts";
 import {
   createParser,
   extractCompleteFileInfo,
   type GrammarRegistry,
   type GrammarRelationshipRule,
-  type GrammarRole,
   GrammarResolver,
+  type GrammarRole,
   initTreeSitter,
   loadGrammar,
   mergeExtractionResults,
@@ -164,7 +164,10 @@ export async function crawlCodebase(
   config: CrawlConfig,
   grammarRegistry: GrammarRegistry,
   grammarRules: readonly GrammarRelationshipRule[] = [],
-  run: { env?: Readonly<Record<string, string | undefined>>; projectRoot?: string } = {},
+  run: {
+    env?: Readonly<Record<string, string | undefined>>;
+    projectRoot?: string;
+  } = {},
 ): Promise<Readonly<CodebaseData>> {
   // Validate grammar registration
   if (grammarRegistry.size === 0) {

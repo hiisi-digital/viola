@@ -25,15 +25,9 @@ import type { Issue } from "../data/types.ts";
 import { isReportAction } from "./actions.ts";
 import type { IssueCatalog } from "./types.ts";
 import type { Rule } from "./types/builder.types.ts";
-import type {
-  EvaluatedIssue,
-  RunContext,
-} from "./types/evaluator.types.ts";
+import type { EvaluatedIssue, RunContext } from "./types/evaluator.types.ts";
 
-export type {
-  EvaluatedIssue,
-  RunContext,
-} from "./types/evaluator.types.ts";
+export type { EvaluatedIssue, RunContext } from "./types/evaluator.types.ts";
 
 /** A run that asked about neither the environment nor the project root. */
 const NO_RUN_CONTEXT: RunContext = { env: {}, projectRoot: "" };
