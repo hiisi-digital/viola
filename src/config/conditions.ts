@@ -252,6 +252,9 @@ export interface Conditions {
   readonly confidence: Frozen<ConfidenceConditions>;
   readonly in: (...patterns: string[]) => ConditionExpr;
   readonly linter: (...patterns: string[]) => ConditionExpr;
+  readonly not: (condition: ConditionExpr) => ConditionExpr;
+  readonly all: (...conditions: ConditionExpr[]) => ConditionExpr;
+  readonly any: (...conditions: ConditionExpr[]) => ConditionExpr;
 }
 
 export const when: Frozen<Conditions> = deepFreeze({
