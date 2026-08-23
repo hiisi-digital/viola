@@ -30,6 +30,9 @@ const DOUBLE_STAR = "\u0000";
 /** Stands in for `/**​/`, which spans zero directories as well as many. */
 const SPANNING = "\u0001";
 
+/** Stands in for a leading `**​/`, which spans zero directories as well as many. */
+const LEADING = "\u0002";
+
 /**
  * Turn a glob into the regex that matches it.
  *
@@ -47,11 +50,18 @@ export function globToRegex(pattern: string): RegExp {
     // glob means by it. Held aside first, because the bare `**` rule below
     // would leave the surrounding slashes as literals and require a directory.
     .replaceAll("/**/", SPANNING)
+    // A leading `**/` spans zero directories too, so `**/tests/**` matches a
+    // `tests` at the root and not only a nested one. Without this it compiled
+    // to `^.*/tests/.*$`, which requires a separator before `tests`, and every
+    // config in this estate excludes its tests with exactly that pattern. They
+    // were all silently matching nothing.
+    .replace(new RegExp(`^\\*\\*/`), LEADING)
     .replaceAll("**", DOUBLE_STAR)
     .replace(/\*/g, "[^/]*")
     .replace(/\?/g, ".")
     .replaceAll(DOUBLE_STAR, ".*")
-    .replaceAll(SPANNING, "/(?:.*/)?");
+    .replaceAll(SPANNING, "/(?:.*/)?")
+    .replaceAll(LEADING, "(?:.*/)?");
 
   const regex = new RegExp(`^${source}$`);
   compiled.set(pattern, regex);

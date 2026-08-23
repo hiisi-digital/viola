@@ -67,3 +67,28 @@ Deno.test("glob - the cache does not change what a pattern means", () => {
   assertEquals(first.test("src/a/b.ts"), true);
   assertEquals(first.test("other/a/b.ts"), false);
 });
+
+Deno.test("a leading ** spans zero directories as well as many", () => {
+  // Every package in this estate excludes its tests with `!**/tests/**` and its
+  // own `tests/` sits at the root. This compiled to `^.*/tests/.*$`, which needs
+  // a separator before `tests`, so all of those exclusions matched nothing and
+  // every config had been silently counting its test files for months.
+  assertEquals(matchesGlob("tests/a.test.ts", "**/tests/**"), true);
+  assertEquals(matchesGlob("examples/x.ts", "**/examples/**"), true);
+  assertEquals(matchesGlob("a.test.ts", "**/*.test.ts"), true);
+});
+
+Deno.test("a leading ** still spans directories when there are some", () => {
+  // The control. The nested case worked before and has to keep working, or the
+  // fix above would have traded one silent miss for another.
+  assertEquals(matchesGlob("pkg/tests/a.test.ts", "**/tests/**"), true);
+  assertEquals(matchesGlob("a/b/c/x.test.ts", "**/*.test.ts"), true);
+});
+
+Deno.test("a leading ** does not match a different directory", () => {
+  // The other control: the pattern still has to refuse something, or it would
+  // pass by matching everything.
+  assertEquals(matchesGlob("src/a.ts", "**/tests/**"), false);
+  assertEquals(matchesGlob("testsuite/a.ts", "**/tests/**"), false);
+  assertEquals(matchesGlob("a.ts", "**/*.test.ts"), false);
+});
