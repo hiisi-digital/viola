@@ -3,6 +3,7 @@
   "specifiers": {
     "jsr:@hiisi/flash-freeze@~0.1.1": "0.1.1",
     "jsr:@hiisi/viola-cli@~0.3.1": "0.3.1",
+    "jsr:@hiisi/viola@0.3": "0.3.1",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/cli@1": "1.0.32",
     "jsr:@std/fs@1": "1.0.24",
@@ -16,6 +17,14 @@
   "jsr": {
     "@hiisi/flash-freeze@0.1.1": {
       "integrity": "d47a7143f8f0497101b62faf466574577383add61960265d8fc3323f3c77c512"
+    },
+    "@hiisi/viola@0.3.1": {
+      "integrity": "bfb2791c9037079de49494ff37f10d042ece94b99e0f173982fa5381a1e419af",
+      "dependencies": [
+        "jsr:@hiisi/flash-freeze",
+        "jsr:@std/fs",
+        "jsr:@std/path@1"
+      ]
     },
     "@hiisi/viola-cli@0.3.1": {
       "integrity": "0d86925e9763392e9882e218917fd8c8ee5c62849bf5464e1bc3e6fbf88b8eea",
@@ -95,7 +104,7 @@
         "dependencies": [
           "jsr:@hiisi/flash-freeze@0.1",
           "jsr:@hiisi/viola-grammar-ts@~0.3.2",
-          "jsr:@hiisi/viola@0.3",
+          "jsr:@hiisi/viola@0.4",
           "jsr:@std/assert@1",
           "jsr:@std/fs@1",
           "jsr:@std/path@1"
@@ -104,7 +113,7 @@
       "jsr:@hiisi/viola-grammar-ts@0.3.2": {
         "dependencies": [
           "jsr:@hiisi/viola-default-lints@~0.3.2",
-          "jsr:@hiisi/viola@0.3",
+          "jsr:@hiisi/viola@0.4",
           "jsr:@std/assert@1",
           "npm:tree-sitter-typescript@0.23.2",
           "npm:web-tree-sitter@0.22.6"
