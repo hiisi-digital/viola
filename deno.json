@@ -44,7 +44,7 @@
     "test": "deno test --allow-env --allow-read --allow-write --allow-ffi src/",
     "viola": "deno run -A scripts/viola.ts",
     "viola:strict": "deno run -A scripts/viola.ts --strict",
-    "lint": "deno run -A --min-dep-age=0 jsr:@hiisi/viola-cli@^0.3.1 --project . --include src,mod.ts"
+    "lint": "deno run -A --min-dep-age=0 jsr:@hiisi/viola-cli@^0.3.1 --project . --include ."
   },
   "viola": {
     "plugins": [],
