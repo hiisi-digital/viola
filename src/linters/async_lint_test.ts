@@ -49,11 +49,16 @@ function catalogue(id: string): IssueCatalog {
 }
 
 function issue(id: string): Issue {
+  // no cast. the cast was hiding two things: `location` is required and was
+  // absent, so every issue this fixture made would have crashed any reporter
+  // that read it, and `confidence` is documented 0-100 while this said 1.
+  // the laws only read `kind`, so nothing here would ever have noticed.
   return {
     kind: `${id}/found`,
+    location: { file: "fixture.ts", line: 1, column: 1 },
     message: "the fixture reported this",
-    confidence: 1,
-  } as Issue;
+    confidence: 100,
+  };
 }
 
 /** A lint whose result is only available after the current tick has ended. */
@@ -62,9 +67,9 @@ class LaterLinter extends BaseLinter {
     id: "later",
     name: "Later",
     description: "resolves on a later tick, which is the whole point",
-  } as LinterMeta;
+  };
   readonly catalog: IssueCatalog = catalogue("later");
-  readonly requirements: LinterDataRequirements = {} as LinterDataRequirements;
+  readonly requirements: LinterDataRequirements = {};
 
   override async lint(): Promise<Issue[]> {
     // a real async lint spawns a process or fetches. a timer is the cheapest
@@ -82,9 +87,9 @@ class NowLinter extends BaseLinter {
     id: "now",
     name: "Now",
     description: "returns an array, so it cannot distinguish a missing await",
-  } as LinterMeta;
+  };
   readonly catalog: IssueCatalog = catalogue("now");
-  readonly requirements: LinterDataRequirements = {} as LinterDataRequirements;
+  readonly requirements: LinterDataRequirements = {};
 
   override lint(): Issue[] {
     return [issue("now")];
@@ -123,9 +128,9 @@ class ThrowsLater extends BaseLinter {
     id: "throws",
     name: "Throws",
     description: "rejects after the tick that called it has ended",
-  } as LinterMeta;
+  };
   readonly catalog: IssueCatalog = catalogue("throws");
-  readonly requirements: LinterDataRequirements = {} as LinterDataRequirements;
+  readonly requirements: LinterDataRequirements = {};
 
   override async lint(): Promise<Issue[]> {
     await new Promise((resolve) => setTimeout(resolve, 1));
