@@ -11,12 +11,12 @@ export { crawlCodebase, DEFAULT_CONFIG } from "./crawler.ts";
 
 // Plugin loader
 export {
-    clearLinters,
-    getRegisteredLinters,
-    loadPlugin,
-    loadPlugins,
-    type PluginLoadResult,
-    type PluginsLoadResult
+  clearLinters,
+  getRegisteredLinters,
+  loadPlugin,
+  loadPlugins,
+  type PluginLoadResult,
+  type PluginsLoadResult,
 } from "./plugins.ts";
 
 // Re-export config type from data for convenience

@@ -8,11 +8,11 @@
  */
 
 import type {
-    IssueCategory,
-    IssueImpact,
-    ParsedPattern,
-    PatternValue,
-    ResolvedPatternValue,
+  IssueCategory,
+  IssueImpact,
+  ParsedPattern,
+  PatternValue,
+  ResolvedPatternValue,
 } from "./types.ts";
 
 // =============================================================================
@@ -83,7 +83,10 @@ export function matchesGlob(value: string, pattern: string): boolean {
  * @param patterns - Patterns to match against
  * @returns Whether the string matches any pattern
  */
-export function matchesAnyGlob(value: string, patterns: readonly string[]): boolean {
+export function matchesAnyGlob(
+  value: string,
+  patterns: readonly string[],
+): boolean {
   return patterns.some((p) => matchesGlob(value, p));
 }
 
@@ -134,9 +137,13 @@ export function parsePattern(pattern: string): ParsedPattern | null {
   }
 
   // Extract impact comparison (>=major, =minor, !=trivial, etc.)
-  const impactMatch = remaining.match(/(>=|<=|>|<|!=|=)(critical|major|minor|trivial)/);
+  const impactMatch = remaining.match(
+    /(>=|<=|>|<|!=|=)(critical|major|minor|trivial)/,
+  );
   if (impactMatch) {
-    const operator = impactMatch[1] as NonNullable<ParsedPattern["impact"]>["operator"];
+    const operator = impactMatch[1] as NonNullable<
+      ParsedPattern["impact"]
+    >["operator"];
     const value = impactMatch[2] as IssueImpact;
     if (IMPACTS.includes(value)) {
       impact = { operator, value };
@@ -180,7 +187,7 @@ export function matchesIssuePattern(
   issueKind: string,
   issueCategory: IssueCategory,
   issueImpact: IssueImpact,
-  pattern: ParsedPattern
+  pattern: ParsedPattern,
 ): boolean {
   // Parse issue kind (linter/issue format)
   const slashIdx = issueKind.indexOf("/");

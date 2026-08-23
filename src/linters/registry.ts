@@ -7,7 +7,12 @@
  * @module
  */
 
-import type { CodebaseData, LinterConfig, LinterResult, LintResults } from "../data/types.ts";
+import type {
+  CodebaseData,
+  LinterConfig,
+  LinterResult,
+  LintResults,
+} from "../data/types.ts";
 import type { BaseLinter, LinterConstructor, LinterMeta } from "./base.ts";
 import type { RunOptions } from "./types/registry.types.ts";
 
@@ -136,8 +141,6 @@ export const registry: LinterRegistry = new LinterRegistry();
 // Runner
 // =============================================================================
 
-
-
 /**
  * Default linter configuration.
  */
@@ -154,7 +157,7 @@ const DEFAULT_LINTER_CONFIG: LinterConfig = {
  */
 export async function runLinters(
   data: Readonly<CodebaseData>,
-  options: RunOptions = {}
+  options: RunOptions = {},
 ): Promise<LintResults> {
   const startTime = performance.now();
   const results: LinterResult[] = [];
@@ -163,11 +166,15 @@ export async function runLinters(
   let lintersToRun = (options.registry ?? registry).getAll();
 
   if (options.only && options.only.length > 0) {
-    lintersToRun = lintersToRun.filter((l) => options.only!.includes(l.meta.id));
+    lintersToRun = lintersToRun.filter((l) =>
+      options.only!.includes(l.meta.id)
+    );
   }
 
   if (options.skip && options.skip.length > 0) {
-    lintersToRun = lintersToRun.filter((l) => !options.skip!.includes(l.meta.id));
+    lintersToRun = lintersToRun.filter((l) =>
+      !options.skip!.includes(l.meta.id)
+    );
   }
 
   // Filter out disabled linters
@@ -195,7 +202,9 @@ export async function runLinters(
       results.push(result);
       if (options.verbose) {
         console.log(
-          `  ${result.issues.length} issues in ${result.durationMs.toFixed(1)}ms`
+          `  ${result.issues.length} issues in ${
+            result.durationMs.toFixed(1)
+          }ms`,
         );
       }
     }
@@ -225,7 +234,7 @@ export async function runLinters(
 export function runLinter(
   id: string,
   data: Readonly<CodebaseData>,
-  config: LinterConfig = DEFAULT_LINTER_CONFIG
+  config: LinterConfig = DEFAULT_LINTER_CONFIG,
 ): Promise<LinterResult> {
   const linter = registry.get(id);
 

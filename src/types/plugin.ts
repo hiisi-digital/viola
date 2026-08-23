@@ -18,7 +18,14 @@ import type { BaseLinter } from "../linters/base.ts";
  * Used for validating plugin-specific configuration.
  */
 export interface JSONSchema {
-  type?: "object" | "array" | "string" | "number" | "integer" | "boolean" | "null";
+  type?:
+    | "object"
+    | "array"
+    | "string"
+    | "number"
+    | "integer"
+    | "boolean"
+    | "null";
   properties?: Record<string, JSONSchema>;
   items?: JSONSchema;
   required?: string[];
@@ -259,7 +266,7 @@ export function isQualifiedName(name: string): boolean {
  * Returns null if not qualified.
  */
 export function parseQualifiedName(
-  name: string
+  name: string,
 ): { pluginName: string; itemName: string } | null {
   if (!isQualifiedName(name)) {
     return null;

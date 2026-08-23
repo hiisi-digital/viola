@@ -10,14 +10,15 @@ import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
 import { ReportLevel } from "./enums.ts";
 import type { ReportAction } from "./types/actions.types.ts";
 import {
-    isGrammarRelationshipAction,
-    isReportAction,
+  isGrammarRelationshipAction,
+  isReportAction,
 } from "./types/actions.types.ts";
 
 // Re-export types and type guards for convenience
 export type {
-    GrammarRelationshipAction, ReportAction,
-    RuleAction
+  GrammarRelationshipAction,
+  ReportAction,
+  RuleAction,
 } from "./types/actions.types.ts";
 export { isGrammarRelationshipAction, isReportAction };
 

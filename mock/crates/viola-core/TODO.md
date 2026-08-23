@@ -5,11 +5,13 @@ Status: planning scaffold only (no implementation yet)
 ## Design
 
 - [ ] Confirm crate identity and naming
-  - [ ] Decide final crate name (`viola-core` vs `viola-host`) and document rationale
+  - [ ] Decide final crate name (`viola-core` vs `viola-host`) and document
+        rationale
   - [ ] Align naming with `viola-cli` and docs (`PLUGIN-ABI-V1-DESIGN.md`)
 - [ ] Lock execution model invariants
   - [ ] Confirm strict `cdylib` / C-ABI optimization boundary
-  - [ ] Confirm explicit, pull-based discovery model (no `inventory`/linker magic)
+  - [ ] Confirm explicit, pull-based discovery model (no `inventory`/linker
+        magic)
   - [ ] Single in-process host model
   - [ ] Unified role ABI (`runner` / `grammar` / `lint`)
   - [ ] Runner executes configured scope exactly once
@@ -81,7 +83,8 @@ Status: planning scaffold only (no implementation yet)
 - [ ] Keep crate README aligned with implementation reality
   - [ ] Update naming decision once finalized
   - [ ] Document host responsibilities and non-goals
-  - [ ] Document architectural rationale (why pull-based discovery and strict C-ABI)
+  - [ ] Document architectural rationale (why pull-based discovery and strict
+        C-ABI)
 - [ ] Sync with top-level design docs
   - [ ] Ensure parity with `docs/PLUGIN-ABI-V1-DESIGN.md`
   - [ ] Record any contract clarifications back into design doc

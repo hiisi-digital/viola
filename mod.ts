@@ -78,22 +78,22 @@
 // =============================================================================
 
 export type {
-    CodebaseData,
-    ExportInfo,
-    FileInfo,
-    FunctionInfo,
-    FunctionParam,
-    ImportInfo,
-    Issue,
-    LinterConfig,
-    LinterResult,
-    LintResults,
-    SchemaInfo,
-    SourceLocation,
-    StringLiteral,
-    TypeField,
-    TypeInfo,
-    ViolaConfig
+  CodebaseData,
+  ExportInfo,
+  FileInfo,
+  FunctionInfo,
+  FunctionParam,
+  ImportInfo,
+  Issue,
+  LinterConfig,
+  LinterResult,
+  LintResults,
+  SchemaInfo,
+  SourceLocation,
+  StringLiteral,
+  TypeField,
+  TypeInfo,
+  ViolaConfig,
 } from "./src/data/mod.ts";
 
 // =============================================================================
@@ -101,30 +101,47 @@ export type {
 // =============================================================================
 
 export {
-
-    // Freeze
-    assertFrozen, BODY_SIMILARITY_THRESHOLDS, classifySimilarity,
-    // Similarity
-    combinedSimilarity,
-    // Hashing
-    combineHashes, compareCodeBodies,
-    compareIdentifiers, createFingerprint, deepFreeze, djb2Hash, findAllSimilarPairs, findExactDuplicates, findSimilar, fingerprintsMightMatch,
-    fnv1aHash, frozenArray,
-    frozenCopy,
-    frozenMap,
-    frozenObject,
-    frozenSet, groupByHash,
-    groupByStructure,
-    hashCodeBody,
-    hashContent,
-    hashStructure, isDeeplyFrozen, jaccardNGramSimilarity,
-    jaccardSimilarity,
-    levenshteinDistance,
-    levenshteinSimilarity, NAME_SIMILARITY_THRESHOLDS, normalizeCode,
-    tokenize,
-    tokenSimilarity, type CodeFingerprint, type SimilarityLevel,
-    type SimilarityMatch,
-    type SimilarityThresholds
+  // Freeze
+  assertFrozen,
+  BODY_SIMILARITY_THRESHOLDS,
+  classifySimilarity,
+  type CodeFingerprint,
+  // Similarity
+  combinedSimilarity,
+  // Hashing
+  combineHashes,
+  compareCodeBodies,
+  compareIdentifiers,
+  createFingerprint,
+  deepFreeze,
+  djb2Hash,
+  findAllSimilarPairs,
+  findExactDuplicates,
+  findSimilar,
+  fingerprintsMightMatch,
+  fnv1aHash,
+  frozenArray,
+  frozenCopy,
+  frozenMap,
+  frozenObject,
+  frozenSet,
+  groupByHash,
+  groupByStructure,
+  hashCodeBody,
+  hashContent,
+  hashStructure,
+  isDeeplyFrozen,
+  jaccardNGramSimilarity,
+  jaccardSimilarity,
+  levenshteinDistance,
+  levenshteinSimilarity,
+  NAME_SIMILARITY_THRESHOLDS,
+  normalizeCode,
+  type SimilarityLevel,
+  type SimilarityMatch,
+  type SimilarityThresholds,
+  tokenize,
+  tokenSimilarity,
 } from "./src/utils/mod.ts";
 
 // =============================================================================
@@ -138,20 +155,20 @@ export { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 // =============================================================================
 
 export {
-    // Base class
-    BaseLinter,
-    isLinter,
-    // Registry
-    register,
-    registerLinter,
-    registry,
-    runLinter,
-    runLinters,
-    // Types
-    type LinterConstructor,
-    type LinterDataRequirements,
-    type LinterMeta,
-    type RunOptions
+  // Base class
+  BaseLinter,
+  isLinter,
+  // Types
+  type LinterConstructor,
+  type LinterDataRequirements,
+  type LinterMeta,
+  // Registry
+  register,
+  registerLinter,
+  registry,
+  runLinter,
+  runLinters,
+  type RunOptions,
 } from "./src/linters/mod.ts";
 
 // =============================================================================
@@ -159,17 +176,17 @@ export {
 // =============================================================================
 
 export {
-    clearLinters,
-    discoverPlugin,
-    discoverPlugins,
-    getRegisteredLinters,
-    loadPlugin,
-    loadPlugins,
-    registerDiscoveredLinters,
-    resolveBundle,
-    resolvePreset,
-    type PluginLoadResult,
-    type PluginsLoadResult
+  clearLinters,
+  discoverPlugin,
+  discoverPlugins,
+  getRegisteredLinters,
+  loadPlugin,
+  loadPlugins,
+  type PluginLoadResult,
+  type PluginsLoadResult,
+  registerDiscoveredLinters,
+  resolveBundle,
+  resolvePreset,
 } from "./src/runtime/plugins.ts";
 
 // =============================================================================
@@ -177,23 +194,23 @@ export {
 // =============================================================================
 
 export type {
-    DiscoveredBundle,
-    DiscoveredPreset,
-    DiscoveredSchema,
-    JSONSchema,
-    PluginDiscoveryResult,
-    PluginsDiscoveryResult,
-    PresetPatternValue,
-    PresetScopeConfig,
-    ViolaConfigPreset,
-    ViolaPlugin as ViolaPluginModule
+  DiscoveredBundle,
+  DiscoveredPreset,
+  DiscoveredSchema,
+  JSONSchema,
+  PluginDiscoveryResult,
+  PluginsDiscoveryResult,
+  PresetPatternValue,
+  PresetScopeConfig,
+  ViolaConfigPreset,
+  ViolaPlugin as ViolaPluginModule,
 } from "./src/types/mod.ts";
 
 export {
-    derivePluginName,
-    isQualifiedName,
-    parseQualifiedName,
-    qualifiedName
+  derivePluginName,
+  isQualifiedName,
+  parseQualifiedName,
+  qualifiedName,
 } from "./src/types/mod.ts";
 
 // =============================================================================
@@ -202,31 +219,37 @@ export {
 
 import type { Frozen } from "@hiisi/flash-freeze";
 import {
-    countByLevel,
-    type EvaluatedIssue,
-    evaluateIssues,
-    filterReportableIssues,
-    formatValidationErrors,
-    hasErrors as hasErrorLevel,
-    type IssueCatalog,
-    mergeLinterConfig,
-    ReportLevel,
-    type Rule,
-    validateLinterConfig
+  countByLevel,
+  type EvaluatedIssue,
+  evaluateIssues,
+  filterReportableIssues,
+  formatValidationErrors,
+  hasErrors as hasErrorLevel,
+  type IssueCatalog,
+  mergeLinterConfig,
+  ReportLevel,
+  type Rule,
+  validateLinterConfig,
 } from "./src/config/mod.ts";
-import type { Issue, LinterConfig, LintResults, ViolaConfig } from "./src/data/mod.ts";
+import type {
+  Issue,
+  LinterConfig,
+  LintResults,
+  ViolaConfig,
+} from "./src/data/mod.ts";
 import type { GrammarRegistry } from "./src/grammars/mod.ts";
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
-    discoverPlugins,
-    registerDiscoveredLinters
+  discoverPlugins,
+  registerDiscoveredLinters,
 } from "./src/runtime/plugins.ts";
 
 /**
  * Options for running viola.
  */
-export interface ViolaOptions extends Partial<ViolaConfig>, Partial<RunOptions> {
+export interface ViolaOptions
+  extends Partial<ViolaConfig>, Partial<RunOptions> {
   /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
   plugins?: string[];
   /** Preset names to inherit from loaded plugins */
@@ -307,13 +330,19 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
         console.log(`Found ${discovery.allPresets.size} preset(s)`);
       }
       if (discovery.defaultPresets.length > 0) {
-        console.log(`Auto-applying ${discovery.defaultPresets.length} default preset(s)`);
+        console.log(
+          `Auto-applying ${discovery.defaultPresets.length} default preset(s)`,
+        );
       }
       if (discovery.bundleCollisions.length > 0) {
-        console.log(`Bundle name collisions: ${discovery.bundleCollisions.join(", ")}`);
+        console.log(
+          `Bundle name collisions: ${discovery.bundleCollisions.join(", ")}`,
+        );
       }
       if (discovery.presetCollisions.length > 0) {
-        console.log(`Preset name collisions: ${discovery.presetCollisions.join(", ")}`);
+        console.log(
+          `Preset name collisions: ${discovery.presetCollisions.join(", ")}`,
+        );
       }
       console.log();
     }
@@ -328,7 +357,9 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
       // For now, we don't have a way to specify linter config in presets
       // This is a placeholder for future expansion
       if (verbose) {
-        console.log(`Applied default preset: ${preset.pluginName}/${preset.name}`);
+        console.log(
+          `Applied default preset: ${preset.pluginName}/${preset.name}`,
+        );
       }
     }
 
@@ -337,11 +368,15 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     for (const presetName of inheritedPresetNames) {
       const preset = discovery.allPresets.get(presetName) ??
         // Try to find by short name
-        Array.from(discovery.allPresets.values()).find(p => p.name === presetName);
+        Array.from(discovery.allPresets.values()).find((p) =>
+          p.name === presetName
+        );
 
       if (preset) {
         if (verbose) {
-          console.log(`Applied inherited preset: ${preset.pluginName}/${preset.name}`);
+          console.log(
+            `Applied inherited preset: ${preset.pluginName}/${preset.name}`,
+          );
         }
       } else if (verbose) {
         console.log(`Warning: Preset "${presetName}" not found`);
@@ -353,14 +388,22 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     mergedLinterConfig = mergeLinterConfig(presetConfigs, userLinterConfig);
 
     if (verbose && Object.keys(mergedLinterConfig).length > 0) {
-      console.log(`Merged linter config for: ${Object.keys(mergedLinterConfig).join(", ")}`);
+      console.log(
+        `Merged linter config for: ${
+          Object.keys(mergedLinterConfig).join(", ")
+        }`,
+      );
       console.log();
     }
 
     // Validate linter config against schemas
     if (Object.keys(mergedLinterConfig).length > 0) {
       const registeredIds = new Set(registry.getIds());
-      const validation = validateLinterConfig(mergedLinterConfig, discovery, registeredIds);
+      const validation = validateLinterConfig(
+        mergedLinterConfig,
+        discovery,
+        registeredIds,
+      );
 
       if (validation.warnings.length > 0) {
         for (const warn of validation.warnings) {
@@ -424,7 +467,9 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
   const runOptions: RunOptions = {
     only: options.only,
     skip: options.skip,
-    config: Object.keys(linterConfigs).length > 0 ? linterConfigs : options.config,
+    config: Object.keys(linterConfigs).length > 0
+      ? linterConfigs
+      : options.config,
     parallel: options.parallel ?? false,
     verbose,
   };
@@ -444,7 +489,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
       allIssues,
       options.rules,
       catalogs,
-      ReportLevel.Warn
+      ReportLevel.Warn,
     );
 
     const reportable = filterReportableIssues(evaluatedIssues);
@@ -535,7 +580,10 @@ export function formatResults(results: LintResults): string {
 /**
  * Format results with evaluated issues and report levels.
  */
-function formatEvaluatedResults(results: EvaluatedResults, lines: string[]): string {
+function formatEvaluatedResults(
+  results: EvaluatedResults,
+  lines: string[],
+): string {
   const reportable = filterReportableIssues(results.evaluatedIssues);
 
   if (reportable.length === 0) {
@@ -547,10 +595,18 @@ function formatEvaluatedResults(results: EvaluatedResults, lines: string[]): str
   // Show summary by level
   const counts = results.levelCounts;
   const summaryParts: string[] = [];
-  if (counts[ReportLevel.Error] > 0) summaryParts.push(`${counts[ReportLevel.Error]} error(s)`);
-  if (counts[ReportLevel.Warn] > 0) summaryParts.push(`${counts[ReportLevel.Warn]} warning(s)`);
-  if (counts[ReportLevel.Info] > 0) summaryParts.push(`${counts[ReportLevel.Info]} info`);
-  if (counts[ReportLevel.Hint] > 0) summaryParts.push(`${counts[ReportLevel.Hint]} hint(s)`);
+  if (counts[ReportLevel.Error] > 0) {
+    summaryParts.push(`${counts[ReportLevel.Error]} error(s)`);
+  }
+  if (counts[ReportLevel.Warn] > 0) {
+    summaryParts.push(`${counts[ReportLevel.Warn]} warning(s)`);
+  }
+  if (counts[ReportLevel.Info] > 0) {
+    summaryParts.push(`${counts[ReportLevel.Info]} info`);
+  }
+  if (counts[ReportLevel.Hint] > 0) {
+    summaryParts.push(`${counts[ReportLevel.Hint]} hint(s)`);
+  }
 
   lines.push(`Found ${reportable.length} issue(s): ${summaryParts.join(", ")}`);
   lines.push("");
@@ -564,7 +620,12 @@ function formatEvaluatedResults(results: EvaluatedResults, lines: string[]): str
   }
 
   // Output in severity order
-  const levelOrder = [ReportLevel.Error, ReportLevel.Warn, ReportLevel.Info, ReportLevel.Hint];
+  const levelOrder = [
+    ReportLevel.Error,
+    ReportLevel.Warn,
+    ReportLevel.Info,
+    ReportLevel.Hint,
+  ];
 
   for (const level of levelOrder) {
     const issues = byLevel.get(level);
@@ -577,7 +638,9 @@ function formatEvaluatedResults(results: EvaluatedResults, lines: string[]): str
 
     for (const evaluated of issues) {
       const issue = evaluated.issue;
-      lines.push(`[${issue.kind}] ${issue.location.file}:${issue.location.line}`);
+      lines.push(
+        `[${issue.kind}] ${issue.location.file}:${issue.location.line}`,
+      );
       lines.push(`    ${issue.message}`);
       lines.push(`    (confidence: ${issue.confidence}%)`);
 
@@ -639,7 +702,9 @@ function formatRawResults(results: LintResults, lines: string[]): string {
     lines.push("");
 
     for (const issue of result.issues) {
-      lines.push(`[${issue.kind}] ${issue.location.file}:${issue.location.line}`);
+      lines.push(
+        `[${issue.kind}] ${issue.location.file}:${issue.location.line}`,
+      );
       lines.push(`    ${issue.message}`);
       lines.push(`    (confidence: ${issue.confidence}%)`);
 
@@ -684,71 +749,83 @@ function formatRawResults(results: LintResults, lines: string[]): string {
 // =============================================================================
 
 export type {
-    ConfigSource,
-    IssueCatalog,
-    IssueCategory,
-    IssueDef,
-    IssueImpact,
-    ParsedPattern,
-    PatternValue,
-    ResolvedConfig,
-    ResolvedPatternValue,
-    ResolvedScope,
-    ScopeConfig,
-    Severity,
-    ViolaConfig as ViolaFileConfig
+  ConfigSource,
+  IssueCatalog,
+  IssueCategory,
+  IssueDef,
+  IssueImpact,
+  ParsedPattern,
+  PatternValue,
+  ResolvedConfig,
+  ResolvedPatternValue,
+  ResolvedScope,
+  ScopeConfig,
+  Severity,
+  ViolaConfig as ViolaFileConfig,
 } from "./src/config/mod.ts";
 
 export {
-    // New API
-    Category,
-    // Legacy
-    compareImpact, ConditionExpr, formatValidationErrors,
-    // Grammar reference helper
-    grammar, Impact, IMPACT_ORDER,
-    impactValue, isGrammarRelationship,
-    isGrammarRelationshipAction, isReportAction, loadConfig,
-    matchesFilePattern,
-    matchesIssuePattern, plugin, report,
-    ReportLevel, resolveIssueSeverity,
-    validateLinterConfig, viola,
-    ViolaBuilder,
-    when
+  // New API
+  Category,
+  // Legacy
+  compareImpact,
+  ConditionExpr,
+  formatValidationErrors,
+  // Grammar reference helper
+  grammar,
+  Impact,
+  IMPACT_ORDER,
+  impactValue,
+  isGrammarRelationship,
+  isGrammarRelationshipAction,
+  isReportAction,
+  loadConfig,
+  matchesFilePattern,
+  matchesIssuePattern,
+  plugin,
+  report,
+  ReportLevel,
+  resolveIssueSeverity,
+  validateLinterConfig,
+  viola,
+  ViolaBuilder,
+  when,
 } from "./src/config/mod.ts";
 
 export type {
-    // New API
-    AddInput,
-    AddResult,
-    Condition,
-    EvaluatedIssue,
-    EvaluationContext,
-    GrammarRelationshipAction,
-    GrammarRelationshipBuilder,
-    LinterInput,
-    LinterSetting,
-    PluginInput,
-    ReportAction,
-    Rule,
-    RuleAction,
-    // Legacy
-    ValidationError,
-    ValidationResult, ViolaBuilderConfig,
-    ViolaBuilderConfigExtended,
-    ViolaPlugin,
-    ViolaPluginFn
+  // New API
+  AddInput,
+  AddResult,
+  Condition,
+  EvaluatedIssue,
+  EvaluationContext,
+  GrammarRelationshipAction,
+  GrammarRelationshipBuilder,
+  LinterInput,
+  LinterSetting,
+  PluginInput,
+  ReportAction,
+  Rule,
+  RuleAction,
+  // Legacy
+  ValidationError,
+  ValidationResult,
+  ViolaBuilderConfig,
+  ViolaBuilderConfigExtended,
+  ViolaPlugin,
+  ViolaPluginFn,
 } from "./src/config/mod.ts";
 
 export {
-    // Rule evaluation
-    countByLevel,
-    createEvaluationContext,
-    evaluateCondition,
-    evaluateIssue,
-    evaluateIssues,
-    filterReportableIssues,
-    groupByLevel,
-    hasErrors as hasErrorLevelIssues
+  // Rule evaluation
+  countByLevel,
+  createEvaluationContext,
+  evaluateCondition,
+  evaluateIssue,
+  evaluateIssues,
+  filterReportableIssues,
+  groupByLevel,
+  hasErrors as hasErrorLevelIssues,
 } from "./src/config/mod.ts";
 
 // =============================================================================
@@ -756,29 +833,38 @@ export {
 // =============================================================================
 
 export type {
-    Category as ConditionCategory, EvaluationContext as ConditionEvaluationContext, Impact as ConditionImpact, Condition as ConditionInterface,
-    EnvConditionBuilder, FileContext, IssueConditions,
-    IssueContext,
-    WhenBuilder
+  Category as ConditionCategory,
+  Condition as ConditionInterface,
+  EnvConditionBuilder,
+  EvaluationContext as ConditionEvaluationContext,
+  FileContext,
+  Impact as ConditionImpact,
+  IssueConditions,
+  IssueContext,
+  WhenBuilder,
 } from "./src/conditions/mod.ts";
 
 export type { Comparison } from "./src/conditions/mod.ts";
 
 export {
-    // The when builder and condition helpers
-    always as alwaysCondition, alwaysMatch,
-    atLeast,
-    atMost,
-    between,
-    contains,
-    endsWith,
-    equals,
-    lessThan,
-    matches,
-    moreThan, never as neverCondition, neverMatch,
-    noneOf,
-    oneOf,
-    startsWith, when as whenCondition
+  // The when builder and condition helpers
+  always as alwaysCondition,
+  alwaysMatch,
+  atLeast,
+  atMost,
+  between,
+  contains,
+  endsWith,
+  equals,
+  lessThan,
+  matches,
+  moreThan,
+  never as neverCondition,
+  neverMatch,
+  noneOf,
+  oneOf,
+  startsWith,
+  when as whenCondition,
 } from "./src/conditions/mod.ts";
 
 // =============================================================================
@@ -786,40 +872,40 @@ export {
 // =============================================================================
 
 export type {
-    ExtractionQueries,
-    GrammarDefinition,
-    GrammarEntry,
-    GrammarMeta,
-    GrammarRelationship,
-    GrammarRelationshipRule,
-    GrammarResolution,
-    GrammarRole,
-    GrammarSource,
-    GrammarTransforms,
-    QueryCaptures,
-    RegisteredGrammar,
-    ResolvedGrammar,
-    SyntaxNode
+  ExtractionQueries,
+  GrammarDefinition,
+  GrammarEntry,
+  GrammarMeta,
+  GrammarRelationship,
+  GrammarRelationshipRule,
+  GrammarResolution,
+  GrammarRole,
+  GrammarSource,
+  GrammarTransforms,
+  QueryCaptures,
+  RegisteredGrammar,
+  ResolvedGrammar,
+  SyntaxNode,
 } from "./src/grammars/mod.ts";
 
 export {
-    clearCache as clearGrammarCache,
-    createGrammarRegistry,
-    createGrammarResolver,
-    createParser,
-    extractCompleteFileInfo,
-    extractFileData,
-    getParser,
-    GrammarRegistry,
-    GrammarResolver,
-    initTreeSitter,
-    isInitialized as isTreeSitterInitialized,
-    loadGrammar,
-    mergeExtractionResults,
-    queryAll,
-    queryCount,
-    queryFirst,
-    queryHasMatch,
-    reset as resetTreeSitter,
-    runQuery
+  clearCache as clearGrammarCache,
+  createGrammarRegistry,
+  createGrammarResolver,
+  createParser,
+  extractCompleteFileInfo,
+  extractFileData,
+  getParser,
+  GrammarRegistry,
+  GrammarResolver,
+  initTreeSitter,
+  isInitialized as isTreeSitterInitialized,
+  loadGrammar,
+  mergeExtractionResults,
+  queryAll,
+  queryCount,
+  queryFirst,
+  queryHasMatch,
+  reset as resetTreeSitter,
+  runQuery,
 } from "./src/grammars/mod.ts";

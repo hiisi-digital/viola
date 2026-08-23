@@ -9,15 +9,15 @@
  */
 
 import type {
-    ExportInfo,
-    FileInfo,
-    FunctionInfo,
-    FunctionParam,
-    ImportInfo,
-    SourceLocation,
-    StringLiteral,
-    TypeField,
-    TypeInfo,
+  ExportInfo,
+  FileInfo,
+  FunctionInfo,
+  FunctionParam,
+  ImportInfo,
+  SourceLocation,
+  StringLiteral,
+  TypeField,
+  TypeInfo,
 } from "../data/types.ts";
 import type { Language, SyntaxNode, Tree } from "./loader.ts";
 import { runQuery } from "./query.ts";
@@ -31,7 +31,13 @@ import { hashCodeBody } from "../utils/hash.ts";
 /**
  * Convert a tree-sitter node position to a SourceLocation.
  */
-function nodeToLocation(node: { startPosition: { row: number; column: number }; endPosition: { row: number; column: number } }, file: string): SourceLocation {
+function nodeToLocation(
+  node: {
+    startPosition: { row: number; column: number };
+    endPosition: { row: number; column: number };
+  },
+  file: string,
+): SourceLocation {
   return {
     file,
     line: node.startPosition.row + 1, // tree-sitter is 0-indexed
@@ -154,17 +160,19 @@ function extractFunctions(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): FunctionInfo[] {
   const functions: FunctionInfo[] = [];
   const transforms = grammar.transforms;
 
-  for (const captures of runQuery(
-    tree,
-    language,
-    grammar.queries.functions,
-    sourceCode
-  )) {
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.functions,
+      sourceCode,
+    )
+  ) {
     const nameCapture = captures.get("function.name");
     const bodyCapture = captures.get("function.body");
     const paramsCapture = captures.get("function.params");
@@ -173,8 +181,8 @@ function extractFunctions(
 
     const name = nameCapture?.text ?? "";
     const body = bodyCapture?.text ?? "";
-    const node =
-      functionCapture?.node ?? nameCapture?.node ?? bodyCapture?.node;
+    const node = functionCapture?.node ?? nameCapture?.node ??
+      bodyCapture?.node;
 
     if (!node) continue;
 
@@ -201,10 +209,14 @@ function extractFunctions(
       body,
       normalizedBody,
       bodyHash: hashCodeBody(normalizedBody),
-      isAsync: transforms?.isAsync?.(node, captures) ?? captures.has("function.async"),
-      isGenerator: transforms?.isGenerator?.(node, captures) ?? captures.has("function.generator"),
-      isExported: transforms?.isExported?.(node, captures) ?? captures.has("function.export"),
-      isDefaultExport: transforms?.isDefaultExport?.(node, captures) ?? captures.has("function.default"),
+      isAsync: transforms?.isAsync?.(node, captures) ??
+        captures.has("function.async"),
+      isGenerator: transforms?.isGenerator?.(node, captures) ??
+        captures.has("function.generator"),
+      isExported: transforms?.isExported?.(node, captures) ??
+        captures.has("function.export"),
+      isDefaultExport: transforms?.isDefaultExport?.(node, captures) ??
+        captures.has("function.default"),
       jsDoc: docCommentFor(node, grammar, sourceCode),
       kind: "function" as const,
     });
@@ -221,19 +233,21 @@ function extractStrings(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): StringLiteral[] {
   if (!grammar.queries.strings) return [];
 
   const strings: StringLiteral[] = [];
   const transforms = grammar.transforms;
 
-  for (const captures of runQuery(
-    tree,
-    language,
-    grammar.queries.strings,
-    sourceCode
-  )) {
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.strings,
+      sourceCode,
+    )
+  ) {
     const valueCapture = captures.get("string.value");
     if (!valueCapture) continue;
 
@@ -243,8 +257,8 @@ function extractStrings(
     const quoteStyle = transforms?.getQuoteStyle
       ? transforms.getQuoteStyle(valueCapture.node)
       : isRaw
-        ? "raw" as const
-        : inferQuoteStyle(valueCapture.text);
+      ? "raw" as const
+      : inferQuoteStyle(valueCapture.text);
 
     if (inTypePosition(valueCapture.node)) continue;
 
@@ -267,19 +281,21 @@ function extractImports(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): ImportInfo[] {
   if (!grammar.queries.imports) return [];
 
   const imports: ImportInfo[] = [];
   const transforms = grammar.transforms;
 
-  for (const captures of runQuery(
-    tree,
-    language,
-    grammar.queries.imports,
-    sourceCode
-  )) {
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.imports,
+      sourceCode,
+    )
+  ) {
     if (transforms?.parseImport) {
       const firstCapture = captures.all().values().next().value;
       const node = captures.get("import")?.node ?? firstCapture?.node;
@@ -292,7 +308,7 @@ function extractImports(
           ...result.map((imp) => ({
             ...imp,
             location: { ...imp.location, file: filePath },
-          }))
+          })),
         );
       } else {
         imports.push({
@@ -327,19 +343,21 @@ function extractExports(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): ExportInfo[] {
   if (!grammar.queries.exports) return [];
 
   const exports: ExportInfo[] = [];
   const transforms = grammar.transforms;
 
-  for (const captures of runQuery(
-    tree,
-    language,
-    grammar.queries.exports,
-    sourceCode
-  )) {
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.exports,
+      sourceCode,
+    )
+  ) {
     if (transforms?.parseExport) {
       const firstCapture = captures.all().values().next().value;
       const node = captures.get("export")?.node ?? firstCapture?.node;
@@ -351,7 +369,7 @@ function extractExports(
           ...result.map((exp) => ({
             ...exp,
             location: { ...exp.location, file: filePath },
-          }))
+          })),
         );
       } else {
         exports.push({
@@ -388,19 +406,21 @@ function extractTypes(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): TypeInfo[] {
   if (!grammar.queries.types) return [];
 
   const types: TypeInfo[] = [];
   const transforms = grammar.transforms;
 
-  for (const captures of runQuery(
-    tree,
-    language,
-    grammar.queries.types,
-    sourceCode
-  )) {
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.types,
+      sourceCode,
+    )
+  ) {
     const nameCapture = captures.get("type.name");
     const bodyCapture = captures.get("type.body");
     const typeCapture = captures.get("type");
@@ -427,11 +447,9 @@ function extractTypes(
 
       jsDoc: docCommentFor(node, grammar, sourceCode),
       kind,
-      isExported:
-        transforms?.isExported?.(node, captures) ??
+      isExported: transforms?.isExported?.(node, captures) ??
         captures.has("type.export"),
-      isDefaultExport:
-        transforms?.isDefaultExport?.(node, captures) ??
+      isDefaultExport: transforms?.isDefaultExport?.(node, captures) ??
         captures.has("type.default"),
       fields,
       body,
@@ -505,7 +523,7 @@ export function extractFileData(
   language: Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): Omit<FileInfo, "path" | "extension" | "lineCount" | "content"> {
   // Each extraction is wrapped in try-catch so a bad query in one category
   // (e.g., types) doesn't prevent extraction of others (e.g., exports).
@@ -561,14 +579,14 @@ export function extractCompleteFileInfo(
   grammar: GrammarDefinition,
   filePath: string,
   extension: string,
-  sourceCode: string
+  sourceCode: string,
 ): FileInfo {
   const extracted = extractFileData(
     tree,
     language,
     grammar,
     filePath,
-    sourceCode
+    sourceCode,
   );
 
   return {

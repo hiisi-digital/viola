@@ -1,10 +1,13 @@
 # Viola Language-Agnostic Implementation Plan
 
-> Step-by-step plan for implementing the single tree-sitter core with pluggable grammar definitions.
+> Step-by-step plan for implementing the single tree-sitter core with pluggable
+> grammar definitions.
 
 ## Overview
 
-This document outlines the concrete implementation steps to refactor viola from a TypeScript-only regex-based linter to a language-agnostic linter runtime using tree-sitter with pluggable grammar definitions.
+This document outlines the concrete implementation steps to refactor viola from
+a TypeScript-only regex-based linter to a language-agnostic linter runtime using
+tree-sitter with pluggable grammar definitions.
 
 ## Architecture Summary
 
@@ -42,15 +45,15 @@ export interface Comparison<T> {
 
 class BaseComparison<T> implements Comparison<T> {
   constructor(private predicate: (value: T) => boolean) {}
-  
+
   evaluate(value: T): boolean {
     return this.predicate(value);
   }
-  
+
   and(other: Comparison<T>): Comparison<T> {
     return new BaseComparison((v) => this.evaluate(v) && other.evaluate(v));
   }
-  
+
   or(other: Comparison<T>): Comparison<T> {
     return new BaseComparison((v) => this.evaluate(v) || other.evaluate(v));
   }
@@ -109,7 +112,12 @@ export function oneOf<T>(...values: T[]): Comparison<T> {
 **File: `src/grammars/types.ts`**
 
 ```ts
-import type { FunctionParam, TypeField, ImportInfo, ExportInfo } from "../data/types.ts";
+import type {
+  ExportInfo,
+  FunctionParam,
+  ImportInfo,
+  TypeField,
+} from "../data/types.ts";
 
 /**
  * Metadata about a grammar.
@@ -171,18 +179,37 @@ export interface SyntaxNode {
  * Optional transform callbacks for language-specific extraction.
  */
 export interface GrammarTransforms {
-  parseParams?: (paramsNode: SyntaxNode | undefined, source: string) => FunctionParam[];
-  extractReturnType?: (node: SyntaxNode, captures: QueryCaptures) => string | undefined;
+  parseParams?: (
+    paramsNode: SyntaxNode | undefined,
+    source: string,
+  ) => FunctionParam[];
+  extractReturnType?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+  ) => string | undefined;
   normalizeBody?: (body: string, language: string) => string;
   isAsync?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
   isGenerator?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
   isExported?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
   isDefaultExport?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
-  parseImport?: (node: SyntaxNode, captures: QueryCaptures, source: string) => ImportInfo | ImportInfo[];
-  parseExport?: (node: SyntaxNode, captures: QueryCaptures, source: string) => ExportInfo | ExportInfo[];
-  parseTypeFields?: (bodyNode: SyntaxNode | undefined, source: string) => TypeField[];
+  parseImport?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+    source: string,
+  ) => ImportInfo | ImportInfo[];
+  parseExport?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+    source: string,
+  ) => ExportInfo | ExportInfo[];
+  parseTypeFields?: (
+    bodyNode: SyntaxNode | undefined,
+    source: string,
+  ) => TypeField[];
   parseDocComment?: (node: SyntaxNode, source: string) => string;
-  getQuoteStyle?: (node: SyntaxNode) => "single" | "double" | "backtick" | "raw";
+  getQuoteStyle?: (
+    node: SyntaxNode,
+  ) => "single" | "double" | "backtick" | "raw";
 }
 
 /**
@@ -219,16 +246,18 @@ export async function initTreeSitter(): Promise<void> {
 /**
  * Load a grammar's WASM and return the Language object.
  */
-export async function loadGrammar(grammar: GrammarSource): Promise<Parser.Language> {
+export async function loadGrammar(
+  grammar: GrammarSource,
+): Promise<Parser.Language> {
   const key = grammarKey(grammar);
-  
+
   const cached = loadedLanguages.get(key);
   if (cached) return cached;
-  
+
   await initTreeSitter();
-  
+
   let wasmPath: string;
-  
+
   if (grammar.source === "npm") {
     // Resolve from node_modules or npm cache
     const pkg = grammar.package ?? "";
@@ -240,10 +269,10 @@ export async function loadGrammar(grammar: GrammarSource): Promise<Parser.Langua
     // Bundled - path relative to viola package
     wasmPath = new URL(`../wasm/${grammar.wasm}`, import.meta.url).pathname;
   }
-  
+
   const language = await Parser.Language.load(wasmPath);
   loadedLanguages.set(key, language);
-  
+
   return language;
 }
 
@@ -285,22 +314,25 @@ export function* runQuery(
   tree: Parser.Tree,
   language: Parser.Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): Generator<QueryCaptures> {
   const query = language.query(querySource);
   const matches = query.matches(tree.rootNode);
-  
+
   for (const match of matches) {
     const captures = new Map<string, { node: SyntaxNode; text: string }>();
-    
+
     for (const capture of match.captures) {
-      const text = sourceCode.slice(capture.node.startIndex, capture.node.endIndex);
+      const text = sourceCode.slice(
+        capture.node.startIndex,
+        capture.node.endIndex,
+      );
       captures.set(capture.name, {
         node: capture.node as unknown as SyntaxNode,
         text,
       });
     }
-    
+
     yield {
       get: (name) => captures.get(name),
       has: (name) => captures.has(name),
@@ -316,7 +348,15 @@ export function* runQuery(
 
 ```ts
 import type Parser from "web-tree-sitter";
-import type { FileInfo, FunctionInfo, StringLiteral, ImportInfo, ExportInfo, TypeInfo, SourceLocation } from "../data/types.ts";
+import type {
+  ExportInfo,
+  FileInfo,
+  FunctionInfo,
+  ImportInfo,
+  SourceLocation,
+  StringLiteral,
+  TypeInfo,
+} from "../data/types.ts";
 import type { GrammarDefinition, QueryCaptures, SyntaxNode } from "./types.ts";
 import { runQuery } from "./query.ts";
 import { hashCodeBody } from "../utils/hash.ts";
@@ -330,9 +370,15 @@ export function extractFileData(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): Omit<FileInfo, "path" | "extension" | "lineCount"> {
-  const functions = extractFunctions(tree, language, grammar, filePath, sourceCode);
+  const functions = extractFunctions(
+    tree,
+    language,
+    grammar,
+    filePath,
+    sourceCode,
+  );
   const strings = grammar.queries.strings
     ? extractStrings(tree, language, grammar, filePath, sourceCode)
     : [];
@@ -345,7 +391,7 @@ export function extractFileData(
   const types = grammar.queries.types
     ? extractTypes(tree, language, grammar, filePath, sourceCode)
     : [];
-  
+
   return { functions, strings, imports, exports, types };
 }
 
@@ -354,39 +400,47 @@ function extractFunctions(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): FunctionInfo[] {
   const functions: FunctionInfo[] = [];
   const transforms = grammar.transforms;
-  
-  for (const captures of runQuery(tree, language, grammar.queries.functions, sourceCode)) {
+
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.functions,
+      sourceCode,
+    )
+  ) {
     const nameCapture = captures.get("function.name");
     const bodyCapture = captures.get("function.body");
     const paramsCapture = captures.get("function.params");
     const returnCapture = captures.get("function.return");
     const functionCapture = captures.get("function");
-    
+
     const name = nameCapture?.text ?? "";
     const body = bodyCapture?.text ?? "";
-    const node = functionCapture?.node ?? nameCapture?.node ?? bodyCapture?.node;
-    
+    const node = functionCapture?.node ?? nameCapture?.node ??
+      bodyCapture?.node;
+
     if (!node) continue;
-    
+
     // Use transform or default for params
     const params = transforms?.parseParams
       ? transforms.parseParams(paramsCapture?.node, sourceCode)
       : defaultParseParams(paramsCapture?.text);
-    
+
     // Use transform or capture for return type
     const returnType = transforms?.extractReturnType
       ? transforms.extractReturnType(node, captures)
       : returnCapture?.text;
-    
+
     // Normalize body
     const normalizedBody = transforms?.normalizeBody
       ? transforms.normalizeBody(body, grammar.meta.id)
       : normalizeCode(body);
-    
+
     functions.push({
       name,
       location: nodeToLocation(node, filePath),
@@ -402,7 +456,7 @@ function extractFunctions(
       kind: "function",
     });
   }
-  
+
   return functions;
 }
 
@@ -411,22 +465,29 @@ function extractStrings(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): StringLiteral[] {
   const strings: StringLiteral[] = [];
   const transforms = grammar.transforms;
-  
-  for (const captures of runQuery(tree, language, grammar.queries.strings!, sourceCode)) {
+
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.strings!,
+      sourceCode,
+    )
+  ) {
     const valueCapture = captures.get("string.value");
     if (!valueCapture) continue;
-    
+
     const isTemplate = captures.has("string.template");
     const isRaw = captures.has("string.raw");
-    
+
     const quoteStyle = transforms?.getQuoteStyle
       ? transforms.getQuoteStyle(valueCapture.node)
       : inferQuoteStyle(valueCapture.text);
-    
+
     strings.push({
       value: stripQuotes(valueCapture.text),
       location: nodeToLocation(valueCapture.node, filePath),
@@ -434,7 +495,7 @@ function extractStrings(
       isTemplate,
     });
   }
-  
+
   return strings;
 }
 
@@ -443,17 +504,25 @@ function extractImports(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): ImportInfo[] {
   const imports: ImportInfo[] = [];
   const transforms = grammar.transforms;
-  
-  for (const captures of runQuery(tree, language, grammar.queries.imports!, sourceCode)) {
+
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.imports!,
+      sourceCode,
+    )
+  ) {
     if (transforms?.parseImport) {
       const result = transforms.parseImport(
-        captures.get("import")?.node ?? captures.all().values().next().value?.node,
+        captures.get("import")?.node ??
+          captures.all().values().next().value?.node,
         captures,
-        sourceCode
+        sourceCode,
       );
       if (Array.isArray(result)) {
         imports.push(...result);
@@ -463,7 +532,7 @@ function extractImports(
     } else {
       const nameCapture = captures.get("import.name");
       const fromCapture = captures.get("import.from");
-      
+
       if (nameCapture && fromCapture) {
         imports.push({
           name: nameCapture.text,
@@ -475,7 +544,7 @@ function extractImports(
       }
     }
   }
-  
+
   return imports;
 }
 
@@ -484,17 +553,25 @@ function extractExports(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): ExportInfo[] {
   const exports: ExportInfo[] = [];
   const transforms = grammar.transforms;
-  
-  for (const captures of runQuery(tree, language, grammar.queries.exports!, sourceCode)) {
+
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.exports!,
+      sourceCode,
+    )
+  ) {
     if (transforms?.parseExport) {
       const result = transforms.parseExport(
-        captures.get("export")?.node ?? captures.all().values().next().value?.node,
+        captures.get("export")?.node ??
+          captures.all().values().next().value?.node,
         captures,
-        sourceCode
+        sourceCode,
       );
       if (Array.isArray(result)) {
         exports.push(...result);
@@ -503,19 +580,20 @@ function extractExports(
       }
     } else {
       const nameCapture = captures.get("export.name");
-      
+
       if (nameCapture) {
         exports.push({
           name: nameCapture.text,
           location: nodeToLocation(nameCapture.node, filePath),
-          kind: (captures.get("export.kind")?.text as ExportInfo["kind"]) ?? "unknown",
+          kind: (captures.get("export.kind")?.text as ExportInfo["kind"]) ??
+            "unknown",
           isTypeOnly: captures.has("export.type_only"),
           from: captures.get("export.from")?.text,
         });
       }
     }
   }
-  
+
   return exports;
 }
 
@@ -524,29 +602,36 @@ function extractTypes(
   language: Parser.Language,
   grammar: GrammarDefinition,
   filePath: string,
-  sourceCode: string
+  sourceCode: string,
 ): TypeInfo[] {
   const types: TypeInfo[] = [];
   const transforms = grammar.transforms;
-  
-  for (const captures of runQuery(tree, language, grammar.queries.types!, sourceCode)) {
+
+  for (
+    const captures of runQuery(
+      tree,
+      language,
+      grammar.queries.types!,
+      sourceCode,
+    )
+  ) {
     const nameCapture = captures.get("type.name");
     const bodyCapture = captures.get("type.body");
     const typeCapture = captures.get("type");
-    
+
     if (!nameCapture) continue;
-    
+
     const body = bodyCapture?.text ?? "";
     const node = typeCapture?.node ?? nameCapture.node;
-    
+
     const fields = transforms?.parseTypeFields
       ? transforms.parseTypeFields(bodyCapture?.node, sourceCode)
       : [];
-    
+
     const normalizedBody = transforms?.normalizeBody
       ? transforms.normalizeBody(body, grammar.meta.id)
       : normalizeCode(body);
-    
+
     types.push({
       name: nameCapture.text,
       location: nodeToLocation(node, filePath),
@@ -559,7 +644,7 @@ function extractTypes(
       bodyHash: hashCodeBody(normalizedBody),
     });
   }
-  
+
   return types;
 }
 
@@ -581,8 +666,8 @@ function defaultParseParams(paramsText: string | undefined): FunctionParam[] {
   // Grammars with complex params should provide a transform
   const inner = paramsText.replace(/^\(|\)$/g, "").trim();
   if (!inner) return [];
-  
-  return inner.split(",").map(p => ({
+
+  return inner.split(",").map((p) => ({
     name: p.trim().split(/[:\s=]/)[0].replace(/^\.\.\./, ""),
     optional: p.includes("?"),
     rest: p.trim().startsWith("..."),
@@ -606,16 +691,16 @@ function stripQuotes(text: string): string {
 
 ```ts
 export type {
+  ExtractionQueries,
+  GrammarDefinition,
   GrammarMeta,
   GrammarSource,
-  ExtractionQueries,
   GrammarTransforms,
-  GrammarDefinition,
   QueryCaptures,
   SyntaxNode,
 } from "./types.ts";
 
-export { initTreeSitter, loadGrammar, createParser } from "./loader.ts";
+export { createParser, initTreeSitter, loadGrammar } from "./loader.ts";
 export { runQuery } from "./query.ts";
 export { extractFileData } from "./extractor.ts";
 ```
@@ -645,9 +730,9 @@ export interface EvaluationContext {
     path: string;
   };
   issue?: {
-    by: string;        // linter/grammar id
+    by: string; // linter/grammar id
     kind: string;
-    impact: number;    // or enum value
+    impact: number; // or enum value
     confidence: number;
   };
   env: Record<string, string | undefined>;
@@ -665,27 +750,30 @@ import { minimatch } from "minimatch";
 
 class BaseCondition implements Condition {
   constructor(private predicate: (ctx: EvaluationContext) => boolean) {}
-  
+
   evaluate(context: EvaluationContext): boolean {
     return this.predicate(context);
   }
-  
+
   and(other: Condition): Condition {
-    return new BaseCondition((ctx) => this.evaluate(ctx) && other.evaluate(ctx));
+    return new BaseCondition((ctx) =>
+      this.evaluate(ctx) && other.evaluate(ctx)
+    );
   }
 }
 
 /**
  * Path pattern matching.
- * 
+ *
  * @example
  * when.in("*.ts", "*.tsx")
- * when.in("**/test/**")
+ * when.in("**/ test; /** ")
  */
+
 function inPatterns(...patterns: string[]): Condition {
   return new BaseCondition((ctx) => {
     if (!ctx.file) return false;
-    return patterns.some(p => minimatch(ctx.file!.path, p));
+    return patterns.some((p) => minimatch(ctx.file!.path, p));
   });
 }
 
@@ -695,7 +783,7 @@ function inPatterns(...patterns: string[]): Condition {
 const issue = {
   /**
    * Match issues by their source (linter or grammar).
-   * 
+   *
    * @example
    * when.issue.by(similarFunctions)
    */
@@ -703,20 +791,20 @@ const issue = {
     const id = typeof source === "string" ? source : source.id;
     return new BaseCondition((ctx) => ctx.issue?.by === id);
   },
-  
+
   /**
    * Match issues by kind.
-   * 
+   *
    * @example
    * when.issue.kind("duplicate")
    */
   kind(issueKind: string): Condition {
     return new BaseCondition((ctx) => ctx.issue?.kind === issueKind);
   },
-  
+
   /**
    * Match issues by impact level.
-   * 
+   *
    * @example
    * when.issue.impact(atLeast(Impact.Major))
    */
@@ -726,10 +814,10 @@ const issue = {
       return comparison.evaluate(ctx.issue.impact);
     });
   },
-  
+
   /**
    * Match issues by confidence level.
-   * 
+   *
    * @example
    * when.issue.confidence(atLeast(80))
    */
@@ -743,7 +831,7 @@ const issue = {
 
 /**
  * Environment variable matching.
- * 
+ *
  * @example
  * when.env("CI").exists()
  * when.env("NODE_ENV").is(equals("production"))
@@ -754,7 +842,7 @@ function env(varName: string) {
     exists(): Condition {
       return new BaseCondition((ctx) => ctx.env[varName] !== undefined);
     },
-    
+
     is(comparison: Comparison<string | number>): Condition {
       return new BaseCondition((ctx) => {
         const value = ctx.env[varName];
@@ -772,7 +860,7 @@ function env(varName: string) {
 
 /**
  * The `when` condition builder.
- * 
+ *
  * @example
  * when.in("*.ts", "*.tsx")
  * when.issue.by(similarFunctions)
@@ -794,7 +882,15 @@ export const when = {
 ```ts
 export type { Condition, EvaluationContext } from "./types.ts";
 export type { Comparison } from "./comparisons.ts";
-export { equals, atLeast, atMost, lessThan, moreThan, between, oneOf } from "./comparisons.ts";
+export {
+  atLeast,
+  atMost,
+  between,
+  equals,
+  lessThan,
+  moreThan,
+  oneOf,
+} from "./comparisons.ts";
 export { when } from "./when.ts";
 ```
 
@@ -830,16 +926,26 @@ export function grammarRef(g: GrammarDefinition | string) {
   return {
     overrides(other: GrammarDefinition | string) {
       const otherId = typeof other === "string" ? other : other.meta.id;
-      return { type: "grammar-overrides" as const, primary: id, secondary: otherId };
+      return {
+        type: "grammar-overrides" as const,
+        primary: id,
+        secondary: otherId,
+      };
     },
     supplements(other: GrammarDefinition | string) {
       const otherId = typeof other === "string" ? other : other.meta.id;
-      return { type: "grammar-supplements" as const, primary: id, secondary: otherId };
+      return {
+        type: "grammar-supplements" as const,
+        primary: id,
+        secondary: otherId,
+      };
     },
   };
 }
 
-export type GrammarAction = ReturnType<ReturnType<typeof grammarRef>["overrides" | "supplements"]>;
+export type GrammarAction = ReturnType<
+  ReturnType<typeof grammarRef>["overrides" | "supplements"]
+>;
 export type RuleAction = ReportAction | GrammarAction;
 
 interface RegisteredGrammar {
@@ -868,18 +974,26 @@ class ViolaBuilder {
 
   /**
    * Add a grammar or linter.
-   * 
+   *
    * @example
    * .add(grammar, typescript).as(ts)
    * .add(linter, similarFunctions)
    */
-  add(kind: GrammarKind, definition: GrammarDefinition): AddResult<GrammarDefinition>;
+  add(
+    kind: GrammarKind,
+    definition: GrammarDefinition,
+  ): AddResult<GrammarDefinition>;
   add(kind: LinterKind, linterDef: BaseLinter): AddResult<BaseLinter>;
-  add(kind: GrammarKind | LinterKind, thing: GrammarDefinition | BaseLinter): AddResult<unknown> {
+  add(
+    kind: GrammarKind | LinterKind,
+    thing: GrammarDefinition | BaseLinter,
+  ): AddResult<unknown> {
     const self = this;
-    
+
     if (kind === grammar) {
-      const entry: RegisteredGrammar = { definition: thing as GrammarDefinition };
+      const entry: RegisteredGrammar = {
+        definition: thing as GrammarDefinition,
+      };
       this._grammars.push(entry);
       return {
         as(alias: string) {
@@ -901,7 +1015,7 @@ class ViolaBuilder {
 
   /**
    * Define a rule.
-   * 
+   *
    * @example
    * .rule(report.error, when.issue.impact(atLeast(Impact.Major)))
    * .rule(grammar(ts).overrides(js), when.in("*.js"))
@@ -928,7 +1042,7 @@ export interface ViolaBuilderConfig {
 
 /**
  * Create a new viola configuration builder.
- * 
+ *
  * @example
  * viola()
  *   .add(grammar, typescript).as(ts)
@@ -950,7 +1064,12 @@ import { basename, extname, join, relative } from "@std/path";
 import { minimatch } from "minimatch";
 import type { CodebaseData, FileInfo } from "../data/types.ts";
 import type { GrammarDefinition } from "../grammars/types.ts";
-import { loadGrammar, createParser, extractFileData, initTreeSitter } from "../grammars/mod.ts";
+import {
+  createParser,
+  extractFileData,
+  initTreeSitter,
+  loadGrammar,
+} from "../grammars/mod.ts";
 
 export interface CrawlConfig {
   projectRoot: string;
@@ -963,27 +1082,29 @@ export interface CrawlConfig {
  * Single-pass crawl of the codebase.
  * Parses each file once and dispatches to matching grammars.
  */
-export async function crawlCodebase(config: CrawlConfig): Promise<CodebaseData> {
+export async function crawlCodebase(
+  config: CrawlConfig,
+): Promise<CodebaseData> {
   await initTreeSitter();
-  
+
   const files: FileInfo[] = [];
   const grammarCache = new Map<string, { language: any; parser: any }>();
-  
+
   for (const includeDir of config.include) {
     const fullPath = join(config.projectRoot, includeDir);
-    
+
     for await (const entry of walk(fullPath, { includeDirs: false })) {
       const relativePath = relative(config.projectRoot, entry.path);
-      
+
       // Check exclusions
-      if (config.exclude.some(pattern => pattern.test(relativePath))) {
+      if (config.exclude.some((pattern) => pattern.test(relativePath))) {
         continue;
       }
-      
+
       // Find matching grammar
       const grammar = findMatchingGrammar(entry.path, config.grammars);
       if (!grammar) continue;
-      
+
       // Load grammar if not cached
       let cached = grammarCache.get(grammar.meta.id);
       if (!cached) {
@@ -992,20 +1113,20 @@ export async function crawlCodebase(config: CrawlConfig): Promise<CodebaseData> 
         cached = { language, parser };
         grammarCache.set(grammar.meta.id, cached);
       }
-      
+
       // Read and parse file
       const content = await Deno.readTextFile(entry.path);
       const tree = cached.parser.parse(content);
-      
+
       // Extract data
       const extracted = extractFileData(
         tree,
         cached.language,
         grammar,
         relativePath,
-        content
+        content,
       );
-      
+
       files.push({
         path: relativePath,
         extension: extname(entry.path),
@@ -1015,24 +1136,24 @@ export async function crawlCodebase(config: CrawlConfig): Promise<CodebaseData> 
       });
     }
   }
-  
+
   return buildCodebaseData(config.projectRoot, files);
 }
 
 function findMatchingGrammar(
   filePath: string,
-  grammars: readonly GrammarDefinition[]
+  grammars: readonly GrammarDefinition[],
 ): GrammarDefinition | undefined {
   const ext = extname(filePath);
   const name = basename(filePath);
-  
+
   // First registered grammar wins (priority order)
   for (const grammar of grammars) {
     // Check extension
     if (grammar.meta.extensions.includes(ext)) {
       return grammar;
     }
-    
+
     // Check globs
     if (grammar.meta.globs) {
       for (const glob of grammar.meta.globs) {
@@ -1042,24 +1163,24 @@ function findMatchingGrammar(
       }
     }
   }
-  
+
   return undefined;
 }
 
 function buildCodebaseData(
   projectRoot: string,
-  files: readonly FileInfo[]
+  files: readonly FileInfo[],
 ): CodebaseData {
   return Object.freeze({
     projectRoot,
     files,
     schemas: [], // Schema extraction could be a separate grammar
     extractedAt: Date.now(),
-    allFunctions: files.flatMap(f => f.functions),
-    allTypes: files.flatMap(f => f.types),
-    allStrings: files.flatMap(f => f.strings),
-    allExports: files.flatMap(f => f.exports),
-    allImports: files.flatMap(f => f.imports),
+    allFunctions: files.flatMap((f) => f.functions),
+    allTypes: files.flatMap((f) => f.types),
+    allStrings: files.flatMap((f) => f.strings),
+    allExports: files.flatMap((f) => f.exports),
+    allImports: files.flatMap((f) => f.imports),
   });
 }
 ```
@@ -1228,24 +1349,34 @@ export const docCommentQuery = `
 **File: `packages/viola-grammar-ts/src/transforms.ts`**
 
 ```ts
-import type { FunctionParam, TypeField, ImportInfo, ExportInfo } from "@hiisi/viola";
-import type { SyntaxNode, QueryCaptures } from "@hiisi/viola";
+import type {
+  ExportInfo,
+  FunctionParam,
+  ImportInfo,
+  TypeField,
+} from "@hiisi/viola";
+import type { QueryCaptures, SyntaxNode } from "@hiisi/viola";
 
 /**
  * Parse TypeScript function parameters.
  * Handles: destructuring, default values, rest params, type annotations.
  */
-export function parseParams(paramsNode: SyntaxNode | undefined, source: string): FunctionParam[] {
+export function parseParams(
+  paramsNode: SyntaxNode | undefined,
+  source: string,
+): FunctionParam[] {
   if (!paramsNode) return [];
-  
+
   const params: FunctionParam[] = [];
-  
+
   for (const child of paramsNode.namedChildren) {
-    if (child.type === "required_parameter" || child.type === "optional_parameter") {
+    if (
+      child.type === "required_parameter" || child.type === "optional_parameter"
+    ) {
       const pattern = child.childForFieldName("pattern");
       const type = child.childForFieldName("type");
       const value = child.childForFieldName("value");
-      
+
       params.push({
         name: pattern?.text ?? "",
         type: type?.text,
@@ -1262,25 +1393,28 @@ export function parseParams(paramsNode: SyntaxNode | undefined, source: string):
       });
     }
   }
-  
+
   return params;
 }
 
 /**
  * Parse TypeScript interface/type fields.
  */
-export function parseTypeFields(bodyNode: SyntaxNode | undefined, source: string): TypeField[] {
+export function parseTypeFields(
+  bodyNode: SyntaxNode | undefined,
+  source: string,
+): TypeField[] {
   if (!bodyNode) return [];
-  
+
   const fields: TypeField[] = [];
-  
+
   for (const child of bodyNode.namedChildren) {
     if (child.type === "property_signature") {
       const name = child.childForFieldName("name");
       const type = child.childForFieldName("type");
-      const optional = child.children.some(c => c.type === "?");
-      const readonly = child.children.some(c => c.type === "readonly");
-      
+      const optional = child.children.some((c) => c.type === "?");
+      const readonly = child.children.some((c) => c.type === "readonly");
+
       if (name) {
         fields.push({
           name: name.text,
@@ -1291,7 +1425,7 @@ export function parseTypeFields(bodyNode: SyntaxNode | undefined, source: string
       }
     }
   }
-  
+
   return fields;
 }
 
@@ -1299,8 +1433,8 @@ export function parseTypeFields(bodyNode: SyntaxNode | undefined, source: string
  * Check if a function is async.
  */
 export function isAsync(node: SyntaxNode, captures: QueryCaptures): boolean {
-  return captures.has("function.async") || 
-         node.children.some(c => c.type === "async");
+  return captures.has("function.async") ||
+    node.children.some((c) => c.type === "async");
 }
 
 /**
@@ -1308,7 +1442,7 @@ export function isAsync(node: SyntaxNode, captures: QueryCaptures): boolean {
  */
 export function isExported(node: SyntaxNode, captures: QueryCaptures): boolean {
   if (captures.has("function.export")) return true;
-  
+
   // Check parent for export_statement
   let current: SyntaxNode | null = node;
   while (current) {
@@ -1321,11 +1455,14 @@ export function isExported(node: SyntaxNode, captures: QueryCaptures): boolean {
 /**
  * Check if it's a default export.
  */
-export function isDefaultExport(node: SyntaxNode, captures: QueryCaptures): boolean {
+export function isDefaultExport(
+  node: SyntaxNode,
+  captures: QueryCaptures,
+): boolean {
   let current: SyntaxNode | null = node;
   while (current) {
     if (current.type === "export_statement") {
-      return current.children.some(c => c.type === "default");
+      return current.children.some((c) => c.type === "default");
     }
     current = current.parent;
   }
@@ -1342,7 +1479,7 @@ export function parseDocComment(node: SyntaxNode, source: string): string {
     .replace(/^\/\*\*\s*/, "")
     .replace(/\s*\*\/$/, "")
     .split("\n")
-    .map(line => line.replace(/^\s*\*\s?/, ""))
+    .map((line) => line.replace(/^\s*\*\s?/, ""))
     .join("\n")
     .trim();
 }
@@ -1350,7 +1487,9 @@ export function parseDocComment(node: SyntaxNode, source: string): string {
 /**
  * Get quote style from string node.
  */
-export function getQuoteStyle(node: SyntaxNode): "single" | "double" | "backtick" {
+export function getQuoteStyle(
+  node: SyntaxNode,
+): "single" | "double" | "backtick" {
   const text = node.text;
   if (text.startsWith("`")) return "backtick";
   if (text.startsWith("'")) return "single";
@@ -1365,21 +1504,21 @@ export function getQuoteStyle(node: SyntaxNode): "single" | "double" | "backtick
 ```ts
 import type { GrammarDefinition } from "@hiisi/viola";
 import {
-  functionQuery,
-  stringQuery,
-  importQuery,
-  exportQuery,
-  typeQuery,
   docCommentQuery,
+  exportQuery,
+  functionQuery,
+  importQuery,
+  stringQuery,
+  typeQuery,
 } from "./src/queries.ts";
 import {
+  getQuoteStyle,
+  isAsync,
+  isDefaultExport,
+  isExported,
+  parseDocComment,
   parseParams,
   parseTypeFields,
-  isAsync,
-  isExported,
-  isDefaultExport,
-  parseDocComment,
-  getQuoteStyle,
 } from "./src/transforms.ts";
 
 export const typescript: GrammarDefinition = {
@@ -1389,13 +1528,13 @@ export const typescript: GrammarDefinition = {
     extensions: [".ts", ".tsx", ".mts", ".cts"],
     description: "TypeScript and TSX files using tree-sitter-typescript",
   },
-  
+
   grammar: {
     source: "npm",
     package: "tree-sitter-typescript",
     wasm: "tree-sitter-typescript.wasm",
   },
-  
+
   queries: {
     functions: functionQuery,
     strings: stringQuery,
@@ -1404,7 +1543,7 @@ export const typescript: GrammarDefinition = {
     types: typeQuery,
     docComments: docCommentQuery,
   },
-  
+
   transforms: {
     parseParams,
     parseTypeFields,
@@ -1423,13 +1562,13 @@ export const javascript: GrammarDefinition = {
     extensions: [".js", ".jsx", ".mjs", ".cjs"],
     description: "JavaScript and JSX files using tree-sitter-javascript",
   },
-  
+
   grammar: {
     source: "npm",
     package: "tree-sitter-javascript",
     wasm: "tree-sitter-javascript.wasm",
   },
-  
+
   queries: {
     functions: functionQuery,
     strings: stringQuery,
@@ -1438,7 +1577,7 @@ export const javascript: GrammarDefinition = {
     // No types query for plain JS
     docComments: docCommentQuery,
   },
-  
+
   transforms: {
     parseParams,
     isAsync,
@@ -1547,21 +1686,24 @@ export const docCommentQuery = `
 **File: `packages/viola-grammar-bash/src/transforms.ts`**
 
 ```ts
-import type { FunctionParam, ImportInfo, ExportInfo } from "@hiisi/viola";
-import type { SyntaxNode, QueryCaptures } from "@hiisi/viola";
+import type { ExportInfo, FunctionParam, ImportInfo } from "@hiisi/viola";
+import type { QueryCaptures, SyntaxNode } from "@hiisi/viola";
 
 /**
  * Extract positional parameters used in a bash function body.
  * Scans for $1, $2, ${1}, ${2}, $@, $*, $#
  */
-export function parseParams(paramsNode: SyntaxNode | undefined, source: string): FunctionParam[] {
+export function parseParams(
+  paramsNode: SyntaxNode | undefined,
+  source: string,
+): FunctionParam[] {
   // In bash, paramsNode is actually the function body - we scan for usage
   if (!paramsNode) return [];
-  
+
   const body = paramsNode.text;
   const params: FunctionParam[] = [];
   const seen = new Set<string>();
-  
+
   // Match positional parameters: $1, ${1}, $2, ${2}, etc.
   const positionalRegex = /\$\{?(\d+)\}?/g;
   let match;
@@ -1576,14 +1718,14 @@ export function parseParams(paramsNode: SyntaxNode | undefined, source: string):
       });
     }
   }
-  
+
   // Sort by parameter number
   params.sort((a, b) => {
     const numA = parseInt(a.name.slice(1));
     const numB = parseInt(b.name.slice(1));
     return numA - numB;
   });
-  
+
   // Check for $@ or $* (rest-like)
   if (/\$[@*]|\$\{[@*]\}/.test(body)) {
     params.push({
@@ -1592,7 +1734,7 @@ export function parseParams(paramsNode: SyntaxNode | undefined, source: string):
       rest: true,
     });
   }
-  
+
   return params;
 }
 
@@ -1617,7 +1759,9 @@ export function normalizeBody(body: string, language: string): string {
 /**
  * Get quote style from bash string node.
  */
-export function getQuoteStyle(node: SyntaxNode): "single" | "double" | "backtick" | "raw" {
+export function getQuoteStyle(
+  node: SyntaxNode,
+): "single" | "double" | "backtick" | "raw" {
   const text = node.text;
   if (node.type === "raw_string") return "raw";
   if (text.startsWith("$'")) return "raw"; // ANSI-C
@@ -1643,18 +1787,18 @@ export function isExported(node: SyntaxNode, captures: QueryCaptures): boolean {
 export function parseImport(
   node: SyntaxNode,
   captures: QueryCaptures,
-  source: string
+  source: string,
 ): ImportInfo {
   const fromCapture = captures.get("import.from");
   const fromText = fromCapture?.text ?? "";
-  
+
   // Strip quotes if present
   const from = fromText.replace(/^["']|["']$/g, "");
-  
+
   return {
     name: from.split("/").pop() ?? from,
     location: {
-      file: "",  // Will be filled in by caller
+      file: "", // Will be filled in by caller
       line: node.startPosition.row + 1,
       column: node.startPosition.column + 1,
     },
@@ -1671,7 +1815,7 @@ export function parseDocComment(node: SyntaxNode, source: string): string {
   // Strip leading # and whitespace
   return node.text
     .split("\n")
-    .map(line => line.replace(/^\s*#\s?/, ""))
+    .map((line) => line.replace(/^\s*#\s?/, ""))
     .join("\n")
     .trim();
 }
@@ -1684,19 +1828,19 @@ export function parseDocComment(node: SyntaxNode, source: string): string {
 ```ts
 import type { GrammarDefinition } from "@hiisi/viola";
 import {
-  functionQuery,
-  stringQuery,
-  importQuery,
-  exportQuery,
   docCommentQuery,
+  exportQuery,
+  functionQuery,
+  importQuery,
+  stringQuery,
 } from "./src/queries.ts";
 import {
-  parseParams,
-  normalizeBody,
   getQuoteStyle,
   isExported,
-  parseImport,
+  normalizeBody,
   parseDocComment,
+  parseImport,
+  parseParams,
 } from "./src/transforms.ts";
 
 export const bash: GrammarDefinition = {
@@ -1707,13 +1851,13 @@ export const bash: GrammarDefinition = {
     globs: [".bashrc", ".bash_profile", ".profile", ".bash_aliases"],
     description: "Bash and shell scripts using tree-sitter-bash",
   },
-  
+
   grammar: {
     source: "npm",
     package: "tree-sitter-bash",
     wasm: "tree-sitter-bash.wasm",
   },
-  
+
   queries: {
     functions: functionQuery,
     strings: stringQuery,
@@ -1723,7 +1867,7 @@ export const bash: GrammarDefinition = {
     types: undefined,
     docComments: docCommentQuery,
   },
-  
+
   transforms: {
     parseParams,
     normalizeBody,
@@ -1744,7 +1888,7 @@ export default bash;
 **File: `nutshell/viola.config.ts`**
 
 ```ts
-import { viola, grammar, linter, report, when } from "@hiisi/viola";
+import { grammar, linter, report, viola, when } from "@hiisi/viola";
 import { atLeast } from "@hiisi/viola";
 import bash from "@hiisi/viola-grammar-bash";
 import similarFunctions from "@hiisi/viola-lint-similar-functions";
@@ -1753,21 +1897,20 @@ import duplicateStrings from "@hiisi/viola-lint-duplicate-strings";
 export default viola()
   // Register grammar
   .add(grammar, bash)
-  
   // Register linters
   .add(linter, similarFunctions)
   .add(linter, duplicateStrings)
-  
   // Severity rules
   .rule(report.error, when.issue.impact(atLeast(Impact.Major)))
   .rule(report.warn, when.issue.impact(atLeast(Impact.Minor)))
-  
   // Path exclusions
   .rule(report.off, when.in("**/impl/**"))
   .rule(report.off, when.in("**/examples/**"))
-  
   // CI-specific: stricter in CI
-  .rule(report.error, when.env("CI").exists().and(when.issue.impact(atLeast(Impact.Minor))));
+  .rule(
+    report.error,
+    when.env("CI").exists().and(when.issue.impact(atLeast(Impact.Minor))),
+  );
 ```
 
 ### 6.2 Update Check Script
@@ -1846,21 +1989,21 @@ fixtures/
 ```ts
 import { assertEquals } from "@std/assert";
 import { bash } from "../mod.ts";
-import { loadGrammar, createParser, extractFileData } from "@hiisi/viola";
+import { createParser, extractFileData, loadGrammar } from "@hiisi/viola";
 
 Deno.test("bash grammar extracts simple function", async () => {
   const language = await loadGrammar(bash.grammar);
   const parser = createParser(language);
-  
+
   const source = `
 my_function() {
     echo "hello"
 }
 `;
-  
+
   const tree = parser.parse(source);
   const data = extractFileData(tree, language, bash, "test.sh", source);
-  
+
   assertEquals(data.functions.length, 1);
   assertEquals(data.functions[0].name, "my_function");
 });
@@ -1868,16 +2011,16 @@ my_function() {
 Deno.test("bash grammar extracts positional params", async () => {
   const language = await loadGrammar(bash.grammar);
   const parser = createParser(language);
-  
+
   const source = `
 greet() {
     echo "Hello, $1! You are $2 years old."
 }
 `;
-  
+
   const tree = parser.parse(source);
   const data = extractFileData(tree, language, bash, "test.sh", source);
-  
+
   assertEquals(data.functions[0].params.length, 2);
   assertEquals(data.functions[0].params[0].name, "$1");
   assertEquals(data.functions[0].params[1].name, "$2");
@@ -1886,15 +2029,15 @@ greet() {
 Deno.test("bash grammar extracts source imports", async () => {
   const language = await loadGrammar(bash.grammar);
   const parser = createParser(language);
-  
+
   const source = `
 source "./lib/utils.sh"
 . "../common.sh"
 `;
-  
+
   const tree = parser.parse(source);
   const data = extractFileData(tree, language, bash, "test.sh", source);
-  
+
   assertEquals(data.imports.length, 2);
   assertEquals(data.imports[0].from, "./lib/utils.sh");
   assertEquals(data.imports[1].from, "../common.sh");
@@ -1905,33 +2048,34 @@ source "./lib/utils.sh"
 
 ### TypeScript Transforms (Must Implement)
 
-| Transform | Complexity | Reason |
-|-----------|------------|--------|
-| `parseParams` | High | Destructuring, defaults, rest, types, decorators |
-| `parseTypeFields` | Medium | Interface/type field extraction |
-| `isAsync` | Low | Check for async keyword |
-| `isGenerator` | Low | Check for * in function |
-| `isExported` | Medium | Check parent for export statement |
-| `isDefaultExport` | Medium | Check for default keyword in export |
-| `parseDocComment` | Medium | Strip JSDoc markers, parse tags |
-| `getQuoteStyle` | Low | Determine quote character |
+| Transform         | Complexity | Reason                                           |
+| ----------------- | ---------- | ------------------------------------------------ |
+| `parseParams`     | High       | Destructuring, defaults, rest, types, decorators |
+| `parseTypeFields` | Medium     | Interface/type field extraction                  |
+| `isAsync`         | Low        | Check for async keyword                          |
+| `isGenerator`     | Low        | Check for * in function                          |
+| `isExported`      | Medium     | Check parent for export statement                |
+| `isDefaultExport` | Medium     | Check for default keyword in export              |
+| `parseDocComment` | Medium     | Strip JSDoc markers, parse tags                  |
+| `getQuoteStyle`   | Low        | Determine quote character                        |
 
 ### Bash Transforms (Must Implement)
 
-| Transform | Complexity | Reason |
-|-----------|------------|--------|
-| `parseParams` | Medium | Scan body for $1, $2, $@, $* usage |
-| `normalizeBody` | Medium | Handle here-docs, different quote styles |
-| `parseImport` | Low | Extract path from source/. command |
-| `parseDocComment` | Low | Strip # prefix from comments |
-| `getQuoteStyle` | Low | Distinguish '', "", $'' |
-| `isExported` | Low | Would need full-file scan for export -f |
+| Transform         | Complexity | Reason                                   |
+| ----------------- | ---------- | ---------------------------------------- |
+| `parseParams`     | Medium     | Scan body for $1, $2, $@, $* usage       |
+| `normalizeBody`   | Medium     | Handle here-docs, different quote styles |
+| `parseImport`     | Low        | Extract path from source/. command       |
+| `parseDocComment` | Low        | Strip # prefix from comments             |
+| `getQuoteStyle`   | Low        | Distinguish '', "", $''                  |
+| `isExported`      | Low        | Would need full-file scan for export -f  |
 
 ### Transforms NOT Needed (Query-Only)
 
 These can be handled purely by tree-sitter queries:
+
 - Function name extraction
-- Function body extraction  
+- Function body extraction
 - String literal extraction
 - Basic import/export detection
 - Type name extraction
@@ -1939,26 +2083,31 @@ These can be handled purely by tree-sitter queries:
 
 ## Timeline Estimate
 
-| Phase | Description | Effort |
-|-------|-------------|--------|
-| 1 | Core tree-sitter + comparisons | 2-3 days |
-| 2 | Condition API (`when.*`) | 1-2 days |
-| 3 | Builder API update | 1-2 days |
-| 4 | TypeScript grammar package | 2-3 days |
-| 5 | Bash grammar package | 1-2 days |
-| 6 | Nutshell integration | 1 day |
-| 7 | Testing infrastructure | 1 day |
+| Phase | Description                    | Effort   |
+| ----- | ------------------------------ | -------- |
+| 1     | Core tree-sitter + comparisons | 2-3 days |
+| 2     | Condition API (`when.*`)       | 1-2 days |
+| 3     | Builder API update             | 1-2 days |
+| 4     | TypeScript grammar package     | 2-3 days |
+| 5     | Bash grammar package           | 1-2 days |
+| 6     | Nutshell integration           | 1 day    |
+| 7     | Testing infrastructure         | 1 day    |
 
 **Total: ~9-14 days**
 
 ## Open Items
 
-1. **WASM loading strategy** - How to resolve npm package paths to WASM files in Deno?
-2. **Grammar bundling** - Should grammars be bundled in the compiled binary or loaded at runtime?
-3. **Query validation** - Should we validate capture names at grammar registration time?
-4. **Incremental parsing** - Should we use tree-sitter's incremental parsing for watch mode?
+1. **WASM loading strategy** - How to resolve npm package paths to WASM files in
+   Deno?
+2. **Grammar bundling** - Should grammars be bundled in the compiled binary or
+   loaded at runtime?
+3. **Query validation** - Should we validate capture names at grammar
+   registration time?
+4. **Incremental parsing** - Should we use tree-sitter's incremental parsing for
+   watch mode?
 5. **Error recovery** - How to handle parse errors gracefully?
-6. **Type inference for aliases** - How to make `.as(ts)` provide proper TypeScript inference for use in `grammar(ts)`?
+6. **Type inference for aliases** - How to make `.as(ts)` provide proper
+   TypeScript inference for use in `grammar(ts)`?
 
 ## Next Steps
 

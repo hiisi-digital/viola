@@ -9,10 +9,10 @@
  */
 
 import type {
-    ExportInfo,
-    FunctionParam,
-    ImportInfo,
-    TypeField,
+  ExportInfo,
+  FunctionParam,
+  ImportInfo,
+  TypeField,
 } from "../data/types.ts";
 
 // =============================================================================
@@ -200,7 +200,7 @@ export interface GrammarTransforms {
    */
   parseParams?: (
     paramsNode: SyntaxNode | undefined,
-    source: string
+    source: string,
   ) => FunctionParam[];
 
   /**
@@ -209,7 +209,7 @@ export interface GrammarTransforms {
    */
   extractReturnType?: (
     node: SyntaxNode,
-    captures: QueryCaptures
+    captures: QueryCaptures,
   ) => string | undefined;
 
   /**
@@ -251,7 +251,7 @@ export interface GrammarTransforms {
   parseImport?: (
     node: SyntaxNode,
     captures: QueryCaptures,
-    source: string
+    source: string,
   ) => ImportInfo | ImportInfo[];
 
   /**
@@ -260,7 +260,7 @@ export interface GrammarTransforms {
   parseExport?: (
     node: SyntaxNode,
     captures: QueryCaptures,
-    source: string
+    source: string,
   ) => ExportInfo | ExportInfo[];
 
   /**
@@ -269,7 +269,7 @@ export interface GrammarTransforms {
    */
   parseTypeFields?: (
     bodyNode: SyntaxNode | undefined,
-    source: string
+    source: string,
   ) => TypeField[];
 
   /**
@@ -284,7 +284,7 @@ export interface GrammarTransforms {
    * Determine string quote style from node.
    */
   getQuoteStyle?: (
-    node: SyntaxNode
+    node: SyntaxNode,
   ) => "single" | "double" | "backtick" | "raw";
 }
 

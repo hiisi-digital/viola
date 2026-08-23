@@ -8,16 +8,16 @@
 
 // Condition types
 export type {
-    BaseCondition,
-    CategoryCondition,
-    CompoundCondition,
-    Condition,
-    ConditionOperator,
-    ConfidenceCondition,
-    FileCondition,
-    ImpactCondition,
-    LinterCondition,
-    NotCondition
+  BaseCondition,
+  CategoryCondition,
+  CompoundCondition,
+  Condition,
+  ConditionOperator,
+  ConfidenceCondition,
+  FileCondition,
+  ImpactCondition,
+  LinterCondition,
+  NotCondition,
 } from "./conditions.types.ts";
 
 // Action types
@@ -28,15 +28,15 @@ export type { EvaluatedIssue, EvaluationContext } from "./evaluator.types.ts";
 
 // Builder types
 export type {
-    ConditionExprInterface,
-    LinterInput,
-    LinterSetting,
-    PluginInput,
-    Rule,
-    ViolaBuilderConfig,
-    ViolaBuilderInterface,
-    ViolaPlugin,
-    ViolaPluginFn
+  ConditionExprInterface,
+  LinterInput,
+  LinterSetting,
+  PluginInput,
+  Rule,
+  ViolaBuilderConfig,
+  ViolaBuilderInterface,
+  ViolaPlugin,
+  ViolaPluginFn,
 } from "./builder.types.ts";
 
 // Merge types

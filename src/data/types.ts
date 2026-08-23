@@ -191,7 +191,18 @@ export interface ExportInfo {
   /** Location in source */
   readonly location: SourceLocation;
   /** Kind of export */
-  readonly kind: "function" | "type" | "interface" | "class" | "const" | "let" | "var" | "enum" | "namespace" | "re-export" | "unknown";
+  readonly kind:
+    | "function"
+    | "type"
+    | "interface"
+    | "class"
+    | "const"
+    | "let"
+    | "var"
+    | "enum"
+    | "namespace"
+    | "re-export"
+    | "unknown";
   /** Whether it's a type-only export */
   readonly isTypeOnly: boolean;
   /** Source module (for re-exports) */
@@ -281,7 +292,7 @@ export interface CodebaseData {
 
 /**
  * An issue found by a linter.
- * 
+ *
  * Issues carry metadata (kind, confidence) but NOT severity. Severity is
  * determined by the config layer based on issue category/impact and rules.
  */

@@ -67,7 +67,7 @@ export interface Comparison<T> {
 class BaseComparison<T> implements Comparison<T> {
   constructor(
     private readonly predicate: (value: T) => boolean,
-    private readonly description?: string
+    private readonly description?: string,
   ) {}
 
   evaluate(value: T): boolean {
@@ -77,21 +77,21 @@ class BaseComparison<T> implements Comparison<T> {
   and(other: Comparison<T>): Comparison<T> {
     return new BaseComparison(
       (v) => this.evaluate(v) && other.evaluate(v),
-      `(${this.description} AND ${(other as BaseComparison<T>).description})`
+      `(${this.description} AND ${(other as BaseComparison<T>).description})`,
     );
   }
 
   or(other: Comparison<T>): Comparison<T> {
     return new BaseComparison(
       (v) => this.evaluate(v) || other.evaluate(v),
-      `(${this.description} OR ${(other as BaseComparison<T>).description})`
+      `(${this.description} OR ${(other as BaseComparison<T>).description})`,
     );
   }
 
   not(): Comparison<T> {
     return new BaseComparison(
       (v) => !this.evaluate(v),
-      `NOT(${this.description})`
+      `NOT(${this.description})`,
     );
   }
 
@@ -167,7 +167,7 @@ export function moreThan<T>(bound: T): Comparison<T> {
 export function between<T>(min: T, max: T): Comparison<T> {
   return new BaseComparison(
     (v) => v >= min && v <= max,
-    `between ${min} and ${max}`
+    `between ${min} and ${max}`,
   );
 }
 
@@ -181,7 +181,7 @@ export function between<T>(min: T, max: T): Comparison<T> {
 export function oneOf<T>(...values: T[]): Comparison<T> {
   return new BaseComparison(
     (v) => values.includes(v),
-    `one of [${values.join(", ")}]`
+    `one of [${values.join(", ")}]`,
   );
 }
 
@@ -194,7 +194,7 @@ export function oneOf<T>(...values: T[]): Comparison<T> {
 export function noneOf<T>(...values: T[]): Comparison<T> {
   return new BaseComparison(
     (v) => !values.includes(v),
-    `none of [${values.join(", ")}]`
+    `none of [${values.join(", ")}]`,
   );
 }
 
@@ -207,7 +207,7 @@ export function noneOf<T>(...values: T[]): Comparison<T> {
 export function contains(substring: string): Comparison<string> {
   return new BaseComparison(
     (v) => v.includes(substring),
-    `contains "${substring}"`
+    `contains "${substring}"`,
   );
 }
 
@@ -220,7 +220,7 @@ export function contains(substring: string): Comparison<string> {
 export function startsWith(prefix: string): Comparison<string> {
   return new BaseComparison(
     (v) => v.startsWith(prefix),
-    `starts with "${prefix}"`
+    `starts with "${prefix}"`,
   );
 }
 

@@ -6,20 +6,20 @@
 
 import { assertEquals } from "@std/assert";
 import {
-    always,
-    atLeast,
-    atMost,
-    between,
-    contains,
-    endsWith,
-    equals,
-    lessThan,
-    matches,
-    moreThan,
-    never,
-    noneOf,
-    oneOf,
-    startsWith,
+  always,
+  atLeast,
+  atMost,
+  between,
+  contains,
+  endsWith,
+  equals,
+  lessThan,
+  matches,
+  moreThan,
+  never,
+  noneOf,
+  oneOf,
+  startsWith,
 } from "./comparisons.ts";
 
 // =============================================================================

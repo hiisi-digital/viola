@@ -48,15 +48,15 @@
 // =============================================================================
 
 export type {
-    ExtractionQueries,
-    GrammarDefinition,
-    GrammarMeta,
-    GrammarRelationship,
-    GrammarSource,
-    GrammarTransforms,
-    QueryCaptures,
-    RegisteredGrammar,
-    SyntaxNode
+  ExtractionQueries,
+  GrammarDefinition,
+  GrammarMeta,
+  GrammarRelationship,
+  GrammarSource,
+  GrammarTransforms,
+  QueryCaptures,
+  RegisteredGrammar,
+  SyntaxNode,
 } from "./types.ts";
 
 // =============================================================================
@@ -64,23 +64,23 @@ export type {
 // =============================================================================
 
 export type {
-    Language,
-    Parser,
-    Query,
-    QueryCapture,
-    QueryMatch,
-    Tree,
-    TreeCursor
+  Language,
+  Parser,
+  Query,
+  QueryCapture,
+  QueryMatch,
+  Tree,
+  TreeCursor,
 } from "./loader.ts";
 
 export {
-    clearCache,
-    createParser,
-    getParser,
-    initTreeSitter,
-    isInitialized,
-    loadGrammar,
-    reset
+  clearCache,
+  createParser,
+  getParser,
+  initTreeSitter,
+  isInitialized,
+  loadGrammar,
+  reset,
 } from "./loader.ts";
 
 // =============================================================================
@@ -88,11 +88,11 @@ export {
 // =============================================================================
 
 export {
-    queryAll,
-    queryCount,
-    queryFirst,
-    queryHasMatch,
-    runQuery
+  queryAll,
+  queryCount,
+  queryFirst,
+  queryHasMatch,
+  runQuery,
 } from "./query.ts";
 
 // =============================================================================
@@ -114,14 +114,14 @@ export { createGrammarRegistry, GrammarRegistry } from "./registry.ts";
 // =============================================================================
 
 export type {
-    GrammarRelationshipRule,
-    GrammarResolution,
-    GrammarRole,
-    ResolvedGrammar
+  GrammarRelationshipRule,
+  GrammarResolution,
+  GrammarRole,
+  ResolvedGrammar,
 } from "./resolver.ts";
 
 export {
-    createGrammarResolver,
-    GrammarResolver,
-    mergeExtractionResults
+  createGrammarResolver,
+  GrammarResolver,
+  mergeExtractionResults,
 } from "./resolver.ts";

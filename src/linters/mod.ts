@@ -9,19 +9,19 @@
 
 // Base linter class
 export {
-    BaseLinter,
-    isLinter,
-    type LinterConstructor,
-    type LinterDataRequirements,
-    type LinterMeta
+  BaseLinter,
+  isLinter,
+  type LinterConstructor,
+  type LinterDataRequirements,
+  type LinterMeta,
 } from "./base.ts";
 
 // Registry
 export {
-    register,
-    registerLinter,
-    registry,
-    runLinter,
-    runLinters,
-    type RunOptions
+  register,
+  registerLinter,
+  registry,
+  runLinter,
+  runLinters,
+  type RunOptions,
 } from "./registry.ts";

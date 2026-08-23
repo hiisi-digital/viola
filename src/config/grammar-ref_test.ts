@@ -72,7 +72,7 @@ Deno.test("isGrammarRelationship - returns false for object without type", () =>
 Deno.test("isGrammarRelationship - returns false for object with wrong type", () => {
   assertEquals(
     isGrammarRelationship({ type: "other", relationship: "overrides" }),
-    false
+    false,
   );
 });
 
@@ -107,4 +107,3 @@ Deno.test("grammar() - can create multiple actions from same builder", () => {
   assertEquals(supplementsAction.relationship, "supplements");
   assertEquals(supplementsAction.secondary, "bash");
 });
-

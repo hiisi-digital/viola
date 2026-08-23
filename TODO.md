@@ -1,7 +1,7 @@
 # TODO: Viola implementation roadmap (normalized checklist)
 
-Status: planning + active rollout.
-Scope: top-level coordination for Rust host + plugin ABI transition and TS bridge integration.
+Status: planning + active rollout. Scope: top-level coordination for Rust host +
+plugin ABI transition and TS bridge integration.
 
 ---
 
@@ -13,7 +13,8 @@ Scope: top-level coordination for Rust host + plugin ABI transition and TS bridg
   - [x] Confirm fail-closed load behavior for required plugins
   - [x] Confirm canonical TOML config + TS builder parity
 - [x] Add distribution matrix to design doc
-  - [x] Define package/artifact responsibilities (`viola-cli`, TS package, bridge dylibs)
+  - [x] Define package/artifact responsibilities (`viola-cli`, TS package,
+        bridge dylibs)
   - [x] Define supported platform matrix (initial targets)
 - [x] Freeze naming decisions
   - [x] Confirm crate naming (`viola-core` vs `viola-host`)
@@ -43,7 +44,8 @@ Scope: top-level coordination for Rust host + plugin ABI transition and TS bridg
 
 ## Phase 4: Host runtime (`viola-core`)
 
-- [x] Implement plugin loading pipeline (using shared extension/plugin machinery later)
+- [x] Implement plugin loading pipeline (using shared extension/plugin machinery
+      later)
   - [x] Discovery inputs from resolved config
   - [x] Strict load-time validation
   - [x] Graceful structured load failure reporting

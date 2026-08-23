@@ -1,61 +1,62 @@
 # viola.toml v2 schema design memo
 
-Status: design. Not yet implemented. This memo lives in the repo as a
-signoff target before the implementation work in [#221](https://github.com/hiisi-digital/viola/issues/221) lands.
+Status: design. Not yet implemented. This memo lives in the repo as a signoff
+target before the implementation work in
+[#221](https://github.com/hiisi-digital/viola/issues/221) lands.
 
 ## Goal
 
-Express the same vocabulary the TS-side `viola.config.ts` carries
-today, in a TOML file Rust-side viola consumers can author. The Rust
-runtime parses this no_std + no_alloc, the deno-runtime path bridges
-the parsed shape into the TS plugin world, and v1-compat (`runner`,
-`grammars`, `lints`, `[ts]`) keeps already-shipped configs working.
+Express the same vocabulary the TS-side `viola.config.ts` carries today, in a
+TOML file Rust-side viola consumers can author. The Rust runtime parses this
+no_std + no_alloc, the deno-runtime path bridges the parsed shape into the TS
+plugin world, and v1-compat (`runner`, `grammars`, `lints`, `[ts]`) keeps
+already-shipped configs working.
 
-The TS builder is fluent and hosts closures. TOML cannot host
-closures, so the port flattens the builder's *resolved state* (what
-the chain produces) rather than the chain itself. Every concept the
-TS user reaches for has a declarative TOML form below.
+The TS builder is fluent and hosts closures. TOML cannot host closures, so the
+port flattens the builder's _resolved state_ (what the chain produces) rather
+than the chain itself. Every concept the TS user reaches for has a declarative
+TOML form below.
 
 ## TS vocabulary (the source)
 
 From the existing `@hiisi/viola/viola/src/config/`:
 
-- **Plugins**: list of module specifiers (`jsr:`, `npm:`, file path,
-  URL). Loaded module exports a `ViolaPlugin` object; the builder
-  applies its side effects.
-- **Inherit**: named preset list. Plugins export presets as named
-  bundles of rules; the user opts in by name.
-- **Severity rules**: ordered list of (issue-pattern, file-pattern,
-  severity) triples. CSS-style "last wins". Issue patterns are a
-  small DSL: `linter/issue`, `linter/*`, `*::category`,
-  `*>=impact`, combinable.
-- **Per-linter config**: `.set("linter-name", { ... })`. Validated
-  against plugin-exported JSON schemas at runtime.
-- **Conditions**: compound boolean algebra over impact / category /
-  file / linter / confidence atoms. Compound (`and` / `or` / `not`).
+- **Plugins**: list of module specifiers (`jsr:`, `npm:`, file path, URL).
+  Loaded module exports a `ViolaPlugin` object; the builder applies its side
+  effects.
+- **Inherit**: named preset list. Plugins export presets as named bundles of
+  rules; the user opts in by name.
+- **Severity rules**: ordered list of (issue-pattern, file-pattern, severity)
+  triples. CSS-style "last wins". Issue patterns are a small DSL:
+  `linter/issue`, `linter/*`, `*::category`, `*>=impact`, combinable.
+- **Per-linter config**: `.set("linter-name", { ... })`. Validated against
+  plugin-exported JSON schemas at runtime.
+- **Conditions**: compound boolean algebra over impact / category / file /
+  linter / confidence atoms. Compound (`and` / `or` / `not`).
 - **Severity enum**: `error | warn | info | hint | off | skip`.
-- **Impact ladder**: `critical > major > minor > trivial` (lower
-  index = more severe).
-- **Categories**: `correctness | maintainability | consistency |
+- **Impact ladder**: `critical > major > minor > trivial` (lower index = more
+  severe).
+- **Categories**:
+  `correctness | maintainability | consistency |
   performance | style`.
 - **Confidence**: integer 0-100; rules can gate on `min_confidence`.
 
 ## Mapping principles
 
-1. **Resolved state, not chain.** `viola().use(p).rule(r1).rule(r2)`
-   resolves to (plugins, [r1, r2]). TOML names the resolved arrays.
-2. **One vocabulary, two surfaces.** A user with `viola.config.ts`
-   keeps it; a user with `viola.toml` uses it. The deno-runtime path
-   (when `[ts] config = "..."` is set) is the bridge: TS users do
-   not migrate; only Rust-runtime users use this schema directly.
+1. **Resolved state, not chain.** `viola().use(p).rule(r1).rule(r2)` resolves to
+   (plugins, [r1, r2]). TOML names the resolved arrays.
+2. **One vocabulary, two surfaces.** A user with `viola.config.ts` keeps it; a
+   user with `viola.toml` uses it. The deno-runtime path (when
+   `[ts] config = "..."` is set) is the bridge: TS users do not migrate; only
+   Rust-runtime users use this schema directly.
 3. **Issue-pattern DSL retained verbatim.** `linter/*::correctness>=major`
-   parses identically on both sides. Mockspace's lint-pattern
-   conventions and viola's converge.
-4. **Condition algebra via nested tables.** `and` / `or` / `not`
-   become array-of-tables with reserved keys.
-5. **No closures, no callbacks.** Plugins still expose presets; the
-   user names presets by string. Per-linter config validation
-   happens runtime-side, not at parse time.
+   parses identically on both sides. Mockspace's lint-pattern conventions and
+   viola's converge.
+4. **Condition algebra via nested tables.** `and` / `or` / `not` become
+   array-of-tables with reserved keys.
+5. **No closures, no callbacks.** Plugins still expose presets; the user names
+   presets by string. Per-linter config validation happens runtime-side, not at
+   parse time.
 
 ## v2 schema
 
@@ -213,80 +214,78 @@ impact    ::= "critical" | "major" | "minor" | "trivial"
 
 Examples:
 
-| Pattern | Matches |
-|---|---|
-| `duplicate-logic/lambda-too-similar` | one exact issue |
-| `duplicate-logic/*` | all issues from one linter |
-| `*::correctness` | every correctness issue, any linter |
-| `*>=major` | every major-or-worse issue, any linter |
-| `style-guide/*::style>=minor` | style-guide issues in `style` category at or above `minor` |
+| Pattern                              | Matches                                                    |
+| ------------------------------------ | ---------------------------------------------------------- |
+| `duplicate-logic/lambda-too-similar` | one exact issue                                            |
+| `duplicate-logic/*`                  | all issues from one linter                                 |
+| `*::correctness`                     | every correctness issue, any linter                        |
+| `*>=major`                           | every major-or-worse issue, any linter                     |
+| `style-guide/*::style>=minor`        | style-guide issues in `style` category at or above `minor` |
 
 ## Severity / impact / category enums
 
-| Severity | Meaning |
-|---|---|
-| `error`  | block at gate threshold |
-| `warn`   | report, do not block |
-| `info`   | informational |
-| `hint`   | dim suggestion |
-| `off`    | suppress |
+| Severity | Meaning                                       |
+| -------- | --------------------------------------------- |
+| `error`  | block at gate threshold                       |
+| `warn`   | report, do not block                          |
+| `info`   | informational                                 |
+| `hint`   | dim suggestion                                |
+| `off`    | suppress                                      |
 | `skip`   | suppress and short-circuit linter run on file |
 
-| Impact | Index | Meaning |
-|---|---|---|
-| `critical` | 0 | severity baseline (highest) |
-| `major`    | 1 | |
-| `minor`    | 2 | |
-| `trivial`  | 3 | (lowest) |
+| Impact     | Index | Meaning                     |
+| ---------- | ----- | --------------------------- |
+| `critical` | 0     | severity baseline (highest) |
+| `major`    | 1     |                             |
+| `minor`    | 2     |                             |
+| `trivial`  | 3     | (lowest)                    |
 
-`>=` semantics: `>=major` matches `critical` and `major`. The smaller
-index wins; the comparison is `index <= threshold_index`.
+`>=` semantics: `>=major` matches `critical` and `major`. The smaller index
+wins; the comparison is `index <= threshold_index`.
 
-| Category | |
-|---|---|
+| Category          |                        |
+| ----------------- | ---------------------- |
 | `correctness`     | logic / behaviour bugs |
-| `maintainability` | code-health concerns |
-| `consistency`     | style consistency |
-| `performance`     | runtime cost |
-| `style`           | aesthetic-only |
+| `maintainability` | code-health concerns   |
+| `consistency`     | style consistency      |
+| `performance`     | runtime cost           |
+| `style`           | aesthetic-only         |
 
 ## Conditions: TS to TOML
 
-| TS surface | TOML equivalent |
-|---|---|
-| `when.in("src/**")` | `files = "src/**"` (single) or `files = ["src/**"]` (multi) |
-| `when.impact.atLeast(Major)` | issue selector `>=major` |
-| `when.category("correctness")` | issue selector `::correctness` |
-| `when.linter("style-*")` | issue prefix `style-*/` |
-| `when.confidence.atLeast(80)` | `min_confidence = 80` |
-| `c1.and(c2)` | `all = [c1, c2]` |
-| `c1.or(c2)` | `any = [c1, c2]` |
-| `c.not()` | `not = c` |
+| TS surface                     | TOML equivalent                                             |
+| ------------------------------ | ----------------------------------------------------------- |
+| `when.in("src/**")`            | `files = "src/**"` (single) or `files = ["src/**"]` (multi) |
+| `when.impact.atLeast(Major)`   | issue selector `>=major`                                    |
+| `when.category("correctness")` | issue selector `::correctness`                              |
+| `when.linter("style-*")`       | issue prefix `style-*/`                                     |
+| `when.confidence.atLeast(80)`  | `min_confidence = 80`                                       |
+| `c1.and(c2)`                   | `all = [c1, c2]`                                            |
+| `c1.or(c2)`                    | `any = [c1, c2]`                                            |
+| `c.not()`                      | `not = c`                                                   |
 
 ## Gate resolution model
 
-For each diagnostic the runtime captures, the gate decision answers
-"does this block the active gate?". The decision is a chain:
+For each diagnostic the runtime captures, the gate decision answers "does this
+block the active gate?". The decision is a chain:
 
-1. Determine the diagnostic's effective severity. Start with the
-   intrinsic severity the lint emitted. Walk `[[severity]]` rules
-   top-to-bottom; a rule whose conditions match the (issue, file,
-   gate, confidence) tuple replaces the severity. Last match wins.
-   Rules without a `gate` field apply at every gate; rules with
-   `gate = "commit"` apply only at the commit gate, etc.
+1. Determine the diagnostic's effective severity. Start with the intrinsic
+   severity the lint emitted. Walk `[[severity]]` rules top-to-bottom; a rule
+   whose conditions match the (issue, file, gate, confidence) tuple replaces the
+   severity. Last match wins. Rules without a `gate` field apply at every gate;
+   rules with `gate = "commit"` apply only at the commit gate, etc.
 2. Resolve the gate threshold for this lint at this gate.
-   `[gates.<lint-id>].<gate>` if present, else `[gates].<gate>`,
-   else the built-in `"error"` default.
+   `[gates.<lint-id>].<gate>` if present, else `[gates].<gate>`, else the
+   built-in `"error"` default.
 3. Compare effective severity to the threshold. Blocks iff
-   `severity_index <= threshold_index` (smaller index = more
-   severe; `error < warn < info < hint < off`).
+   `severity_index <= threshold_index` (smaller index = more severe;
+   `error < warn < info < hint < off`).
 
-This three-step shape gives mockspace parity (per-lint per-gate
-severity via `[gates.<lint-id>]`) plus the additional axis viola
-inherited from the TS side (severity rules per (issue, file,
-gate)). Users authoring viola.toml from a mockspace.toml only need
-the `[gates.<lint>]` block; users coming from the TS side reach for
-`[[severity]]`.
+This three-step shape gives mockspace parity (per-lint per-gate severity via
+`[gates.<lint-id>]`) plus the additional axis viola inherited from the TS side
+(severity rules per (issue, file, gate)). Users authoring viola.toml from a
+mockspace.toml only need the `[gates.<lint>]` block; users coming from the TS
+side reach for `[[severity]]`.
 
 ## Mockspace migration shape
 
@@ -308,102 +307,93 @@ build = "error"
 push = "error"
 ```
 
-The translation is the table rename `lints.<name>` -> `gates.<name>`
-(plus the optional `[viola] version = 2` marker). Per-linter config
-that lived in mockspace.toml's `[lints.<name>]` body alongside
-gate keys (rare today, but possible) splits between
-`[gates.<name>]` (gate keys) and `[lint.<name>]` (plugin config
-keys). #200's migration tool will handle this split.
+The translation is the table rename `lints.<name>` -> `gates.<name>` (plus the
+optional `[viola] version = 2` marker). Per-linter config that lived in
+mockspace.toml's `[lints.<name>]` body alongside gate keys (rare today, but
+possible) splits between `[gates.<name>]` (gate keys) and `[lint.<name>]`
+(plugin config keys). #200's migration tool will handle this split.
 
 ## v1 → v2 migration
 
 Three states:
 
-1. **Pre-v1 / no `viola.toml`.** Pure-TS path. viola-cli execvp's
-   into `deno run -A jsr:@hiisi/viola-cli`. Unchanged by v2.
+1. **Pre-v1 / no `viola.toml`.** Pure-TS path. viola-cli execvp's into
+   `deno run -A jsr:@hiisi/viola-cli`. Unchanged by v2.
 
-2. **v1 `viola.toml`** (no `[viola].version`, has `runner` /
-   `grammars` / `lints` / `[ts]` keys). Continues to parse and run
-   as today. The parser internally translates to v2 shape; the user
-   notices nothing.
+2. **v1 `viola.toml`** (no `[viola].version`, has `runner` / `grammars` /
+   `lints` / `[ts]` keys). Continues to parse and run as today. The parser
+   internally translates to v2 shape; the user notices nothing.
 
-3. **v2 `viola.toml`** (`[viola].version = 2`). The full schema
-   above is required. v1 keys are a parse error to prevent silent
-   schema drift.
+3. **v2 `viola.toml`** (`[viola].version = 2`). The full schema above is
+   required. v1 keys are a parse error to prevent silent schema drift.
 
-A `viola migrate` subcommand is out of scope for #221; users who
-want v2 features rewrite by hand (the schema is small enough that
-this is fine).
+A `viola migrate` subcommand is out of scope for #221; users who want v2
+features rewrite by hand (the schema is small enough that this is fine).
 
 ## Reserved keys
 
-The parser rejects unknown top-level keys deterministically (per the
-existing `ConfigError::UnknownKey`). Reserved tables for future use:
+The parser rejects unknown top-level keys deterministically (per the existing
+`ConfigError::UnknownKey`). Reserved tables for future use:
 
 - `[mockspace]`. Context bridge (#222).
-- `[scope]`. Explicit include/exclude/extensions; today implicit
-  via runner walk, tabled until a real use surfaces.
+- `[scope]`. Explicit include/exclude/extensions; today implicit via runner
+  walk, tabled until a real use surfaces.
 - `[plugins.<name>]`. Plugin-pinned versions / hashes; tabled.
 
 ## Implementation slices (post-signoff)
 
 Once this memo lands, implementation splits into:
 
-1. **PR-A**: parser supports `[viola] version = 2`, `plugins`,
-   `inherit`, `[gates]`. v1 keys become parse errors when version=2
-   is set. v1 path unchanged.
-2. **PR-B**: `[lint.<name>]` per-linter config blocks. Stored as raw
-   bytes / TOML subtree handed to plugins via `LintConfig`.
-3. **PR-C**: `[[severity]]` rules, both flat and compound. Issue
-   pattern parser. `min_confidence` field.
-4. **PR-D**: viola-cli wires the new config through the runtime,
-   sliced as it lands:
-   - **PR-D-1** (landed): v2 plugin loading with role classification
-     by descriptor capability.
-   - **PR-D-2** (landed): `--gate <name>` argument + gate-threshold
-     filtering against captured severities. `[gates.<lint>].<gate>`
-     -> `[gates].<gate>` -> built-in `error` chain via
-     `ViolaConfig::resolve_gate_threshold`.
+1. **PR-A**: parser supports `[viola] version = 2`, `plugins`, `inherit`,
+   `[gates]`. v1 keys become parse errors when version=2 is set. v1 path
+   unchanged.
+2. **PR-B**: `[lint.<name>]` per-linter config blocks. Stored as raw bytes /
+   TOML subtree handed to plugins via `LintConfig`.
+3. **PR-C**: `[[severity]]` rules, both flat and compound. Issue pattern parser.
+   `min_confidence` field.
+4. **PR-D**: viola-cli wires the new config through the runtime, sliced as it
+   lands:
+   - **PR-D-1** (landed): v2 plugin loading with role classification by
+     descriptor capability.
+   - **PR-D-2** (landed): `--gate <name>` argument + gate-threshold filtering
+     against captured severities. `[gates.<lint>].<gate>` -> `[gates].<gate>` ->
+     built-in `error` chain via `ViolaConfig::resolve_gate_threshold`.
    - **PR-D-3**: severity-rule evaluation in `DiagnosticSink` (the
      `[[severity]]` table override pass).
-   - **PR-D-4**: pass `[lint.<id>]` raw bodies through to plugins
-     via `LintConfig`.
+   - **PR-D-4**: pass `[lint.<id>]` raw bodies through to plugins via
+     `LintConfig`.
    - **PR-D-5**: preset inheritance resolution.
-5. **PR-E**: docs + examples + tests against fixture configs ported
-   from the TS-side example.
+5. **PR-E**: docs + examples + tests against fixture configs ported from the
+   TS-side example.
 
-Each slice is independently mergeable. Slice 1 is the smallest
-forward step.
+Each slice is independently mergeable. Slice 1 is the smallest forward step.
 
 ## Open questions
 
-1. **Inherit ordering and conflict resolution.** TS resolves preset
-   chains depth-first, last wins. Two presets that both set
-   `lint.duplicate-logic.ignoreFunctions` to disjoint lists: do we
-   union or replace? TS-side replaces. Memo recommends matching TS.
-2. **`min_confidence` on compound conditions.** Putting
-   `min_confidence` at the top level alongside `all = [...]` mixes
-   atom-level and compound concepts. Cleanest: every condition atom
-   (in `all`, `any`, top-level flat form) accepts `min_confidence`.
-   Compound nodes do not.
-3. **Issue pattern overlap detection.** TS does not warn on
-   overlapping rules that produce ambiguous "last wins" results.
-   The Rust parser could surface a soft diagnostic at parse time;
-   tabled.
-4. **Plugin role inference vs declaration.** v2 derives role from
-   the descriptor's capability table. A plugin that exports both
-   `CAP_RUNNER_EXECUTE_SCOPE` and `CAP_LINT_EVALUATE` (multi-role)
-   is implicitly enrolled in both. Per #220's "rust-grammar +
-   rust-runner" plan this is the right shape; flagging in case a
-   future plugin wants to opt out of one role at config time.
+1. **Inherit ordering and conflict resolution.** TS resolves preset chains
+   depth-first, last wins. Two presets that both set
+   `lint.duplicate-logic.ignoreFunctions` to disjoint lists: do we union or
+   replace? TS-side replaces. Memo recommends matching TS.
+2. **`min_confidence` on compound conditions.** Putting `min_confidence` at the
+   top level alongside `all = [...]` mixes atom-level and compound concepts.
+   Cleanest: every condition atom (in `all`, `any`, top-level flat form) accepts
+   `min_confidence`. Compound nodes do not.
+3. **Issue pattern overlap detection.** TS does not warn on overlapping rules
+   that produce ambiguous "last wins" results. The Rust parser could surface a
+   soft diagnostic at parse time; tabled.
+4. **Plugin role inference vs declaration.** v2 derives role from the
+   descriptor's capability table. A plugin that exports both
+   `CAP_RUNNER_EXECUTE_SCOPE` and `CAP_LINT_EVALUATE` (multi-role) is implicitly
+   enrolled in both. Per #220's "rust-grammar + rust-runner" plan this is the
+   right shape; flagging in case a future plugin wants to opt out of one role at
+   config time.
 
 ## Non-goals for v2
 
-- Per-issue suppress comments (`// viola:allow(...)` etc.). That
-  belongs in source-code conventions, not config.
-- Workspace-aware multi-config aggregation. Each subdir's
-  `viola.toml` is independent; mockspace #222 is the upstream of
-  any cross-tree concern.
+- Per-issue suppress comments (`// viola:allow(...)` etc.). That belongs in
+  source-code conventions, not config.
+- Workspace-aware multi-config aggregation. Each subdir's `viola.toml` is
+  independent; mockspace #222 is the upstream of any cross-tree concern.
 - A `[severity.<linter>.<issue>]` heredoc form. Array-of-tables is
-  TOML-idiomatic; lookup tables would be cuter but break the
-  ordering semantic that "last wins" depends on.
+  TOML-idiomatic; lookup tables would be cuter but break the ordering semantic
+  that "last wins" depends on.

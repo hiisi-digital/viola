@@ -6,15 +6,9 @@
 
 import { assertEquals } from "@std/assert";
 import type { Issue } from "../../data/types.ts";
-import {
-    ConditionExpr,
-    when,
-} from "../conditions.ts";
+import { ConditionExpr, when } from "../conditions.ts";
 import { Category, Impact } from "../enums.ts";
-import {
-    createEvaluationContext,
-    evaluateCondition,
-} from "../evaluator.ts";
+import { createEvaluationContext, evaluateCondition } from "../evaluator.ts";
 import type { IssueCatalog } from "../types.ts";
 
 // =============================================================================
@@ -58,7 +52,7 @@ function createTestCatalogs(): Map<string, IssueCatalog> {
 function createIssue(
   kind: string,
   file: string,
-  confidence = 80
+  confidence = 80,
 ): Issue {
   return {
     kind,
@@ -72,7 +66,7 @@ function evalCondition(
   condition: ConditionExpr,
   kind: string,
   file: string,
-  confidence = 80
+  confidence = 80,
 ): boolean {
   const catalogs = createTestCatalogs();
   const issue = createIssue(kind, file, confidence);
@@ -89,15 +83,15 @@ Deno.test("when.impact.is() matches exact impact", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    false
+    false,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -106,11 +100,11 @@ Deno.test("when.impact.not() excludes exact impact", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -120,22 +114,22 @@ Deno.test("when.impact.atLeast() matches >= impact", () => {
   // Critical >= Major (more severe)
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   // Major >= Major
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "a.ts"),
-    true
+    true,
   );
   // Minor < Major (less severe)
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
   // Trivial < Major
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -144,15 +138,15 @@ Deno.test("when.impact.atMost() matches <= impact", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -161,11 +155,11 @@ Deno.test("when.impact.above() matches > impact", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -174,11 +168,11 @@ Deno.test("when.impact.below() matches < impact", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -191,11 +185,11 @@ Deno.test("when.category.is() matches exact category", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -204,31 +198,31 @@ Deno.test("when.category.not() excludes category", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    false
+    false,
   );
 });
 
 Deno.test("when.category.in() matches any in list", () => {
   const cond = when.category.in(
     Category.Correctness,
-    Category.Performance
+    Category.Performance,
   );
 
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/major-performance", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -237,15 +231,15 @@ Deno.test("when.category.notIn() excludes categories", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    false
+    false,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -258,11 +252,11 @@ Deno.test("when.in() matches exact file", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/main.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/other.ts"),
-    false
+    false,
   );
 });
 
@@ -271,11 +265,11 @@ Deno.test("when.in() matches glob with *", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/main.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/nested/main.ts"),
-    false
+    false,
   );
 });
 
@@ -284,15 +278,15 @@ Deno.test("when.in() matches glob with **", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/main.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/nested/main.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "lib/main.ts"),
-    false
+    false,
   );
 });
 
@@ -301,11 +295,11 @@ Deno.test("when.in() matches test file patterns", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils_test.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.ts"),
-    false
+    false,
   );
 });
 
@@ -314,15 +308,15 @@ Deno.test("when.in() with multiple patterns", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils_test.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.spec.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.ts"),
-    false
+    false,
   );
 });
 
@@ -330,12 +324,20 @@ Deno.test("when.in() with directory pattern", () => {
   const cond = when.in("packages/core/**");
 
   assertEquals(
-    evalCondition(cond, "test-linter/minor-consistency", "packages/core/lib.ts"),
-    true
+    evalCondition(
+      cond,
+      "test-linter/minor-consistency",
+      "packages/core/lib.ts",
+    ),
+    true,
   );
   assertEquals(
-    evalCondition(cond, "test-linter/minor-consistency", "packages/utils/lib.ts"),
-    false
+    evalCondition(
+      cond,
+      "test-linter/minor-consistency",
+      "packages/utils/lib.ts",
+    ),
+    false,
   );
 });
 
@@ -348,7 +350,7 @@ Deno.test("when.linter() matches exact linter", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    true
+    true,
   );
 });
 
@@ -357,7 +359,7 @@ Deno.test("when.linter() with glob pattern", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    true
+    true,
   );
 });
 
@@ -366,11 +368,11 @@ Deno.test("when.linter() with multiple patterns", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "foo-linter/some-issue", "a.ts"),
-    true
+    true,
   );
 });
 
@@ -383,15 +385,15 @@ Deno.test("when.confidence.atLeast() matches >= value", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 80),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 70),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 50),
-    false
+    false,
   );
 });
 
@@ -400,21 +402,21 @@ Deno.test("when.confidence.below() matches < value", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 50),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 59),
-    true
+    true,
   );
   // Note: below uses max which is exclusive (<), so 60 should not match
   // But the implementation checks confidence > max, so 60 does NOT match
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 60),
-    true  // confidence 60 is NOT below 60's max (implementation checks > max)
+    true, // confidence 60 is NOT below 60's max (implementation checks > max)
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 61),
-    false
+    false,
   );
 });
 
@@ -423,23 +425,23 @@ Deno.test("when.confidence.between() matches range", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 60),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 40),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 80),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 30),
-    false
+    false,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts", 90),
-    false
+    false,
   );
 });
 
@@ -448,24 +450,38 @@ Deno.test("when.confidence.between() matches range", () => {
 // =============================================================================
 
 Deno.test("and() combines two conditions", () => {
-  const cond = when.in("packages/core/**").and(when.impact.atLeast(Impact.Major));
+  const cond = when.in("packages/core/**").and(
+    when.impact.atLeast(Impact.Major),
+  );
 
   // Both match
   assertEquals(
-    evalCondition(cond, "test-linter/major-maintainability", "packages/core/lib.ts"),
-    true
+    evalCondition(
+      cond,
+      "test-linter/major-maintainability",
+      "packages/core/lib.ts",
+    ),
+    true,
   );
 
   // File matches, impact doesn't
   assertEquals(
-    evalCondition(cond, "test-linter/minor-consistency", "packages/core/lib.ts"),
-    false
+    evalCondition(
+      cond,
+      "test-linter/minor-consistency",
+      "packages/core/lib.ts",
+    ),
+    false,
   );
 
   // Impact matches, file doesn't
   assertEquals(
-    evalCondition(cond, "test-linter/major-maintainability", "packages/utils/lib.ts"),
-    false
+    evalCondition(
+      cond,
+      "test-linter/major-maintainability",
+      "packages/utils/lib.ts",
+    ),
+    false,
   );
 });
 
@@ -474,15 +490,15 @@ Deno.test("or() combines two conditions", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils_test.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.spec.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.ts"),
-    false
+    false,
   );
 });
 
@@ -491,11 +507,11 @@ Deno.test("not() negates a condition", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils_test.ts"),
-    false
+    false,
   );
 });
 
@@ -504,11 +520,11 @@ Deno.test("when.not() negates a condition", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "a.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "a.ts"),
-    false
+    false,
   );
 });
 
@@ -516,25 +532,25 @@ Deno.test("when.all() requires all conditions", () => {
   const cond = when.all(
     when.in("src/**"),
     when.impact.atLeast(Impact.Minor),
-    when.category.not(Category.Style)
+    when.category.not(Category.Style),
   );
 
   // All match
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/lib.ts"),
-    true
+    true,
   );
 
   // File doesn't match
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "lib/lib.ts"),
-    false
+    false,
   );
 
   // Category excluded
   assertEquals(
     evalCondition(cond, "test-linter/trivial-style", "src/lib.ts"),
-    false
+    false,
   );
 });
 
@@ -542,24 +558,24 @@ Deno.test("when.any() requires at least one condition", () => {
   const cond = when.any(
     when.in("**/*_test.ts"),
     when.in("**/*.spec.ts"),
-    when.in("tests/**")
+    when.in("tests/**"),
   );
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils_test.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.spec.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "tests/foo.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/utils.ts"),
-    false
+    false,
   );
 });
 
@@ -572,25 +588,25 @@ Deno.test("Complex nested conditions", () => {
   // src + major
   assertEquals(
     evalCondition(cond, "test-linter/major-maintainability", "src/lib.ts"),
-    true
+    true,
   );
 
   // tests + correctness
   assertEquals(
     evalCondition(cond, "test-linter/critical-correctness", "tests/foo.ts"),
-    true
+    true,
   );
 
   // src but minor (doesn't match first, not in tests)
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/lib.ts"),
-    false
+    false,
   );
 
   // tests but not correctness
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "tests/foo.ts"),
-    false
+    false,
   );
 });
 
@@ -606,19 +622,22 @@ Deno.test("Condition without catalog entry returns false for impact/category", (
   // Impact condition can't match without catalog
   assertEquals(
     evaluateCondition(when.impact.atLeast(Impact.Major).condition, context),
-    false
+    false,
   );
 
   // Category condition can't match without catalog
   assertEquals(
-    evaluateCondition(when.category.is(Category.Correctness).condition, context),
-    false
+    evaluateCondition(
+      when.category.is(Category.Correctness).condition,
+      context,
+    ),
+    false,
   );
 
   // File condition CAN match without catalog (use pattern that matches a.ts)
   assertEquals(
     evaluateCondition(when.in("*.ts").condition, context),
-    true
+    true,
   );
 });
 
@@ -629,7 +648,7 @@ Deno.test("when.all() with single condition returns that condition", () => {
   // Should be the same condition
   assertEquals(
     evalCondition(wrapped, "test-linter/minor-consistency", "src/lib.ts"),
-    true
+    true,
   );
 });
 
@@ -639,7 +658,7 @@ Deno.test("when.any() with single condition returns that condition", () => {
 
   assertEquals(
     evalCondition(wrapped, "test-linter/minor-consistency", "src/lib.ts"),
-    true
+    true,
   );
 });
 
@@ -648,11 +667,11 @@ Deno.test("Double negation", () => {
 
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "src/lib.ts"),
-    true
+    true,
   );
   assertEquals(
     evalCondition(cond, "test-linter/minor-consistency", "lib/lib.ts"),
-    false
+    false,
   );
 });
 

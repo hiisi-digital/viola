@@ -61,7 +61,7 @@ export function isReportAction(action: RuleAction): action is ReportAction {
  * Type guard for grammar relationship actions.
  */
 export function isGrammarRelationshipAction(
-  action: RuleAction
+  action: RuleAction,
 ): action is GrammarRelationshipAction {
   return action.type === "grammar-relationship";
 }

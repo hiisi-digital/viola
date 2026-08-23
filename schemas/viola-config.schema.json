@@ -26,7 +26,13 @@
     },
     "issueCategory": {
       "type": "string",
-      "enum": ["correctness", "maintainability", "consistency", "performance", "style"],
+      "enum": [
+        "correctness",
+        "maintainability",
+        "consistency",
+        "performance",
+        "style"
+      ],
       "description": "Category of an issue - what kind of problem it represents"
     },
     "issueImpact": {
