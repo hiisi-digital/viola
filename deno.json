@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Language-agnostic convention linter runtime. Plugin-based, zero opinions.",
   "exports": {
     ".": "./mod.ts",
@@ -30,8 +30,8 @@
     "@hiisi/flash-freeze": "jsr:@hiisi/flash-freeze@^0.1.1",
     "web-tree-sitter": "npm:web-tree-sitter@0.22.6",
     "tree-sitter-typescript": "npm:tree-sitter-typescript@0.23.2",
-    "@hiisi/viola-default-lints": "jsr:@hiisi/viola-default-lints@^0.3.2",
-    "@hiisi/viola-grammar-ts": "jsr:@hiisi/viola-grammar-ts@^0.3.2"
+    "@hiisi/viola-default-lints": "jsr:@hiisi/viola-default-lints@^0.4.0",
+    "@hiisi/viola-grammar-ts": "jsr:@hiisi/viola-grammar-ts@^0.4.0"
   },
   "compilerOptions": {
     "strict": true,
