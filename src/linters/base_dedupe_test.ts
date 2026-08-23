@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * A linter may not report the same finding twice.
  *
@@ -23,7 +28,7 @@ class Repeats extends BaseLinter {
   }
 }
 
-const issue = (
+const reported = (
   kind: string,
   file: string,
   line: number,
@@ -38,7 +43,7 @@ const issue = (
 Deno.test("a linter reporting one finding three times reports it once", async () => {
   // `orphaned-code` did exactly this: one export reachable through three
   // re-export paths produced three findings at one and the same line.
-  const same = issue("a/b", "src/x.ts", 23, "never imported");
+  const same = reported("a/b", "src/x.ts", 23, "never imported");
   const r = await new Repeats([same, same, same]).run(
     {} as CodebaseData,
     {} as LinterConfig,
@@ -48,11 +53,11 @@ Deno.test("a linter reporting one finding three times reports it once", async ()
 
 Deno.test("findings that differ in any part all survive", async () => {
   const r = await new Repeats([
-    issue("a/b", "src/x.ts", 23, "never imported"),
-    issue("a/b", "src/x.ts", 24, "never imported"),
-    issue("a/b", "src/y.ts", 23, "never imported"),
-    issue("a/c", "src/x.ts", 23, "never imported"),
-    issue("a/b", "src/x.ts", 23, "something else"),
+    reported("a/b", "src/x.ts", 23, "never imported"),
+    reported("a/b", "src/x.ts", 24, "never imported"),
+    reported("a/b", "src/y.ts", 23, "never imported"),
+    reported("a/c", "src/x.ts", 23, "never imported"),
+    reported("a/b", "src/x.ts", 23, "something else"),
   ]).run({} as CodebaseData, {} as LinterConfig);
   assertEquals(r.issues.length, 5);
 });

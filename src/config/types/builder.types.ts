@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Builder types for viola configuration.
  *
@@ -11,7 +16,7 @@ import type { GrammarRegistry } from "../../grammars/registry.ts";
 import type { GrammarDefinition } from "../../grammars/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import type { GrammarRelationshipAction, RuleAction } from "./actions.types.ts";
-import type { Condition } from "./conditions.types.ts";
+import type { Condition } from "../../conditions/types.ts";
 
 // =============================================================================
 // Builder Types

@@ -1,287 +1,256 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
- * When Condition API
+ * `when`, the one condition builder.
  *
- * Implementation of the `when` condition builder for defining
- * when rules should apply.
+ * There were two, offering overlapping surfaces over incompatible types. This
+ * is their union, and it is one mechanism rather than two: every accessor is
+ * callable with a comparison, and the named shorthands on it are defined in
+ * terms of that call. `when.impact.atLeast(x)` is `when.impact(atLeast(x))`,
+ * spelled the way a config reads best.
  *
  * @example
  * ```ts
- * // Path matching
- * when.in("*.ts", "*.tsx")
- * when.in("**\/tests/**")
- *
- * // Issue properties
- * when.issue.by(similarFunctions)
- * when.issue.impact(atLeast(Impact.Major))
- * when.issue.confidence(atLeast(80))
- *
- * // Environment
+ * when.in("src/**")                          // a path
+ * when.confidence.atLeast(80)                // a shorthand
+ * when.impact(atLeast(Impact.Major))         // the same thing, spelled long
+ * when.impact(oneOf(Impact.Major, Impact.Minor))   // what a shorthand cannot say
  * when.env("CI").exists()
- * when.env("NODE_ENV").is(equals("production"))
- *
- * // Composition
- * when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
- * when.env("CI").exists().and(when.issue.confidence(atLeast(90)))
+ * when.all(when.in("src/**"), when.impact.atLeast(Impact.Major))
  * ```
  *
  * @module
  */
 
-import type { Comparison } from "./comparisons.ts";
-import type {
-  Category,
-  Condition,
-  EnvConditionBuilder,
-  EvaluationContext,
-  Impact,
-  IssueConditions,
-  WhenBuilder,
-} from "./types.ts";
+import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
+import {
+  atLeast,
+  atMost,
+  between,
+  type Comparison,
+  type ComparisonData,
+  equals,
+  glob,
+  lessThan,
+  moreThan,
+  noneOf,
+  notEquals,
+  oneOf,
+} from "./comparison.ts";
+import type { Condition } from "./types.ts";
+import type { Category, Impact } from "./vocabulary.ts";
+
+// =============================================================================
+// The expression a rule takes
+// =============================================================================
 
 /**
- * Minimatch-like glob matching.
- * For now, a simple implementation. Can be replaced with a proper glob library.
+ * A condition with its combinators.
+ *
+ * The condition itself is the data; this is the fluent surface over it, and
+ * `.condition` is how the builder and the evaluator get at what was built.
  */
-function matchGlob(pattern: string, path: string): boolean {
-  // Convert glob pattern to regex
-  // We need to be careful about the order of replacements
+export class ConditionExpr {
+  constructor(readonly condition: Frozen<Condition>) {}
 
-  // First, escape special regex characters (except * and ?)
-  let regexPattern = "";
-  let i = 0;
-
-  while (i < pattern.length) {
-    const char = pattern[i] as string;
-    const nextChar = pattern[i + 1] as string | undefined;
-
-    if (char === "*" && nextChar === "*") {
-      // Handle **
-      const afterStars = pattern[i + 2] as string | undefined;
-      if (i === 0 && afterStars === "/") {
-        // **/ at start - matches any prefix including empty
-        regexPattern += "(?:.*/)?";
-        i += 3;
-      } else if (afterStars === "/" || afterStars === undefined) {
-        // **/ in middle or ** at end - matches any path segments
-        if (afterStars === "/") {
-          regexPattern += "(?:.*/)?";
-          i += 3;
-        } else {
-          // ** at end
-          regexPattern += ".*";
-          i += 2;
-        }
-      } else {
-        // ** followed by something else - treat as .*
-        regexPattern += ".*";
-        i += 2;
-      }
-    } else if (char === "*") {
-      // Single * - matches anything except /
-      regexPattern += "[^/]*";
-      i++;
-    } else if (char === "?") {
-      // ? matches single character except /
-      regexPattern += "[^/]";
-      i++;
-    } else if (".+^${}()|[]\\".includes(char)) {
-      // Escape special regex characters
-      regexPattern += "\\" + char;
-      i++;
-    } else {
-      regexPattern += char;
-      i++;
-    }
+  /** Both this and the other. */
+  and(other: ConditionExpr): ConditionExpr {
+    return this.join("and", other);
   }
 
-  const regex = new RegExp(`^${regexPattern}$`);
-  return regex.test(path);
+  /** Either this or the other. */
+  or(other: ConditionExpr): ConditionExpr {
+    return this.join("or", other);
+  }
+
+  /** The half of `and` and `or` that is not the operator. */
+  private join(
+    operator: "and" | "or",
+    other: ConditionExpr,
+  ): ConditionExpr {
+    return expr({
+      type: "compound",
+      operator,
+      conditions: [this.condition as Condition, other.condition as Condition],
+    });
+  }
+
+  /** The opposite of this. */
+  not(): ConditionExpr {
+    return expr({ type: "not", condition: this.condition as Condition });
+  }
+}
+
+function expr(condition: Condition): ConditionExpr {
+  return new ConditionExpr(deepFreeze(condition) as Frozen<Condition>);
+}
+
+// =============================================================================
+// The accessors
+// =============================================================================
+
+/**
+ * An accessor that takes any comparison, plus the shorthands for the
+ * comparisons a config reaches for most.
+ *
+ * The shorthands exist because `when.confidence.atLeast(80)` reads better in a
+ * config file than `when.confidence(atLeast(80))`, and they are not a second
+ * mechanism: each one calls the accessor.
+ */
+export interface Ordered<T> {
+  (comparison: Comparison<T>): ConditionExpr;
+  /** This value or more. */
+  atLeast(value: T): ConditionExpr;
+  /** This value or less. */
+  atMost(value: T): ConditionExpr;
+  /** Strictly more than. */
+  above(value: T): ConditionExpr;
+  /** Strictly less than. */
+  below(value: T): ConditionExpr;
+  /** Exactly. */
+  is(value: T): ConditionExpr;
+  /** Anything but. */
+  not(value: T): ConditionExpr;
+  /** Inclusive on both ends. */
+  between(min: T, max: T): ConditionExpr;
+  /** Any one of. */
+  in(...values: T[]): ConditionExpr;
+  /** None of. */
+  notIn(...values: T[]): ConditionExpr;
+}
+
+function ordered<T>(
+  make: (comparison: ComparisonData<T>) => Condition,
+): Ordered<T> {
+  const call = (c: Comparison<T>): ConditionExpr =>
+    expr(make(c.data as ComparisonData<T>));
+  return Object.assign(call, {
+    atLeast: (v: T) => call(atLeast(v)),
+    atMost: (v: T) => call(atMost(v)),
+    above: (v: T) => call(moreThan(v)),
+    below: (v: T) => call(lessThan(v)),
+    is: (v: T) => call(equals(v)),
+    not: (v: T) => call(notEquals(v)),
+    between: (min: T, max: T) => call(between(min, max)),
+    in: (...vs: T[]) => call(oneOf(...vs)),
+    notIn: (...vs: T[]) => call(noneOf(...vs)),
+  });
 }
 
 /**
- * Base implementation of Condition interface.
+ * Conditions about an environment variable.
  */
-class BaseCondition implements Condition {
-  constructor(
-    private readonly predicate: (ctx: EvaluationContext) => boolean,
-    private readonly description?: string,
-  ) {}
+export interface EnvConditions {
+  /** Whether it is set at all. */
+  exists(): ConditionExpr;
+  /** Whether its value satisfies a comparison. */
+  is(comparison: Comparison<string>): ConditionExpr;
+}
 
-  evaluate(context: EvaluationContext): boolean {
-    return this.predicate(context);
-  }
+// =============================================================================
+// when
+// =============================================================================
 
-  and(other: Condition): Condition {
-    return new BaseCondition(
-      (ctx) => this.evaluate(ctx) && other.evaluate(ctx),
-      `(${this.description} AND ${other.toString()})`,
+/**
+ * The condition builder.
+ */
+export interface WhenBuilder {
+  /** Which file, by glob. */
+  in(...patterns: string[]): ConditionExpr;
+  /** Which linter reported it, by glob over its id or its full kind. */
+  linter(...patterns: string[]): ConditionExpr;
+  /** Which issue, by glob over its name or its full kind. */
+  kind(...patterns: string[]): ConditionExpr;
+  /** Which grammar parsed the file, by glob. */
+  grammar(...patterns: string[]): ConditionExpr;
+  /** How severe, per the reporting linter's catalog. */
+  readonly impact: Ordered<Impact>;
+  /** What kind of problem, per the catalog. */
+  readonly category: Ordered<Category>;
+  /** How sure the linter was, 0 to 100. */
+  readonly confidence: Ordered<number>;
+  /** An environment variable. */
+  env(name: string): EnvConditions;
+  /** All of them. */
+  all(...conditions: ConditionExpr[]): ConditionExpr;
+  /** Any of them. */
+  any(...conditions: ConditionExpr[]): ConditionExpr;
+  /** The opposite of one. */
+  not(condition: ConditionExpr): ConditionExpr;
+  /** Holds for everything. */
+  always(): ConditionExpr;
+  /** Holds for nothing. */
+  never(): ConditionExpr;
+}
+
+function compound(
+  operator: "and" | "or",
+  conditions: ConditionExpr[],
+): ConditionExpr {
+  if (conditions.length === 0) {
+    throw new Error(
+      `when.${operator === "and" ? "all" : "any"}() requires at least one ` +
+        `condition. An empty one has no honest answer: all of nothing is ` +
+        `true and any of nothing is false, and a config that meant either ` +
+        `should say so.`,
     );
   }
-
-  or(other: Condition): Condition {
-    return new BaseCondition(
-      (ctx) => this.evaluate(ctx) || other.evaluate(ctx),
-      `(${this.description} OR ${other.toString()})`,
-    );
-  }
-
-  not(): Condition {
-    return new BaseCondition(
-      (ctx) => !this.evaluate(ctx),
-      `NOT(${this.description})`,
-    );
-  }
-
-  toString(): string {
-    return this.description ?? "Condition";
-  }
+  if (conditions.length === 1) return conditions[0]!;
+  return expr({
+    type: "compound",
+    operator,
+    conditions: conditions.map((c) => c.condition as Condition),
+  });
 }
 
 /**
- * Create a condition that always evaluates to true.
- */
-function alwaysCondition(): Condition {
-  return new BaseCondition(() => true, "always");
-}
-
-/**
- * Create a condition that always evaluates to false.
- */
-function neverCondition(): Condition {
-  return new BaseCondition(() => false, "never");
-}
-
-/**
- * Path pattern matching condition.
- *
- * @example
- * when.in("*.ts", "*.tsx")
- * when.in("**\/tests/**")
- */
-function inPatterns(...patterns: string[]): Condition {
-  return new BaseCondition((ctx) => {
-    if (!ctx.file) return false;
-    return patterns.some((p) => matchGlob(p, ctx.file!.path));
-  }, `in(${patterns.join(", ")})`);
-}
-
-/**
- * Extract ID from various source types.
- */
-function extractId(
-  source: { meta: { id: string } } | { id: string } | string,
-): string {
-  if (typeof source === "string") return source;
-  if ("meta" in source) return source.meta.id;
-  return source.id;
-}
-
-/**
- * Issue conditions namespace implementation.
- */
-const issueConditions: IssueConditions = {
-  by(source: { meta: { id: string } } | { id: string } | string): Condition {
-    const id = extractId(source);
-    return new BaseCondition(
-      (ctx) => ctx.issue?.by === id,
-      `issue.by(${id})`,
-    );
-  },
-
-  kind(issueKind: string): Condition {
-    return new BaseCondition(
-      (ctx) => ctx.issue?.kind === issueKind,
-      `issue.kind(${issueKind})`,
-    );
-  },
-
-  impact(comparison: Comparison<Impact>): Condition {
-    return new BaseCondition((ctx) => {
-      if (ctx.issue?.impact === undefined) return false;
-      return comparison.evaluate(ctx.issue.impact);
-    }, `issue.impact(${comparison.toString()})`);
-  },
-
-  confidence(comparison: Comparison<number>): Condition {
-    return new BaseCondition((ctx) => {
-      if (ctx.issue?.confidence === undefined) return false;
-      return comparison.evaluate(ctx.issue.confidence);
-    }, `issue.confidence(${comparison.toString()})`);
-  },
-
-  category(comparison: Comparison<Category>): Condition {
-    return new BaseCondition((ctx) => {
-      if (ctx.issue?.category === undefined) return false;
-      return comparison.evaluate(ctx.issue.category);
-    }, `issue.category(${comparison.toString()})`);
-  },
-};
-
-/**
- * Environment variable condition builder.
- *
- * @example
- * when.env("CI").exists()
- * when.env("NODE_ENV").is(equals("production"))
- */
-function envCondition(varName: string): EnvConditionBuilder {
-  return {
-    exists(): Condition {
-      return new BaseCondition(
-        (ctx) => ctx.env[varName] !== undefined && ctx.env[varName] !== "",
-        `env(${varName}).exists()`,
-      );
-    },
-
-    is(comparison: Comparison<string | number>): Condition {
-      return new BaseCondition((ctx) => {
-        const value = ctx.env[varName];
-        if (value === undefined) return false;
-
-        // Try numeric comparison first
-        const numValue = Number(value);
-        if (!isNaN(numValue)) {
-          return (comparison as Comparison<number>).evaluate(numValue);
-        }
-
-        // Fall back to string comparison
-        return (comparison as Comparison<string>).evaluate(value);
-      }, `env(${varName}).is(${comparison.toString()})`);
-    },
-  };
-}
-
-/**
- * The `when` condition builder.
- *
- * Provides a fluent API for building conditions that determine
- * when rules should apply.
- *
- * @example
- * ```ts
- * // Path matching
- * when.in("*.ts", "*.tsx")
- * when.in("**\/tests/**")
- *
- * // Issue properties
- * when.issue.by(similarFunctions)
- * when.issue.impact(atLeast(Impact.Major))
- * when.issue.confidence(atLeast(80))
- *
- * // Environment
- * when.env("CI").exists()
- * when.env("NODE_ENV").is(equals("production"))
- *
- * // Composition
- * when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
- * ```
+ * Build a condition.
  */
 export const when: WhenBuilder = {
-  in: inPatterns,
-  issue: issueConditions,
-  env: envCondition,
+  in: (...patterns) =>
+    expr({
+      type: "file",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  linter: (...patterns) =>
+    expr({
+      type: "linter",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  kind: (...patterns) =>
+    expr({
+      type: "kind",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  grammar: (...patterns) =>
+    expr({
+      type: "grammar",
+      comparison: glob(...patterns).data as ComparisonData<string>,
+    }),
+  impact: ordered<Impact>((comparison) => ({ type: "impact", comparison })),
+  category: ordered<Category>((comparison) => ({
+    type: "category",
+    comparison,
+  })),
+  confidence: ordered<number>((comparison) => ({
+    type: "confidence",
+    comparison,
+  })),
+  env: (name) => ({
+    exists: () => expr({ type: "env", name }),
+    is: (comparison) =>
+      expr({
+        type: "env",
+        name,
+        comparison: comparison.data as ComparisonData<string>,
+      }),
+  }),
+  all: (...conditions) => compound("and", conditions),
+  any: (...conditions) => compound("or", conditions),
+  not: (condition) => condition.not(),
+  always: () => expr({ type: "always" }),
+  never: () => expr({ type: "never" }),
 };
-
-// Re-export for convenience
-export { alwaysCondition as always, neverCondition as never };
-export type { Condition, EvaluationContext };

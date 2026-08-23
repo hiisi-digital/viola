@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * What this package has to be true of before anything may be committed.
  *
@@ -11,8 +16,8 @@
  * @module
  */
 
-import defaultLints from "jsr:@hiisi/viola-default-lints@^0.3.2";
-import typescript from "jsr:@hiisi/viola-grammar-ts@^0.3.2";
+import defaultLints from "@hiisi/viola-default-lints";
+import typescript from "@hiisi/viola-grammar-ts";
 import { report, viola, when } from "./mod.ts";
 
 export default viola()
@@ -29,4 +34,14 @@ export default viola()
   .rule(report.error, when.in("**/*_test.ts"))
   // fixtures that are supposed to be wrong are the one exception, since being
   // wrong is their entire job.
-  .rule(report.off, when.in("**/fixtures/**"));
+  .rule(report.off, when.in("**/fixtures/**"))
+  // a literal spelled out across several test cases is several tests each
+  // asserting its own expected value. counting those toward a duplication
+  // threshold asks for a shared constant, and a test that compares a constant
+  // to itself has stopped testing anything.
+  // `build` is a directory in the exclude list and also the method that
+  // identifies a builder; `linters` is a plugin's field and also a config key.
+  // Each pair is two unrelated meanings that must both be spelled out, so a
+  // shared constant would be a lie about what they have in common.
+  .set("duplicate-strings.ignoreStrings", ["build", "linters"])
+  .set("duplicate-strings.countIn", ["**", "!**/*_test.ts", "!**/tests/**"]);

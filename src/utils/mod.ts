@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Utilities Module
  *
@@ -83,3 +88,5 @@ export {
   // Validation
   isFrozen,
 } from "@hiisi/flash-freeze";
+
+export { globToRegex, matchesAnyGlob, matchesGlob } from "./glob.ts";

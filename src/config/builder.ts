@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Fluent builder API for viola configuration.
  *
@@ -28,7 +33,7 @@ import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
 import { GrammarRegistry } from "../grammars/registry.ts";
 import type { GrammarDefinition } from "../grammars/types.ts";
 import type { BaseLinter } from "../linters/base.ts";
-import type { ConditionExpr } from "./conditions.ts";
+import type { ConditionExpr } from "../conditions/when.ts";
 import type {
   GrammarRelationshipAction,
   RuleAction,
@@ -77,7 +82,7 @@ export interface ViolaBuilderConfigExtended extends ViolaBuilderConfig {
 }
 
 // Import Condition type
-import type { Condition } from "./types/conditions.types.ts";
+import type { Condition } from "../conditions/types.ts";
 
 // =============================================================================
 // Type Guards

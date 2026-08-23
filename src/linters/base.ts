@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Base Linter
  *
@@ -10,12 +15,8 @@
  * @module
  */
 
-import type {
-  IssueCatalog,
-  IssueCategory,
-  IssueDef,
-  IssueImpact,
-} from "../config/types.ts";
+import type { IssueCatalog, IssueDef } from "../config/types.ts";
+import type { CategoryName, ImpactName } from "../conditions/vocabulary.ts";
 import type {
   CodebaseData,
   Issue,
@@ -126,14 +127,14 @@ export abstract class BaseLinter {
   /**
    * Get category for an issue kind.
    */
-  getCategory(kind: string): IssueCategory {
+  getCategory(kind: string): CategoryName {
     return this.catalog[kind]?.category ?? "consistency";
   }
 
   /**
    * Get impact for an issue kind.
    */
-  getImpact(kind: string): IssueImpact {
+  getImpact(kind: string): ImpactName {
     return this.catalog[kind]?.impact ?? "minor";
   }
 

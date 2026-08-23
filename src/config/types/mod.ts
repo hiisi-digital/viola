@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Types module for viola configuration.
  *
@@ -18,7 +23,7 @@ export type {
   ImpactCondition,
   LinterCondition,
   NotCondition,
-} from "./conditions.types.ts";
+} from "../../conditions/types.ts";
 
 // Action types
 export type { ReportAction, RuleAction } from "./actions.types.ts";

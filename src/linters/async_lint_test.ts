@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * An async lint has to actually resolve before its issues are counted.
  *
@@ -34,6 +39,7 @@ const EMPTY_DATA: CodebaseData = {
   allStrings: [],
   allExports: [],
   allImports: [],
+  literalVocabulary: new Set<string>(),
 };
 
 const ENABLED: LinterConfig = { enabled: true };

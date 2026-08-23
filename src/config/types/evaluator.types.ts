@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Evaluator types for viola configuration.
  *
@@ -7,25 +12,22 @@
  */
 
 import type { Issue } from "../../data/types.ts";
-import type { ReportLevel } from "../enums.ts";
-import type { IssueDef } from "../types.ts";
+import type { ReportLevel } from "../../conditions/vocabulary.ts";
 
 // =============================================================================
 // Evaluation Types
 // =============================================================================
 
 /**
- * Context for evaluating conditions against an issue.
+ * What a run knows that an issue does not.
+ *
+ * A condition may ask about an environment variable or a path relative to the
+ * project, and neither is on an `Issue`. Passed in rather than read here, so
+ * evaluating a rule stays a pure function of what it was given.
  */
-export interface EvaluationContext {
-  /** The issue being evaluated */
-  readonly issue: Issue;
-  /** Issue definition from catalog (if found) */
-  readonly issueDef?: IssueDef;
-  /** Linter ID (extracted from issue.kind) */
-  readonly linterId: string;
-  /** Issue name (extracted from issue.kind) */
-  readonly issueName: string;
+export interface RunContext {
+  readonly env: Readonly<Record<string, string | undefined>>;
+  readonly projectRoot: string;
 }
 
 /**

@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Data Types
  *
@@ -239,6 +244,14 @@ export interface FileInfo {
   readonly path: string;
   /** File extension */
   readonly extension: string;
+  /**
+   * Which grammar parsed it.
+   *
+   * The alias the config gave it, so a condition can ask `when.grammar("ts")`
+   * and a reader of the data can tell which of several grammars produced what.
+   * Empty when nothing recorded it.
+   */
+  readonly grammarId: string;
   /** Line count */
   readonly lineCount: number;
   /** Raw file content (only populated if a linter requests it) */
@@ -284,6 +297,23 @@ export interface CodebaseData {
   readonly allExports: readonly ExportInfo[];
   /** All imports across all files */
   readonly allImports: readonly ImportInfo[];
+  /**
+   * Every string the codebase declares as a member of a type.
+   *
+   * The literals in a string-literal union, and the values of a string enum:
+   * `"primary"` where `type Role = "primary" | "suppressed"`, `"major"` where
+   * `enum Impact { Major = "major" }`.
+   *
+   * These are not repeated strings in the sense a maintainability check means.
+   * They repeat because the type says they may, the compiler checks every
+   * occurrence, and replacing one with a constant loses the correspondence
+   * with the declaration while gaining nothing: rename the union member and
+   * every use breaks, which is the property a shared constant would remove.
+   *
+   * Computed once here rather than in whichever linter wants it, so a check
+   * asking "is this string part of a declared vocabulary" has one answer.
+   */
+  readonly literalVocabulary: ReadonlySet<string>;
 }
 
 // =============================================================================
@@ -360,9 +390,14 @@ export interface LinterConfig {
 }
 
 /**
- * Viola configuration.
+ * What a run is configured with, after the config file has been resolved.
+ *
+ * Not the file a user writes: that is `ViolaConfig` in `src/config/types.ts`,
+ * and both were called `ViolaConfig` until the linter pointed out that two
+ * unrelated shapes shared a name. `mod.ts` had been exporting one of them
+ * under an alias, which is the clash being worked around rather than fixed.
  */
-export interface ViolaConfig {
+export interface CrawlConfig {
   /** Project root directory */
   readonly projectRoot: string;
   /** Directories to scan */

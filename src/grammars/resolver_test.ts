@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Grammar Resolver Tests
  *
@@ -6,7 +11,9 @@
 
 import { deepFreeze } from "@hiisi/flash-freeze";
 import { assertEquals, assertExists } from "@std/assert";
+import type { Frozen } from "@hiisi/flash-freeze";
 import type { Condition, EvaluationContext } from "../conditions/types.ts";
+import { when } from "../conditions/when.ts";
 import { GrammarRegistry } from "./registry.ts";
 import {
   createGrammarResolver,
@@ -70,58 +77,22 @@ const mockBashGrammar: GrammarDefinition = {
 };
 
 /**
- * Create a mock condition that always returns the specified value.
+ * A condition that holds, or does not, whatever it is asked.
+ *
+ * These used to be hand-built objects with an `evaluate` method, because a
+ * condition was an interface. It is data now, so a test cannot invent one and
+ * has to build a real one, which is the point: what these exercise is what a
+ * config would actually produce.
  */
-function mockCondition(result: boolean): Condition {
-  return {
-    evaluate: () => result,
-    and: (other) =>
-      mockCondition(result && other.evaluate({} as EvaluationContext)),
-    or: (other) =>
-      mockCondition(result || other.evaluate({} as EvaluationContext)),
-    not: () => mockCondition(!result),
-  };
+function mockCondition(result: boolean): Frozen<Condition> {
+  return (result ? when.always() : when.never()).condition;
 }
 
 /**
- * Create a mock condition that checks file extension.
+ * A condition that holds for files with any of these extensions.
  */
-function extensionCondition(...exts: string[]): Condition {
-  return {
-    evaluate: (ctx) => {
-      if (!ctx.file) return false;
-      return exts.some((ext) => ctx.file!.path.endsWith(ext));
-    },
-    and: function (other) {
-      const self = this;
-      return {
-        evaluate: (ctx: EvaluationContext) =>
-          self.evaluate(ctx) && other.evaluate(ctx),
-        and: self.and,
-        or: self.or,
-        not: self.not,
-      };
-    },
-    or: function (other) {
-      const self = this;
-      return {
-        evaluate: (ctx: EvaluationContext) =>
-          self.evaluate(ctx) || other.evaluate(ctx),
-        and: self.and,
-        or: self.or,
-        not: self.not,
-      };
-    },
-    not: function () {
-      const self = this;
-      return {
-        evaluate: (ctx: EvaluationContext) => !self.evaluate(ctx),
-        and: self.and,
-        or: self.or,
-        not: self.not,
-      };
-    },
-  };
+function extensionCondition(...exts: string[]): Frozen<Condition> {
+  return when.in(...exts.map((ext) => `*${ext}`)).condition;
 }
 
 /**

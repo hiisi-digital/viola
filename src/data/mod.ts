@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Data Module
  *
@@ -11,6 +16,7 @@
 export type {
   // Codebase
   CodebaseData,
+  CrawlConfig,
   // Exports/Imports
   ExportInfo,
   // Files
@@ -35,5 +41,4 @@ export type {
   // Types/Interfaces
   TypeField,
   TypeInfo,
-  ViolaConfig,
 } from "./types.ts";

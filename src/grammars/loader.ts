@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Grammar Loader
  *
@@ -16,6 +21,21 @@ import type { GrammarSource } from "./types.ts";
 /**
  * Tree-sitter Parser type (from web-tree-sitter).
  * We define this interface to avoid direct import in type definitions.
+ */
+/**
+ * Raised wherever a parse is attempted before the runtime is up.
+ *
+ * One message, because two spellings of one condition drift and a caller
+ * matching on the text then handles one of them.
+ */
+const NOT_INITIALIZED =
+  "Tree-sitter not initialized. Call initTreeSitter() first.";
+
+/**
+ * The part of tree-sitter's parser this needs.
+ *
+ * Declared here rather than imported, because the runtime arrives through a
+ * dynamic import whose types are not available at build time.
  */
 export interface Parser {
   parse(input: string, oldTree?: Tree | null): Tree;
@@ -145,7 +165,7 @@ export interface TreeCursor {
 /**
  * Tree-sitter Edit type.
  */
-export interface Edit {
+interface Edit {
   startIndex: number;
   oldEndIndex: number;
   newEndIndex: number;
@@ -157,7 +177,7 @@ export interface Edit {
 /**
  * Tree-sitter Range type.
  */
-export interface Range {
+interface Range {
   startPosition: { row: number; column: number };
   endPosition: { row: number; column: number };
   startIndex: number;
@@ -167,7 +187,7 @@ export interface Range {
 /**
  * The tree-sitter Parser class/constructor.
  */
-export interface ParserConstructor {
+interface ParserConstructor {
   new (): Parser;
   init(
     options?: { locateFile?: (scriptName: string) => string },
@@ -232,7 +252,7 @@ export function isInitialized(): boolean {
 export async function loadGrammar(grammar: GrammarSource): Promise<Language> {
   if (!initialized || !ParserClass) {
     throw new Error(
-      "Tree-sitter not initialized. Call initTreeSitter() first.",
+      NOT_INITIALIZED,
     );
   }
 
@@ -265,7 +285,7 @@ export function createParser(
 ): Parser {
   if (!initialized || !ParserClass) {
     throw new Error(
-      "Tree-sitter not initialized. Call initTreeSitter() first.",
+      NOT_INITIALIZED,
     );
   }
 

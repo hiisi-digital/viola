@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Integration tests for viola builder and plugin system.
  *
@@ -20,8 +25,8 @@ import {
   type ViolaBuilderConfig,
   type ViolaPlugin,
 } from "../builder.ts";
-import { when } from "../conditions.ts";
-import { Category, Impact, ReportLevel } from "../enums.ts";
+import { when } from "../../conditions/when.ts";
+import { Category, Impact, ReportLevel } from "../../conditions/vocabulary.ts";
 import {
   countByLevel,
   type EvaluatedIssue,

@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Grammar Resolver
  *
@@ -20,6 +25,7 @@
  */
 
 import type { Frozen } from "@hiisi/flash-freeze";
+import { evaluateCondition } from "../conditions/evaluate.ts";
 import type { Condition, EvaluationContext } from "../conditions/types.ts";
 import type { GrammarRelationshipAction } from "../config/types/actions.types.ts";
 import type { GrammarEntry, GrammarRegistry } from "./registry.ts";
@@ -223,8 +229,11 @@ export class GrammarResolver {
     const active: GrammarRelationshipAction[] = [];
 
     for (const rule of this.rules) {
-      // Evaluate the condition
-      if (rule.condition.evaluate(context)) {
+      // A condition is data now, so reading one is the evaluator's job rather
+      // than the condition's. That is what lets a rule written by `when` in a
+      // config reach here at all: it used to be built as one kind of object
+      // and read as another, which is why this whole path never ran.
+      if (evaluateCondition(rule.condition as Condition, context)) {
         active.push(rule.action);
       }
     }
@@ -288,7 +297,13 @@ export function mergeExtractionResults<
   const merged: T[] = [];
   const seenLocations = new Set<string>();
 
-  // Helper to create a location key
+  /**
+   * What makes two extracted items the same item.
+   *
+   * Line and column only. The name is deliberately not in the key, since the
+   * whole point of merging is that two grammars may name one thing
+   * differently and the position is what says they mean it.
+   */
   const locationKey = (item: T): string => {
     const loc = item.location;
     return `${loc.line}:${loc.column ?? 0}`;

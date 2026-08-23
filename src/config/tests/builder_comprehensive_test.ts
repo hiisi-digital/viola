@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Comprehensive tests for the ViolaBuilder configuration system.
  *
@@ -12,13 +17,10 @@ import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
 import { viola, type ViolaPlugin } from "../builder.ts";
-import { when } from "../conditions.ts";
-import { Category, Impact, ReportLevel } from "../enums.ts";
-import {
-  createEvaluationContext,
-  evaluateCondition,
-  evaluateIssue,
-} from "../evaluator.ts";
+import { when } from "../../conditions/when.ts";
+import { Category, Impact, ReportLevel } from "../../conditions/vocabulary.ts";
+import { evaluateCondition } from "../../conditions/evaluate.ts";
+import { createEvaluationContext, evaluateIssue } from "../evaluator.ts";
 import { grammar } from "../grammar-ref.ts";
 import type { GrammarDefinition } from "../../grammars/types.ts";
 import type { IssueCatalog } from "../types.ts";
@@ -517,11 +519,11 @@ Deno.test("evaluator: issue kind without slash", () => {
   const issue = createMockIssue("unknown", "src/a.ts");
   const context = createEvaluationContext(issue, catalogs);
 
-  assertEquals(context.linterId, "unknown");
-  assertEquals(context.issueName, "");
+  assertEquals(context.issue?.by, "unknown");
+  assertEquals(context.issue?.name, "");
   // The catalog lookup uses issue.kind which is "unknown"
   // and catalogs.get("unknown")?.["unknown"] should find it
-  assertEquals(context.issueDef !== undefined, true);
+  assertEquals(context.issue?.impact !== undefined, true);
 });
 
 Deno.test("evaluator: issue kind with multiple slashes splits on first", () => {
@@ -529,8 +531,8 @@ Deno.test("evaluator: issue kind with multiple slashes splits on first", () => {
   const catalogs = new Map<string, IssueCatalog>();
   const context = createEvaluationContext(issue, catalogs);
 
-  assertEquals(context.linterId, "my-linter");
-  assertEquals(context.issueName, "sub/issue");
+  assertEquals(context.issue?.by, "my-linter");
+  assertEquals(context.issue?.name, "sub/issue");
 });
 
 Deno.test("evaluator: confidence boundary values (0 and 100)", () => {
@@ -687,10 +689,12 @@ Deno.test("ordering: 10+ rules maintain exact definition order", () => {
     const cond = config.rules[i]!.condition;
     assertEquals(cond.type, "file");
     if (cond.type === "file") {
-      assertEquals(
-        (cond as unknown as { patterns: string[] }).patterns[0],
-        `pattern-${i}/**`,
-      );
+      // A file condition carries a comparison now rather than a bare pattern
+      // list, which is what makes `when.in(...)` and `when.confidence(...)`
+      // the same kind of thing.
+      const comparison = cond.comparison as { op: string; patterns: string[] };
+      assertEquals(comparison.op, "glob");
+      assertEquals(comparison.patterns[0], `pattern-${i}/**`);
     }
   }
 });

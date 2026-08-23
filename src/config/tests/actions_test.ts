@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Tests for report actions.
  *
@@ -6,7 +11,7 @@
 
 import { assertEquals } from "@std/assert";
 import { isReportAction, report } from "../actions.ts";
-import { ReportLevel } from "../enums.ts";
+import { ReportLevel } from "../../conditions/vocabulary.ts";
 
 // =============================================================================
 // Report Action Creation Tests

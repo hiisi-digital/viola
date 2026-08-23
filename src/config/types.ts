@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola configuration types.
  *
@@ -5,72 +10,34 @@
  * Config is always scoped by file patterns.
  */
 
-// =============================================================================
-// Issue Classification
-// =============================================================================
+import type {
+  Category,
+  CategoryName,
+  Impact,
+  ImpactName,
+  ReportLevel,
+  ReportLevelName,
+} from "../conditions/vocabulary.ts";
+
+// The vocabulary lives in `src/conditions/vocabulary.ts`, and this file used
+// to hold a second copy of it: `IssueCategory` beside `Category`,
+// `IssueImpact` beside `Impact`, `Severity` beside `ReportLevel`, and its own
+// `IMPACT_ORDER`, `impactValue` and `compareImpact`. Unifying the two
+// condition systems still left this third copy standing, and the linter is
+// what found it.
 
 /**
- * Category of an issue - what kind of problem it represents.
- */
-export type IssueCategory =
-  | "correctness" // Code is wrong or broken
-  | "maintainability" // Harder to work with over time
-  | "consistency" // Breaks project conventions
-  | "performance" // Slower than needed
-  | "style"; // Cosmetic/formatting
-
-/**
- * Impact level of an issue - how urgent it is (ordered).
+ * What a linter says about one kind of issue it can report.
  *
- * Order: critical > major > minor > trivial
- */
-export type IssueImpact =
-  | "critical" // Must fix, blocks release
-  | "major" // Should fix soon
-  | "minor" // Fix when convenient
-  | "trivial"; // Nice to have
-
-/**
- * Impact levels in order from highest to lowest.
- */
-export const IMPACT_ORDER: readonly IssueImpact[] = [
-  "critical",
-  "major",
-  "minor",
-  "trivial",
-] as const;
-
-/**
- * Get numeric value for impact comparison.
- */
-export function impactValue(impact: IssueImpact): number {
-  return IMPACT_ORDER.indexOf(impact);
-}
-
-/**
- * Compare two impacts. Returns negative if a > b, positive if a < b, 0 if equal.
- */
-export function compareImpact(a: IssueImpact, b: IssueImpact): number {
-  return impactValue(a) - impactValue(b);
-}
-
-/**
- * Output severity for reporting.
- */
-export type Severity = "error" | "warn" | "info" | "off";
-
-// =============================================================================
-// Issue Catalog
-// =============================================================================
-
-/**
- * Definition of an issue kind that a linter can emit.
+ * Declared once in the linter's catalog and read whenever an issue of that
+ * kind turns up, which is how a rule about impact or category reaches a
+ * finding that carries neither.
  */
 export interface IssueDef {
   /** What kind of problem this is */
-  category: IssueCategory;
+  category: CategoryName;
   /** How urgent this is by default */
-  impact: IssueImpact;
+  impact: ImpactName;
   /** Human-readable description */
   description: string;
   /** Default confidence if not specified per-issue (0-100) */
@@ -91,10 +58,10 @@ export type IssueCatalog = Record<string, IssueDef>;
  * Simple severity value or full config object.
  */
 export type PatternValue =
-  | Severity
+  | ReportLevelName
   | {
     /** Output severity */
-    severity: Severity;
+    severity: ReportLevelName;
     /** Minimum confidence to report (0-100) */
     minConfidence?: number;
   };
@@ -193,11 +160,11 @@ export interface ParsedPattern {
   /** Issue glob (e.g., "stale", "*") */
   issue: string;
   /** Category filter if present */
-  category?: IssueCategory;
+  category?: Category;
   /** Impact comparison if present */
   impact?: {
     operator: "=" | "!=" | ">=" | "<=" | ">" | "<";
-    value: IssueImpact;
+    value: Impact;
   };
 }
 
@@ -205,7 +172,7 @@ export interface ParsedPattern {
  * Resolved pattern value.
  */
 export interface ResolvedPatternValue {
-  severity: Severity;
+  severity: ReportLevelName;
   minConfidence: number;
 }
 
@@ -252,6 +219,8 @@ export interface ResolvedConfig {
 export interface ConfigSource {
   /** Path to the config file */
   path: string;
-  /** Type of config */
-  type: "viola.config.ts" | "deno.json" | "viola.json" | "env";
+  /** Type of config. There is one, and it is the only one there has been
+   * since the `deno.json` block went; the field stays so a reader of a
+   * source list can see what answered rather than infer it. */
+  type: "viola.config.ts";
 }

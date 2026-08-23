@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola - Convention linter for codebases
  *
@@ -79,6 +84,7 @@
 
 export type {
   CodebaseData,
+  CrawlConfig,
   ExportInfo,
   FileInfo,
   FunctionInfo,
@@ -93,7 +99,6 @@ export type {
   StringLiteral,
   TypeField,
   TypeInfo,
-  ViolaConfig,
 } from "./src/data/mod.ts";
 
 // =============================================================================
@@ -149,6 +154,12 @@ export {
 // =============================================================================
 
 export { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
+export {
+  type ProjectRunOptions,
+  registerBuilderLinters,
+  type ResolvedRun,
+  resolveRun,
+} from "./src/runtime/mod.ts";
 
 // =============================================================================
 // Linters
@@ -227,42 +238,35 @@ import {
   hasErrors as hasErrorLevel,
   type IssueCatalog,
   mergeLinterConfig,
-  ReportLevel,
   type Rule,
   validateLinterConfig,
 } from "./src/config/mod.ts";
+import { ReportLevel } from "./src/conditions/mod.ts";
 import type {
+  CrawlConfig,
   Issue,
   LinterConfig,
   LintResults,
-  ViolaConfig,
 } from "./src/data/mod.ts";
-import type { GrammarRegistry } from "./src/grammars/mod.ts";
+import type {
+  GrammarRegistry,
+  GrammarRelationshipRule,
+} from "./src/grammars/mod.ts";
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
+import {
+  catalogsOf,
+  DEFAULT_INCLUDE,
+  type ProjectRunOptions,
+  resolveRun,
+} from "./src/runtime/project.ts";
+import type { ViolaOptions } from "./src/runtime/types/run.types.ts";
+
+export type { ViolaOptions } from "./src/runtime/types/run.types.ts";
 import {
   discoverPlugins,
   registerDiscoveredLinters,
 } from "./src/runtime/plugins.ts";
-
-/**
- * Options for running viola.
- */
-export interface ViolaOptions
-  extends Partial<ViolaConfig>, Partial<RunOptions> {
-  /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
-  plugins?: string[];
-  /** Preset names to inherit from loaded plugins */
-  inherit?: string[];
-  /** Per-linter configuration options (merged with preset configs) */
-  linterConfig?: Record<string, Record<string, unknown>>;
-  /** Rules for classifying issues (from builder config) */
-  rules?: readonly Frozen<Rule>[];
-  /** Issue catalogs for rule evaluation (linter ID -> catalog) */
-  catalogs?: Map<string, IssueCatalog>;
-  /** Grammar registry for tree-sitter based extraction (required) */
-  grammarRegistry: GrammarRegistry;
-}
 
 /**
  * Extended results with evaluated issues.
@@ -285,9 +289,9 @@ export interface EvaluatedResults extends LintResults {
 export async function runViola(options: ViolaOptions): Promise<LintResults> {
   const verbose = options.verbose ?? false;
 
-  const config: ViolaConfig = {
+  const config: CrawlConfig = {
     projectRoot: options.projectRoot ?? Deno.cwd(),
-    include: options.include ?? ["packages", "app", "src"],
+    include: options.include ?? DEFAULT_INCLUDE,
     exclude: options.exclude ?? DEFAULT_CONFIG.exclude ?? [],
     extensions: options.extensions ?? DEFAULT_CONFIG.extensions ?? [],
     linters: options.linters ?? {},
@@ -425,7 +429,12 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
     console.log("Crawling codebase...");
   }
 
-  const data = await crawlCodebase(config, options.grammarRegistry);
+  const data = await crawlCodebase(
+    config,
+    options.grammarRegistry,
+    options.grammarRules ?? [],
+    { env: options.env, projectRoot: config.projectRoot },
+  );
 
   if (config.verbose) {
     console.log(`Crawled ${data.files.length} files`);
@@ -513,13 +522,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
  * Build catalogs map from registered linters.
  */
 function buildCatalogsFromRegistry(): Map<string, IssueCatalog> {
-  const catalogs = new Map<string, IssueCatalog>();
-  for (const linter of registry.getAll()) {
-    if (linter.catalog) {
-      catalogs.set(linter.meta.id, linter.catalog);
-    }
-  }
-  return catalogs;
+  return catalogsOf(registry.getAll());
 }
 
 /**
@@ -547,11 +550,111 @@ function levelPrefix(level: ReportLevel): string {
   }
 }
 
+
+/**
+ * Run viola over a project and report, the way a front end does.
+ *
+ * Reads the project's config, registers what it declares, runs, prints, and
+ * answers with the exit status a caller should use. That whole sequence lived
+ * in the cli, so nothing but the cli could perform it: viola's own gate had to
+ * shell out to a published copy of itself, which is how a fix on disk stayed
+ * invisible to the gate meant to catch it.
+ *
+ * The cli still owns argument parsing and the subprocess that bridges a
+ * foreign project's import map. Neither is needed by a project running viola
+ * on itself, since its own manifest is already in effect.
+ *
+ * @param options - Where the project is and how to run it
+ * @returns 0 when the run is clean or only reporting, 1 when it found errors
+ */
+export async function runProject(
+  options: ProjectRunOptions = {},
+): Promise<number> {
+  const { options: runOptions } = await resolveRun(options);
+
+  // No linters is not a clean project either. A config that registered none,
+  // or none this cli could load, checks nothing and would otherwise report
+  // "All clear" for the same reason a zero-file run does.
+  const configured = (runOptions.rules?.length ?? 0) > 0 ||
+    (runOptions.catalogs?.size ?? 0) > 0 ||
+    (runOptions.plugins?.length ?? 0) > 0;
+  if (!configured && options.allowEmpty !== true) {
+    console.error(
+      "Refusing to pass: no plugins configured, so nothing would be checked.\n" +
+        "\n" +
+        "  Create a viola.config.ts naming what to run:\n" +
+        "\n" +
+        '    import defaultLints from "@hiisi/viola-default-lints";\n' +
+        '    import typescript from "@hiisi/viola-grammar-ts";\n' +
+        '    import { report, viola, when } from "@hiisi/viola";\n' +
+        "\n" +
+        "    export default viola()\n" +
+        "      .use(defaultLints)\n" +
+        "      .add(typescript)\n" +
+        "      .rule(report.error, when.confidence.atLeast(1));\n" +
+        "\n" +
+        "  A grammar is not optional: without one viola reads nothing and\n" +
+        "  reports nothing, which looks exactly like a clean project.\n" +
+        "\n" +
+        "  Pass `allowEmpty` if a project really has nothing to check yet.",
+    );
+    return 1;
+  }
+  if (!configured) {
+    // `allowEmpty` got us past the refusal, and there is now genuinely nothing
+    // to do. Calling on would reach the crawler's own no-grammar guard and
+    // throw, which made the documented escape hatch crash instead of pass.
+    console.log("Nothing configured to check.");
+    return 0;
+  }
+
+  const results = await runViola(runOptions);
+  console.log(formatResults(results));
+
+  // A run that read nothing is not a clean run. It is a project whose include
+  // list points somewhere empty, or whose grammar never matched a file, or
+  // whose config registered a grammar into a different copy of viola than the
+  // one crawling. Every one of those prints "All clear", which is the worst
+  // possible thing to say about a package nobody checked.
+  if (results.filesScanned === 0 && options.allowEmpty !== true) {
+    console.error(
+      "\nRefusing to pass: no files were read.\n" +
+        "  A run that scanned nothing cannot say a package is clean.\n" +
+        "  Check that the include list points at files that exist, that a\n" +
+        "  grammar claims their extensions, and that the config imports the\n" +
+        "  same viola that is running. Pass `allowEmpty` if a project really\n" +
+        "  has nothing to lint yet.",
+    );
+    return 1;
+  }
+
+  return results.hasErrors && options.reportOnly !== true ? 1 : 0;
+}
+
+/** The heading above a finding's other locations, in both formatters. */
+const RELATED_HEADING = "    Related:";
+
+/**
+ * The words a run ends with.
+ *
+ * Both formatters print one of these, and both used to spell them out. That is
+ * not a style point: a caller deciding whether a run was clean reads the
+ * verdict, and two independent spellings of it are two things that can drift.
+ * A publish gate in this workspace searched the output for "All clear" and
+ * passed a package with 222 findings, because the phrase also appears in this
+ * file's own source and the linter quotes source in its findings.
+ */
+const VERDICT = {
+  clean: "All clear.",
+  dirty: "Issues found. Review and address as needed.",
+  blocked: "Errors found. Fix before continuing.",
+} as const;
+
 /**
  * Format check results for console output.
  *
- * If results include evaluated issues (from rule evaluation), formats with
- * report levels. Otherwise, formats raw issues.
+ * Results carrying evaluated issues are formatted with their report levels;
+ * anything else is formatted as raw issues.
  *
  * @param results - Check results to format
  * @returns Formatted string
@@ -587,7 +690,7 @@ function formatEvaluatedResults(
   const reportable = filterReportableIssues(results.evaluatedIssues);
 
   if (reportable.length === 0) {
-    lines.push("All clear.");
+    lines.push(VERDICT.clean);
     lines.push("");
     return lines.join("\n");
   }
@@ -653,7 +756,7 @@ function formatEvaluatedResults(
 
       if (issue.relatedLocations && issue.relatedLocations.length > 0) {
         lines.push("");
-        lines.push("    Related:");
+        lines.push(RELATED_HEADING);
         for (const loc of issue.relatedLocations.slice(0, 3)) {
           lines.push(`      - ${loc.file}:${loc.line}`);
         }
@@ -669,9 +772,9 @@ function formatEvaluatedResults(
   lines.push("=".repeat(80));
 
   if (results.hasErrorLevel) {
-    lines.push("Errors found. Fix before continuing.");
+    lines.push(VERDICT.blocked);
   } else if (reportable.length > 0) {
-    lines.push("Issues found. Review and address as needed.");
+    lines.push(VERDICT.dirty);
   }
 
   lines.push("=".repeat(80));
@@ -685,7 +788,7 @@ function formatEvaluatedResults(
  */
 function formatRawResults(results: LintResults, lines: string[]): string {
   if (results.totalIssues === 0) {
-    lines.push("All clear.");
+    lines.push(VERDICT.clean);
     lines.push("");
     return lines.join("\n");
   }
@@ -717,7 +820,7 @@ function formatRawResults(results: LintResults, lines: string[]): string {
 
       if (issue.relatedLocations && issue.relatedLocations.length > 0) {
         lines.push("");
-        lines.push("    Related:");
+        lines.push(RELATED_HEADING);
         for (const loc of issue.relatedLocations.slice(0, 3)) {
           lines.push(`      - ${loc.file}:${loc.line}`);
         }
@@ -735,7 +838,7 @@ function formatRawResults(results: LintResults, lines: string[]): string {
   if (results.hasErrors) {
     lines.push("Some linters failed to run.");
   } else if (results.totalIssues > 0) {
-    lines.push("Issues found. Review and address as needed.");
+    lines.push(VERDICT.dirty);
   }
 
   lines.push("=".repeat(80));
@@ -751,54 +854,36 @@ function formatRawResults(results: LintResults, lines: string[]): string {
 export type {
   ConfigSource,
   IssueCatalog,
-  IssueCategory,
   IssueDef,
-  IssueImpact,
   ParsedPattern,
   PatternValue,
   ResolvedConfig,
   ResolvedPatternValue,
   ResolvedScope,
   ScopeConfig,
-  Severity,
-  ViolaConfig as ViolaFileConfig,
+  ViolaConfig,
 } from "./src/config/mod.ts";
 
 export {
-  // New API
-  Category,
-  // Legacy
-  compareImpact,
-  ConditionExpr,
   formatValidationErrors,
-  // Grammar reference helper
   grammar,
-  Impact,
-  IMPACT_ORDER,
-  impactValue,
   isGrammarRelationship,
   isGrammarRelationshipAction,
   isReportAction,
   loadConfig,
-  matchesFilePattern,
   matchesIssuePattern,
   plugin,
   report,
-  ReportLevel,
   resolveIssueSeverity,
   validateLinterConfig,
   viola,
   ViolaBuilder,
-  when,
 } from "./src/config/mod.ts";
 
 export type {
-  // New API
   AddInput,
   AddResult,
-  Condition,
   EvaluatedIssue,
-  EvaluationContext,
   GrammarRelationshipAction,
   GrammarRelationshipBuilder,
   LinterInput,
@@ -807,7 +892,7 @@ export type {
   ReportAction,
   Rule,
   RuleAction,
-  // Legacy
+  RunContext,
   ValidationError,
   ValidationResult,
   ViolaBuilderConfig,
@@ -820,7 +905,6 @@ export {
   // Rule evaluation
   countByLevel,
   createEvaluationContext,
-  evaluateCondition,
   evaluateIssue,
   evaluateIssues,
   filterReportableIssues,
@@ -829,42 +913,65 @@ export {
 } from "./src/config/mod.ts";
 
 // =============================================================================
-// Conditions (new condition API)
+// Conditions
 // =============================================================================
+//
+// One vocabulary, one comparison, one `when`, one evaluator. These used to be
+// exported twice under aliases (`whenCondition`, `ConditionImpact`,
+// `alwaysMatch`) because there were two of each and neither could be given the
+// plain name.
 
 export type {
-  Category as ConditionCategory,
-  Condition as ConditionInterface,
-  EnvConditionBuilder,
-  EvaluationContext as ConditionEvaluationContext,
+  CategoryCondition,
+  Comparison,
+  ComparisonData,
+  CompoundCondition,
+  Condition,
+  ConfidenceCondition,
+  ConstantCondition,
+  EnvCondition,
+  EnvConditions,
+  EvaluationContext,
+  FileCondition,
   FileContext,
-  Impact as ConditionImpact,
-  IssueConditions,
+  GrammarCondition,
+  ImpactCondition,
   IssueContext,
+  KindCondition,
+  LinterCondition,
+  NotCondition,
+  Ordered,
   WhenBuilder,
 } from "./src/conditions/mod.ts";
 
-export type { Comparison } from "./src/conditions/mod.ts";
-
 export {
-  // The when builder and condition helpers
-  always as alwaysCondition,
-  alwaysMatch,
+  always,
   atLeast,
   atMost,
   between,
+  Category,
+  compareImpact,
+  ConditionExpr,
   contains,
+  describe,
   endsWith,
   equals,
+  evaluateComparison,
+  evaluateCondition,
+  glob,
+  Impact,
+  IMPACT_ORDER,
+  impactValue,
   lessThan,
   matches,
   moreThan,
-  never as neverCondition,
-  neverMatch,
+  never,
   noneOf,
+  notEquals,
   oneOf,
+  ReportLevel,
   startsWith,
-  when as whenCondition,
+  when,
 } from "./src/conditions/mod.ts";
 
 // =============================================================================

@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Hashing Utilities
  *
@@ -208,15 +213,28 @@ export function groupByHash<T>(
   items: readonly T[],
   getContent: (item: T) => string,
 ): Map<string, T[]> {
+  return groupBy(items, (item) => hashContent(getContent(item)));
+}
+
+/**
+ * Gather items under whatever key a function gives them.
+ *
+ * The two grouping functions below differ only in which hash they take, and
+ * were written out twice in full. This is the part that was the same.
+ */
+function groupBy<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
+): Map<string, T[]> {
   const groups = new Map<string, T[]>();
 
   for (const item of items) {
-    const hash = hashContent(getContent(item));
-    const existing = groups.get(hash);
+    const key = keyOf(item);
+    const existing = groups.get(key);
     if (existing) {
       existing.push(item);
     } else {
-      groups.set(hash, [item]);
+      groups.set(key, [item]);
     }
   }
 
@@ -250,17 +268,5 @@ export function groupByStructure<T>(
   items: readonly T[],
   getCode: (item: T) => string,
 ): Map<string, T[]> {
-  const groups = new Map<string, T[]>();
-
-  for (const item of items) {
-    const hash = hashStructure(getCode(item));
-    const existing = groups.get(hash);
-    if (existing) {
-      existing.push(item);
-    } else {
-      groups.set(hash, [item]);
-    }
-  }
-
-  return groups;
+  return groupBy(items, (item) => hashStructure(getCode(item)));
 }

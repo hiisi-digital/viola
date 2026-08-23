@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Integration tests for grammar-aware extraction in the crawler.
  *
@@ -9,7 +14,7 @@ import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { GrammarRegistry } from "../grammars/registry.ts";
 import type { GrammarDefinition } from "../grammars/types.ts";
 import { crawlCodebase } from "./crawler.ts";
-import type { ViolaConfig } from "../data/types.ts";
+import type { CrawlConfig } from "../data/types.ts";
 
 // Import tree-sitter-typescript so Deno caches the npm package (needed for WASM loading)
 import "tree-sitter-typescript";
@@ -168,7 +173,7 @@ Deno.test("crawler with grammar registry - extracts async function exports corre
     const registry = new GrammarRegistry();
     registry.add(createTestTsGrammar()).as("ts");
 
-    const config: ViolaConfig = {
+    const config: CrawlConfig = {
       projectRoot: tmpDir,
       include: ["src"],
       exclude: [],
@@ -229,7 +234,7 @@ Deno.test("crawler with grammar registry - extracts async function exports corre
 Deno.test("crawler without grammars registered - throws error", async () => {
   const registry = new GrammarRegistry();
 
-  const config: ViolaConfig = {
+  const config: CrawlConfig = {
     projectRoot: "/tmp/nonexistent",
     include: ["src"],
     exclude: [],
@@ -277,7 +282,7 @@ Deno.test("crawler with grammar registry - expands extension filter", async () =
     registry.add(createTestTsGrammar()).as("ts");
 
     // Config only has .ts, but grammar also adds .tsx
-    const config: ViolaConfig = {
+    const config: CrawlConfig = {
       projectRoot: tmpDir,
       include: ["src"],
       exclude: [],

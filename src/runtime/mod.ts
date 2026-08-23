@@ -1,3 +1,8 @@
+//--------------------------------------------------------------------------------------------------
+// Copyright (c) 2026                   orgrinrt                 ort@hiisi.digital
+// SPDX-License-Identifier: MPL-2.0     https://mozilla.org/MPL/2.0        ort@hiisi.digital
+//--------------------------------------------------------------------------------------------------
+
 /**
  * Viola Runtime Module
  *
@@ -20,4 +25,15 @@ export {
 } from "./plugins.ts";
 
 // Re-export config type from data for convenience
-export type { ViolaConfig } from "../data/types.ts";
+export type { CrawlConfig } from "../data/types.ts";
+
+export {
+  catalogsOf,
+  DEFAULT_INCLUDE,
+  type ProjectRunOptions,
+  registerBuilderLinters,
+  type ResolvedRun,
+  resolveRun,
+} from "./project.ts";
+
+export type { ViolaOptions } from "./types/run.types.ts";
