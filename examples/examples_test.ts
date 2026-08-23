@@ -60,6 +60,25 @@ async function runExample(
       /^\[[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*\] \S+:\d+/.test(line)
     )
     .map((line) => line.trim());
+
+  // The run has to have actually happened before any assertion about what it
+  // found means anything. A cli that dies on an import prints no report, so
+  // `findings` is empty, and every test phrased as "this is not reported" or
+  // "these do not repeat" passes without the linter ever starting.
+  //
+  // That is not hypothetical: bumping viola to 0.4.0 left the cli pinned to
+  // `^0.3.0`, it failed to load `runProject`, six of these tests failed and two
+  // passed green. The two that passed are the two that assert an absence.
+  //
+  // `Files scanned:` is the report's own header, so it is present exactly when
+  // viola ran to completion. Checking it here covers every test in this file
+  // rather than the two that happened to be caught.
+  if (!output.includes("Files scanned:")) {
+    throw new Error(
+      `viola never produced a report for ${name}, so nothing here was measured.\n` +
+        `exit ${code}\n${output.slice(0, 800)}`,
+    );
+  }
   return { code, output, findings };
 }
 

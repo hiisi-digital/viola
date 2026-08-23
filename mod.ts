@@ -550,6 +550,7 @@ function levelPrefix(level: ReportLevel): string {
   }
 }
 
+
 /**
  * Run viola over a project and report, the way a front end does.
  *
@@ -598,6 +599,13 @@ export async function runProject(
         "  Pass `allowEmpty` if a project really has nothing to check yet.",
     );
     return 1;
+  }
+  if (!configured) {
+    // `allowEmpty` got us past the refusal, and there is now genuinely nothing
+    // to do. Calling on would reach the crawler's own no-grammar guard and
+    // throw, which made the documented escape hatch crash instead of pass.
+    console.log("Nothing configured to check.");
+    return 0;
   }
 
   const results = await runViola(runOptions);
