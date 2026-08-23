@@ -149,6 +149,12 @@ export {
 // =============================================================================
 
 export { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
+export {
+  type ProjectRunOptions,
+  registerBuilderLinters,
+  type ResolvedRun,
+  resolveRun,
+} from "./src/runtime/mod.ts";
 
 // =============================================================================
 // Linters
@@ -244,40 +250,19 @@ import type {
 import { registry, runLinters, type RunOptions } from "./src/linters/mod.ts";
 import { crawlCodebase, DEFAULT_CONFIG } from "./src/runtime/mod.ts";
 import {
+  catalogsOf,
+  DEFAULT_INCLUDE,
+  type ProjectRunOptions,
+  resolveRun,
+} from "./src/runtime/project.ts";
+import type { ViolaOptions } from "./src/runtime/types/run.types.ts";
+
+export type { ViolaOptions } from "./src/runtime/types/run.types.ts";
+import {
   discoverPlugins,
   registerDiscoveredLinters,
 } from "./src/runtime/plugins.ts";
 
-/**
- * Options for running viola.
- */
-export interface ViolaOptions
-  extends Partial<CrawlConfig>, Partial<RunOptions> {
-  /** Plugin specifiers to load (JSR, npm, URL, or import map references) */
-  plugins?: string[];
-  /** Preset names to inherit from loaded plugins */
-  inherit?: string[];
-  /** Per-linter configuration options (merged with preset configs) */
-  linterConfig?: Record<string, Record<string, unknown>>;
-  /** Rules for classifying issues (from builder config) */
-  rules?: readonly Frozen<Rule>[];
-  /** Issue catalogs for rule evaluation (linter ID -> catalog) */
-  catalogs?: Map<string, IssueCatalog>;
-  /** Grammar registry for tree-sitter based extraction (required) */
-  grammarRegistry: GrammarRegistry;
-  /**
-   * Grammar relationship rules, from `grammar("a").overrides("b")` in the
-   * config.
-   *
-   * Without these every grammar matching a file runs as a primary, which is
-   * what happened to every run before this was passed: the rules were
-   * collected by the builder and read by nobody, so the feature was in the
-   * readme and not in the product.
-   */
-  grammarRules?: readonly GrammarRelationshipRule[];
-  /** What the environment is, for conditions that ask about it. */
-  env?: Readonly<Record<string, string | undefined>>;
-}
 
 /**
  * Extended results with evaluated issues.
@@ -302,7 +287,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
 
   const config: CrawlConfig = {
     projectRoot: options.projectRoot ?? Deno.cwd(),
-    include: options.include ?? ["packages", "app", "src"],
+    include: options.include ?? DEFAULT_INCLUDE,
     exclude: options.exclude ?? DEFAULT_CONFIG.exclude ?? [],
     extensions: options.extensions ?? DEFAULT_CONFIG.extensions ?? [],
     linters: options.linters ?? {},
@@ -533,13 +518,7 @@ export async function runViola(options: ViolaOptions): Promise<LintResults> {
  * Build catalogs map from registered linters.
  */
 function buildCatalogsFromRegistry(): Map<string, IssueCatalog> {
-  const catalogs = new Map<string, IssueCatalog>();
-  for (const linter of registry.getAll()) {
-    if (linter.catalog) {
-      catalogs.set(linter.meta.id, linter.catalog);
-    }
-  }
-  return catalogs;
+  return catalogsOf(registry.getAll());
 }
 
 /**
@@ -565,6 +544,31 @@ function levelPrefix(level: ReportLevel): string {
     default:
       return "";
   }
+}
+
+/**
+ * Run viola over a project and report, the way a front end does.
+ *
+ * Reads the project's config, registers what it declares, runs, prints, and
+ * answers with the exit status a caller should use. That whole sequence lived
+ * in the cli, so nothing but the cli could perform it: viola's own gate had to
+ * shell out to a published copy of itself, which is how a fix on disk stayed
+ * invisible to the gate meant to catch it.
+ *
+ * The cli still owns argument parsing and the subprocess that bridges a
+ * foreign project's import map. Neither is needed by a project running viola
+ * on itself, since its own manifest is already in effect.
+ *
+ * @param options - Where the project is and how to run it
+ * @returns 0 when the run is clean or only reporting, 1 when it found errors
+ */
+export async function runProject(
+  options: ProjectRunOptions = {},
+): Promise<number> {
+  const { options: runOptions } = await resolveRun(options);
+  const results = await runViola(runOptions);
+  console.log(formatResults(results));
+  return results.hasErrors && options.reportOnly !== true ? 1 : 0;
 }
 
 /** The heading above a finding's other locations, in both formatters. */

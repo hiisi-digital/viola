@@ -21,3 +21,14 @@ export {
 
 // Re-export config type from data for convenience
 export type { CrawlConfig } from "../data/types.ts";
+
+export {
+  catalogsOf,
+  DEFAULT_INCLUDE,
+  type ProjectRunOptions,
+  registerBuilderLinters,
+  type ResolvedRun,
+  resolveRun,
+} from "./project.ts";
+
+export type { ViolaOptions } from "./types/run.types.ts";

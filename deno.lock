@@ -3,7 +3,6 @@
   "specifiers": {
     "jsr:@hiisi/flash-freeze@~0.1.1": "0.1.1",
     "jsr:@hiisi/viola-cli@~0.3.1": "0.3.1",
-    "jsr:@hiisi/viola-grammar-ts@~0.3.2": "0.3.2",
     "jsr:@std/assert@1": "1.0.19",
     "jsr:@std/cli@1": "1.0.32",
     "jsr:@std/fs@1": "1.0.24",
@@ -24,9 +23,6 @@
         "jsr:@std/cli",
         "jsr:@std/path@1"
       ]
-    },
-    "@hiisi/viola-grammar-ts@0.3.2": {
-      "integrity": "5a2498433ef19c21c5ed5bb7eb3e46d077d9337b0171ac4f8b9cd2a8015b331a"
     },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
@@ -86,11 +82,32 @@
   "workspace": {
     "dependencies": [
       "jsr:@hiisi/flash-freeze@~0.1.1",
+      "jsr:@hiisi/viola-default-lints@~0.3.2",
+      "jsr:@hiisi/viola-grammar-ts@~0.3.2",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",
       "jsr:@std/path@1",
       "npm:tree-sitter-typescript@0.23.2",
       "npm:web-tree-sitter@0.22.6"
-    ]
+    ],
+    "links": {
+      "jsr:@hiisi/viola-default-lints@0.3.2": {
+        "dependencies": [
+          "jsr:@hiisi/flash-freeze@0.1",
+          "jsr:@hiisi/viola@0.3",
+          "jsr:@std/assert@1",
+          "jsr:@std/fs@1",
+          "jsr:@std/path@1"
+        ]
+      },
+      "jsr:@hiisi/viola-grammar-ts@0.3.2": {
+        "dependencies": [
+          "jsr:@hiisi/viola@0.3",
+          "jsr:@std/assert@1",
+          "npm:tree-sitter-typescript@0.23.2",
+          "npm:web-tree-sitter@0.22.6"
+        ]
+      }
+    }
   }
 }
