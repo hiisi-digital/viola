@@ -2,7 +2,9 @@
   "version": "5",
   "specifiers": {
     "jsr:@hiisi/flash-freeze@~0.1.1": "0.1.1",
+    "jsr:@hiisi/viola-cli@~0.3.1": "0.3.1",
     "jsr:@std/assert@1": "1.0.19",
+    "jsr:@std/cli@1": "1.0.32",
     "jsr:@std/fs@1": "1.0.24",
     "jsr:@std/internal@^1.0.12": "1.0.14",
     "jsr:@std/internal@^1.0.14": "1.0.14",
@@ -15,11 +17,21 @@
     "@hiisi/flash-freeze@0.1.1": {
       "integrity": "d47a7143f8f0497101b62faf466574577383add61960265d8fc3323f3c77c512"
     },
+    "@hiisi/viola-cli@0.3.1": {
+      "integrity": "0d86925e9763392e9882e218917fd8c8ee5c62849bf5464e1bc3e6fbf88b8eea",
+      "dependencies": [
+        "jsr:@std/cli",
+        "jsr:@std/path@1"
+      ]
+    },
     "@std/assert@1.0.19": {
       "integrity": "eaada96ee120cb980bc47e040f82814d786fe8162ecc53c91d8df60b8755991e",
       "dependencies": [
         "jsr:@std/internal@^1.0.12"
       ]
+    },
+    "@std/cli@1.0.32": {
+      "integrity": "188b3a100d6202d64e3f5bd3d799c7fa4f6d77f92cc65eb7f641c1fa0aa92a66"
     },
     "@std/fs@1.0.24": {
       "integrity": "f3061b45b81673a2bece689da041df32d174be064c89eb6397fb5718d3fb7877",
@@ -70,6 +82,8 @@
   "workspace": {
     "dependencies": [
       "jsr:@hiisi/flash-freeze@~0.1.1",
+      "jsr:@hiisi/viola-default-lints@~0.3.1",
+      "jsr:@hiisi/viola-grammar-ts@~0.3.1",
       "jsr:@std/assert@1",
       "jsr:@std/fs@1",
       "jsr:@std/path@1",
