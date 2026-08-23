@@ -32,15 +32,32 @@
 
 // Comparison primitives
 export {
-    always as alwaysMatch, atLeast,
-    atMost, between, contains, endsWith, equals, lessThan, matches, moreThan, never as neverMatch, noneOf, oneOf, startsWith
+  always as alwaysMatch,
+  atLeast,
+  atMost,
+  between,
+  contains,
+  endsWith,
+  equals,
+  lessThan,
+  matches,
+  moreThan,
+  never as neverMatch,
+  noneOf,
+  oneOf,
+  startsWith,
 } from "./comparisons.ts";
 export type { Comparison } from "./comparisons.ts";
 
 // Condition types
 export type {
-    Condition, EnvConditionBuilder, EvaluationContext,
-    FileContext, IssueConditions, IssueContext, WhenBuilder
+  Condition,
+  EnvConditionBuilder,
+  EvaluationContext,
+  FileContext,
+  IssueConditions,
+  IssueContext,
+  WhenBuilder,
 } from "./types.ts";
 
 // Enums

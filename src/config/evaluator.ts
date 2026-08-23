@@ -12,32 +12,38 @@ import type { Frozen } from "@hiisi/flash-freeze";
 import type { Issue } from "../data/types.ts";
 import { isReportAction } from "./actions.ts";
 import {
-    isCategoryCondition,
-    isCompoundCondition,
-    isConfidenceCondition,
-    isFileCondition,
-    isImpactCondition,
-    isLinterCondition,
-    isNotCondition,
+  isCategoryCondition,
+  isCompoundCondition,
+  isConfidenceCondition,
+  isFileCondition,
+  isImpactCondition,
+  isLinterCondition,
+  isNotCondition,
 } from "./conditions.ts";
 import { Category, Impact, impactValue, ReportLevel } from "./enums.ts";
 import { matchesAnyGlob } from "./pattern.ts";
 import type { IssueCatalog } from "./types.ts";
 import type { Rule } from "./types/builder.types.ts";
 import type {
-    CategoryCondition,
-    CompoundCondition,
-    Condition,
-    ConfidenceCondition,
-    FileCondition,
-    ImpactCondition,
-    LinterCondition,
-    NotCondition,
+  CategoryCondition,
+  CompoundCondition,
+  Condition,
+  ConfidenceCondition,
+  FileCondition,
+  ImpactCondition,
+  LinterCondition,
+  NotCondition,
 } from "./types/conditions.types.ts";
-import type { EvaluatedIssue, EvaluationContext } from "./types/evaluator.types.ts";
+import type {
+  EvaluatedIssue,
+  EvaluationContext,
+} from "./types/evaluator.types.ts";
 
 // Re-export types for convenience
-export type { EvaluatedIssue, EvaluationContext } from "./types/evaluator.types.ts";
+export type {
+  EvaluatedIssue,
+  EvaluationContext,
+} from "./types/evaluator.types.ts";
 
 // =============================================================================
 // Condition Evaluation
@@ -48,7 +54,7 @@ export type { EvaluatedIssue, EvaluationContext } from "./types/evaluator.types.
  */
 function evaluateImpactCondition(
   condition: ImpactCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   const issueDef = context.issueDef;
   if (!issueDef) {
@@ -128,7 +134,7 @@ function stringToCategory(category: string): Category | null {
  */
 function evaluateCategoryCondition(
   condition: CategoryCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   const issueDef = context.issueDef;
   if (!issueDef) {
@@ -161,7 +167,7 @@ function evaluateCategoryCondition(
  */
 function evaluateFileCondition(
   condition: FileCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   const file = context.issue.location.file;
   return matchesAnyGlob(file, condition.patterns);
@@ -172,7 +178,7 @@ function evaluateFileCondition(
  */
 function evaluateLinterCondition(
   condition: LinterCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   // Match against linter ID or full issue kind
   return (
@@ -186,7 +192,7 @@ function evaluateLinterCondition(
  */
 function evaluateConfidenceCondition(
   condition: ConfidenceCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   const confidence = context.issue.confidence;
 
@@ -206,7 +212,7 @@ function evaluateConfidenceCondition(
  */
 function evaluateCompoundCondition(
   condition: CompoundCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   if (condition.operator === "and") {
     return condition.conditions.every((c) => evaluateCondition(c, context));
@@ -221,7 +227,7 @@ function evaluateCompoundCondition(
  */
 function evaluateNotCondition(
   condition: NotCondition,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   return !evaluateCondition(condition.condition, context);
 }
@@ -231,7 +237,7 @@ function evaluateNotCondition(
  */
 export function evaluateCondition(
   condition: Condition | Frozen<Condition>,
-  context: EvaluationContext
+  context: EvaluationContext,
 ): boolean {
   // Cast away Frozen for evaluation (it's just readonly)
   const cond = condition as Condition;
@@ -285,7 +291,7 @@ function parseIssueKind(kind: string): { linterId: string; issueName: string } {
  */
 export function createEvaluationContext(
   issue: Issue,
-  catalogs: Map<string, IssueCatalog>
+  catalogs: Map<string, IssueCatalog>,
 ): EvaluationContext {
   const { linterId, issueName } = parseIssueKind(issue.kind);
 
@@ -318,7 +324,7 @@ export function evaluateIssue(
   issue: Issue,
   rules: readonly Frozen<Rule>[],
   catalogs: Map<string, IssueCatalog>,
-  defaultLevel: ReportLevel = ReportLevel.Warn
+  defaultLevel: ReportLevel = ReportLevel.Warn,
 ): EvaluatedIssue {
   const context = createEvaluationContext(issue, catalogs);
 
@@ -359,7 +365,7 @@ export function evaluateIssues(
   issues: readonly Issue[],
   rules: readonly Frozen<Rule>[],
   catalogs: Map<string, IssueCatalog>,
-  defaultLevel: ReportLevel = ReportLevel.Warn
+  defaultLevel: ReportLevel = ReportLevel.Warn,
 ): EvaluatedIssue[] {
   return issues.map((issue) =>
     evaluateIssue(issue, rules, catalogs, defaultLevel)
@@ -371,10 +377,10 @@ export function evaluateIssues(
  * Removes issues with level "off" or "skip".
  */
 export function filterReportableIssues(
-  issues: readonly EvaluatedIssue[]
+  issues: readonly EvaluatedIssue[],
 ): EvaluatedIssue[] {
   return issues.filter(
-    (i) => i.level !== ReportLevel.Off && i.level !== ReportLevel.Skip
+    (i) => i.level !== ReportLevel.Off && i.level !== ReportLevel.Skip,
   );
 }
 
@@ -389,7 +395,7 @@ export function hasErrors(issues: readonly EvaluatedIssue[]): boolean {
  * Group issues by report level.
  */
 export function groupByLevel(
-  issues: readonly EvaluatedIssue[]
+  issues: readonly EvaluatedIssue[],
 ): Map<ReportLevel, EvaluatedIssue[]> {
   const groups = new Map<ReportLevel, EvaluatedIssue[]>();
 
@@ -409,7 +415,7 @@ export function groupByLevel(
  * Get issue counts by level.
  */
 export function countByLevel(
-  issues: readonly EvaluatedIssue[]
+  issues: readonly EvaluatedIssue[],
 ): Record<ReportLevel, number> {
   const counts: Record<ReportLevel, number> = {
     [ReportLevel.Error]: 0,

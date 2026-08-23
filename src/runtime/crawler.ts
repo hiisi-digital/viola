@@ -14,17 +14,17 @@ import { deepFreeze } from "@hiisi/flash-freeze";
 import { walk } from "@std/fs/walk";
 import { basename, extname, join, relative } from "@std/path";
 import type {
-    CodebaseData,
-    FileInfo,
-    SchemaInfo,
-    ViolaConfig
+  CodebaseData,
+  FileInfo,
+  SchemaInfo,
+  ViolaConfig,
 } from "../data/types.ts";
 import {
-    extractCompleteFileInfo,
-    type GrammarRegistry,
-    initTreeSitter,
-    loadGrammar,
-    createParser,
+  createParser,
+  extractCompleteFileInfo,
+  type GrammarRegistry,
+  initTreeSitter,
+  loadGrammar,
 } from "../grammars/mod.ts";
 
 // =============================================================================
@@ -95,19 +95,21 @@ export const DEFAULT_CONFIG: Partial<ViolaConfig> = {
  */
 export async function crawlCodebase(
   config: ViolaConfig,
-  grammarRegistry: GrammarRegistry
+  grammarRegistry: GrammarRegistry,
 ): Promise<Readonly<CodebaseData>> {
   // Validate grammar registration
   if (grammarRegistry.size === 0) {
     throw new Error(
       "No grammars registered. Viola requires at least one grammar " +
-      "(e.g., @hiisi/viola-grammar-ts) to extract code data. " +
-      "Register grammars using builder.add(grammar).as(alias) in your config."
+        "(e.g., @hiisi/viola-grammar-ts) to extract code data. " +
+        "Register grammars using builder.add(grammar).as(alias) in your config.",
     );
   }
 
   // Build extension filter from grammar registry
-  const baseExtensions = config.extensions.length > 0 ? config.extensions : DEFAULT_CONFIG.extensions!;
+  const baseExtensions = config.extensions.length > 0
+    ? config.extensions
+    : DEFAULT_CONFIG.extensions!;
   const extensions = [...baseExtensions];
   for (const ext of grammarRegistry.allExtensions()) {
     if (!extensions.includes(ext)) {
@@ -115,12 +117,17 @@ export async function crawlCodebase(
     }
   }
 
-  const excludePatterns = [...(config.exclude || []), ...(DEFAULT_CONFIG.exclude || [])];
+  const excludePatterns = [
+    ...(config.exclude || []),
+    ...(DEFAULT_CONFIG.exclude || []),
+  ];
 
   // Initialize tree-sitter
   await initTreeSitter();
   if (config.verbose) {
-    console.log(`Tree-sitter initialized with ${grammarRegistry.size} grammar(s)`);
+    console.log(
+      `Tree-sitter initialized with ${grammarRegistry.size} grammar(s)`,
+    );
   }
 
   const files: FileInfo[] = [];
@@ -132,10 +139,12 @@ export async function crawlCodebase(
     const fullPath = join(config.projectRoot, includeDir);
 
     try {
-      for await (const entry of walk(fullPath, {
-        exts: extensions.map((e) => e.replace(/^\./, "")),
-        skip: excludePatterns,
-      })) {
+      for await (
+        const entry of walk(fullPath, {
+          exts: extensions.map((e) => e.replace(/^\./, "")),
+          skip: excludePatterns,
+        })
+      ) {
         if (!entry.isFile) continue;
 
         // Additional exclusion check
@@ -146,7 +155,9 @@ export async function crawlCodebase(
           const content = await Deno.readTextFile(entry.path);
 
           // Find matching grammar for this file
-          const matchingGrammars = grammarRegistry.findMatchingGrammars(relativePath);
+          const matchingGrammars = grammarRegistry.findMatchingGrammars(
+            relativePath,
+          );
 
           if (matchingGrammars.length === 0) {
             // No grammar matches this file: skip it
@@ -163,18 +174,28 @@ export async function crawlCodebase(
 
           try {
             const language = await loadGrammar(grammarEntry.definition.grammar);
-            const parser = createParser(grammarEntry.definition.grammar, language);
+            const parser = createParser(
+              grammarEntry.definition.grammar,
+              language,
+            );
             const tree = parser.parse(content);
             const fileData = extractCompleteFileInfo(
-              tree, language, grammarEntry.definition,
-              relativePath, ext, content
+              tree,
+              language,
+              grammarEntry.definition,
+              relativePath,
+              ext,
+              content,
             );
             files.push(fileData);
           } catch (grammarErr) {
             // Grammar extraction failed: skip this file
             skippedCount++;
             if (config.verbose) {
-              console.error(`Grammar extraction failed for ${entry.path}, skipping:`, grammarErr);
+              console.error(
+                `Grammar extraction failed for ${entry.path}, skipping:`,
+                grammarErr,
+              );
             }
           }
         } catch (err) {
@@ -199,11 +220,13 @@ export async function crawlCodebase(
     const fullPath = join(config.projectRoot, includeDir);
 
     try {
-      for await (const entry of walk(fullPath, {
-        exts: ["json"],
-        skip: excludePatterns,
-        match: [/\.schema\.json$/, /schemas?\//],
-      })) {
+      for await (
+        const entry of walk(fullPath, {
+          exts: ["json"],
+          skip: excludePatterns,
+          match: [/\.schema\.json$/, /schemas?\//],
+        })
+      ) {
         if (!entry.isFile) continue;
 
         const schemaData = await extractSchemaData(entry.path);

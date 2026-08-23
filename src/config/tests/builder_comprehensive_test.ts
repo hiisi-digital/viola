@@ -11,10 +11,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
-import {
-  viola,
-  type ViolaPlugin,
-} from "../builder.ts";
+import { viola, type ViolaPlugin } from "../builder.ts";
 import { when } from "../conditions.ts";
 import { Category, Impact, ReportLevel } from "../enums.ts";
 import {

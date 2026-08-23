@@ -9,32 +9,31 @@
 
 // Re-export all types
 export type {
-    // Codebase
-    CodebaseData,
-    // Exports/Imports
-    ExportInfo,
-    // Files
-    FileInfo,
-    // Functions
-    FunctionInfo,
-    FunctionParam,
-    // Imports
-    ImportInfo,
-    // Issues
-    Issue,
-    // Configuration
-    LinterConfig,
-    LinterResult,
-    LintResults,
-    // Schemas
-    SchemaInfo,
-    // Location
-    SourceLocation,
-    // Strings
-    StringLiteral,
-    // Types/Interfaces
-    TypeField,
-    TypeInfo,
-    ViolaConfig
+  // Codebase
+  CodebaseData,
+  // Exports/Imports
+  ExportInfo,
+  // Files
+  FileInfo,
+  // Functions
+  FunctionInfo,
+  FunctionParam,
+  // Imports
+  ImportInfo,
+  // Issues
+  Issue,
+  // Configuration
+  LinterConfig,
+  LinterResult,
+  LintResults,
+  // Schemas
+  SchemaInfo,
+  // Location
+  SourceLocation,
+  // Strings
+  StringLiteral,
+  // Types/Interfaces
+  TypeField,
+  TypeInfo,
+  ViolaConfig,
 } from "./types.ts";
-

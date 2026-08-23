@@ -13,22 +13,22 @@
  * Category of an issue - what kind of problem it represents.
  */
 export type IssueCategory =
-  | "correctness"    // Code is wrong or broken
+  | "correctness" // Code is wrong or broken
   | "maintainability" // Harder to work with over time
-  | "consistency"    // Breaks project conventions
-  | "performance"    // Slower than needed
-  | "style";         // Cosmetic/formatting
+  | "consistency" // Breaks project conventions
+  | "performance" // Slower than needed
+  | "style"; // Cosmetic/formatting
 
 /**
  * Impact level of an issue - how urgent it is (ordered).
- * 
+ *
  * Order: critical > major > minor > trivial
  */
 export type IssueImpact =
-  | "critical"  // Must fix, blocks release
-  | "major"     // Should fix soon
-  | "minor"     // Fix when convenient
-  | "trivial";  // Nice to have
+  | "critical" // Must fix, blocks release
+  | "major" // Should fix soon
+  | "minor" // Fix when convenient
+  | "trivial"; // Nice to have
 
 /**
  * Impact levels in order from highest to lowest.
@@ -93,15 +93,15 @@ export type IssueCatalog = Record<string, IssueDef>;
 export type PatternValue =
   | Severity
   | {
-      /** Output severity */
-      severity: Severity;
-      /** Minimum confidence to report (0-100) */
-      minConfidence?: number;
-    };
+    /** Output severity */
+    severity: Severity;
+    /** Minimum confidence to report (0-100) */
+    minConfidence?: number;
+  };
 
 /**
  * Scope configuration - patterns mapped to severities.
- * 
+ *
  * Pattern syntax:
  * - `linter/issue` - exact issue
  * - `linter/*` - all issues from linter
@@ -115,10 +115,10 @@ export type ScopeConfig = Record<string, PatternValue>;
 
 /**
  * Root viola configuration.
- * 
+ *
  * Contains a `plugins` array, `inherit` for presets, `config` for per-linter
  * options, and file glob patterns mapped to scope configs.
- * 
+ *
  * @example
  * ```json
  * {
@@ -154,7 +154,7 @@ export interface ViolaConfig {
    * Preset names to inherit from loaded plugins.
    * Presets are applied in order (later presets override earlier).
    * User's own rules are applied last (always win).
-   * 
+   *
    * Note: "default" presets from plugins are auto-applied before these.
    * Use short names or qualified names (plugin/preset) if ambiguous.
    */
@@ -166,12 +166,16 @@ export interface ViolaConfig {
    * Validated against schemas provided by plugins.
    */
   config?: Record<string, Record<string, unknown>>;
-  
+
   /**
    * File glob patterns mapped to scope configs.
    * All other keys are treated as file patterns.
    */
-  [filePattern: string]: ScopeConfig | string[] | Record<string, unknown> | undefined;
+  [filePattern: string]:
+    | ScopeConfig
+    | string[]
+    | Record<string, unknown>
+    | undefined;
 }
 
 // =============================================================================

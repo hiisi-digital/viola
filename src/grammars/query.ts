@@ -73,7 +73,7 @@ export function* runQuery(
   tree: Tree,
   language: Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): Generator<QueryCaptures> {
   // Create the query from source
   let query: Query;
@@ -81,7 +81,9 @@ export function* runQuery(
     query = language.query(querySource);
   } catch (error) {
     throw new Error(
-      `Failed to compile tree-sitter query: ${error instanceof Error ? error.message : String(error)}`
+      `Failed to compile tree-sitter query: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
     );
   }
 
@@ -98,7 +100,7 @@ export function* runQuery(
         // This is more reliable than node.text for some edge cases
         const text = sourceCode.slice(
           capture.node.startIndex,
-          capture.node.endIndex
+          capture.node.endIndex,
         );
 
         capturesMap.set(capture.name, {
@@ -129,7 +131,7 @@ export function queryAll(
   tree: Tree,
   language: Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): QueryCaptures[] {
   return [...runQuery(tree, language, querySource, sourceCode)];
 }
@@ -147,7 +149,7 @@ export function queryFirst(
   tree: Tree,
   language: Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): QueryCaptures | undefined {
   for (const captures of runQuery(tree, language, querySource, sourceCode)) {
     return captures;
@@ -168,7 +170,7 @@ export function queryCount(
   tree: Tree,
   language: Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): number {
   let count = 0;
   for (const _ of runQuery(tree, language, querySource, sourceCode)) {
@@ -190,7 +192,7 @@ export function queryHasMatch(
   tree: Tree,
   language: Language,
   querySource: string,
-  sourceCode: string
+  sourceCode: string,
 ): boolean {
   return queryFirst(tree, language, querySource, sourceCode) !== undefined;
 }

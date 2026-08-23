@@ -63,12 +63,12 @@ export interface Query {
   matches(
     node: SyntaxNode,
     startPosition?: { row: number; column: number },
-    endPosition?: { row: number; column: number }
+    endPosition?: { row: number; column: number },
   ): QueryMatch[];
   captures(
     node: SyntaxNode,
     startPosition?: { row: number; column: number },
-    endPosition?: { row: number; column: number }
+    endPosition?: { row: number; column: number },
   ): QueryCapture[];
   delete(): void;
 }
@@ -117,7 +117,7 @@ export interface SyntaxNode {
   descendantsOfType(
     type: string | string[],
     startPosition?: { row: number; column: number },
-    endPosition?: { row: number; column: number }
+    endPosition?: { row: number; column: number },
   ): SyntaxNode[];
   walk(): TreeCursor;
 }
@@ -169,7 +169,9 @@ export interface Range {
  */
 export interface ParserConstructor {
   new (): Parser;
-  init(options?: { locateFile?: (scriptName: string) => string }): Promise<void>;
+  init(
+    options?: { locateFile?: (scriptName: string) => string },
+  ): Promise<void>;
   Language: {
     load(path: string): Promise<Language>;
   };
@@ -230,7 +232,7 @@ export function isInitialized(): boolean {
 export async function loadGrammar(grammar: GrammarSource): Promise<Language> {
   if (!initialized || !ParserClass) {
     throw new Error(
-      "Tree-sitter not initialized. Call initTreeSitter() first."
+      "Tree-sitter not initialized. Call initTreeSitter() first.",
     );
   }
 
@@ -257,10 +259,13 @@ export async function loadGrammar(grammar: GrammarSource): Promise<Language> {
  *
  * @throws Error if tree-sitter hasn't been initialized
  */
-export function createParser(grammar: GrammarSource, language: Language): Parser {
+export function createParser(
+  grammar: GrammarSource,
+  language: Language,
+): Parser {
   if (!initialized || !ParserClass) {
     throw new Error(
-      "Tree-sitter not initialized. Call initTreeSitter() first."
+      "Tree-sitter not initialized. Call initTreeSitter() first.",
     );
   }
 
@@ -330,7 +335,9 @@ function grammarKey(grammar: GrammarSource): string {
     case "bundled":
       return `bundled:${grammar.wasm}`;
     default:
-      throw new Error(`Unknown grammar source type: ${(grammar as GrammarSource).source}`);
+      throw new Error(
+        `Unknown grammar source type: ${(grammar as GrammarSource).source}`,
+      );
   }
 }
 
@@ -356,7 +363,9 @@ async function resolveWasmPath(grammar: GrammarSource): Promise<string> {
       return new URL(`../../wasm/${grammar.wasm}`, import.meta.url).pathname;
 
     default:
-      throw new Error(`Unknown grammar source type: ${(grammar as GrammarSource).source}`);
+      throw new Error(
+        `Unknown grammar source type: ${(grammar as GrammarSource).source}`,
+      );
   }
 }
 
@@ -368,7 +377,7 @@ async function resolveWasmPath(grammar: GrammarSource): Promise<string> {
  */
 async function resolveNpmWasm(
   packageName: string,
-  wasmFile: string
+  wasmFile: string,
 ): Promise<string> {
   // Strategy 1: Try import.meta.resolve (works if Deno returns file:// URL)
   try {
@@ -387,7 +396,7 @@ async function resolveNpmWasm(
     `${Deno.env.get("DENO_DIR") ?? ""}/npm/registry.npmjs.org`,
     `${Deno.env.get("HOME")}/Library/Caches/deno/npm/registry.npmjs.org`,
     `${Deno.env.get("HOME")}/.cache/deno/npm/registry.npmjs.org`,
-  ].filter(p => p && !p.startsWith("/npm/"));
+  ].filter((p) => p && !p.startsWith("/npm/"));
 
   for (const cacheRoot of cacheRoots) {
     const packageDir = `${cacheRoot}/${packageName}`;
@@ -426,6 +435,6 @@ async function resolveNpmWasm(
 
   throw new Error(
     `Could not resolve WASM file for npm package: ${packageName}/${wasmFile}. ` +
-    `Ensure the package is imported in deno.json.`
+      `Ensure the package is imported in deno.json.`,
   );
 }

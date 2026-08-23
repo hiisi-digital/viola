@@ -119,7 +119,7 @@ export function grammar(primaryAlias: string): GrammarRelationshipBuilder {
  * Type guard to check if an action is a grammar relationship action.
  */
 export function isGrammarRelationship(
-  action: unknown
+  action: unknown,
 ): action is GrammarRelationshipAction {
   return (
     typeof action === "object" &&

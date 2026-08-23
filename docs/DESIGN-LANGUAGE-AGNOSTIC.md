@@ -1,10 +1,13 @@
 # Viola Language-Agnostic Architecture
 
-> Design document for making viola truly language-agnostic through a single tree-sitter core with pluggable grammar definitions.
+> Design document for making viola truly language-agnostic through a single
+> tree-sitter core with pluggable grammar definitions.
 
 ## Builder API Design
 
-This section documents the unified builder API for configuring viola. The API is designed to be:
+This section documents the unified builder API for configuring viola. The API is
+designed to be:
+
 - **Fluent** - chains naturally, reads like English
 - **Consistent** - same patterns used throughout
 - **Discoverable** - IDE autocompletion guides usage
@@ -25,7 +28,7 @@ Everything in viola follows two core patterns:
 ### Adding Grammars and Linters
 
 ```ts
-import { viola, grammar, linter, report, when } from "@hiisi/viola";
+import { grammar, linter, report, viola, when } from "@hiisi/viola";
 import typescript from "@hiisi/viola-grammar-ts";
 import javascript from "@hiisi/viola-grammar-js";
 import bash from "@hiisi/viola-grammar-bash";
@@ -36,18 +39,19 @@ viola()
   // Add grammars with aliases for use in rules below
   .add(grammar, typescript).as(ts)
   .add(grammar, javascript).as(js)
-  .add(grammar, bash)  // no alias - referenced by import name 'bash'
-  
+  .add(grammar, bash) // no alias - referenced by import name 'bash'
   // Add linters
   .add(linter, similarFunctions)
-  .add(linter, duplicateStrings).as(dupes)
+  .add(linter, duplicateStrings).as(dupes);
 ```
 
-The `.as(alias)` is optional. Without it, the thing is referenced by its import identifier.
+The `.as(alias)` is optional. Without it, the thing is referenced by its import
+identifier.
 
 ### Grammar Relationship Rules
 
-Grammars can have relationships that control how they interact when multiple grammars match the same file.
+Grammars can have relationships that control how they interact when multiple
+grammars match the same file.
 
 #### Parallel (Default)
 
@@ -56,27 +60,28 @@ By default, all matching grammars run in parallel and all results are merged:
 ```ts
 viola()
   .add(grammar, typescript).as(ts)
-  .add(grammar, javascript).as(js)
-  // Both run for .tsx files if both match, results merged
+  .add(grammar, javascript).as(js);
+// Both run for .tsx files if both match, results merged
 ```
 
 #### Supplements (Fallback)
 
-One grammar supplements another - both run, but the supplementary grammar only contributes where the primary didn't capture:
+One grammar supplements another - both run, but the supplementary grammar only
+contributes where the primary didn't capture:
 
 ```ts
 viola()
   .add(grammar, typescript).as(ts)
   .add(grammar, javascript).as(js)
-  
   // JS fills gaps where TS didn't capture anything
   // Use case: TS grammar might miss some JS-only patterns
-  .rule(grammar(ts).supplements(js), when.in("*.ts", "*.tsx"))
+  .rule(grammar(ts).supplements(js), when.in("*.ts", "*.tsx"));
 ```
 
 #### Overrides
 
-One grammar completely replaces another for matching files - only the overriding grammar runs:
+One grammar completely replaces another for matching files - only the overriding
+grammar runs:
 
 ```ts
 viola()
@@ -84,88 +89,88 @@ viola()
   .add(grammar, javascript).as(js)
   .add(grammar, cpp).as(cpp)
   .add(grammar, c).as(c)
-  
   // TS overrides JS for .js files (only TS runs)
   .rule(grammar(ts).overrides(js), when.in("*.js"))
-  
   // C overrides C++ for header files
-  .rule(grammar(c).overrides(cpp), when.in("*.h"))
+  .rule(grammar(c).overrides(cpp), when.in("*.h"));
 ```
 
 ### Condition API: `when.*`
 
-The `when` API provides a consistent way to express conditions. Conditions are namespaced by what they operate on.
+The `when` API provides a consistent way to express conditions. Conditions are
+namespaced by what they operate on.
 
 #### Path Matching: `when.in()`
 
 ```ts
 // Match by glob patterns
-when.in("*.ts", "*.tsx")           // files with these extensions
-when.in("**/test/**")              // files in test directories
-when.in("**/test/**/*.spec.ts")    // combined pattern
-when.in("src/**", "lib/**")        // multiple patterns (OR)
+when.in("*.ts", "*.tsx"); // files with these extensions
+when.in("**/test/**"); // files in test directories
+when.in("**/test/**/*.spec.ts"); // combined pattern
+when.in("src/**", "lib/**"); // multiple patterns (OR)
 ```
 
 #### Issue Properties: `when.issue.*`
 
 ```ts
 // Who reported the issue
-when.issue.by(similarFunctions)
-when.issue.by(duplicateStrings)
+when.issue.by(similarFunctions);
+when.issue.by(duplicateStrings);
 
 // Issue kind/type
-when.issue.kind("duplicate")
-when.issue.kind("missing-docs")
+when.issue.kind("duplicate");
+when.issue.kind("missing-docs");
 
 // Impact and confidence (see Comparison Primitives below)
-when.issue.impact(atLeast(Impact.Major))
-when.issue.confidence(atLeast(80))
+when.issue.impact(atLeast(Impact.Major));
+when.issue.confidence(atLeast(80));
 ```
 
 #### Environment: `when.env()`
 
 ```ts
 // Check if env var exists
-when.env("CI").exists()
+when.env("CI").exists();
 
 // Check env var value (see Comparison Primitives below)
-when.env("NODE_ENV").is(equals("production"))
-when.env("LOG_LEVEL").is(oneOf("debug", "trace"))
-when.env("TIMEOUT").is(atLeast(30))
+when.env("NODE_ENV").is(equals("production"));
+when.env("LOG_LEVEL").is(oneOf("debug", "trace"));
+when.env("TIMEOUT").is(atLeast(30));
 ```
 
 ### Comparison Primitives
 
-A unified set of comparison functions that work with any comparable value - numbers, strings, or enums with ordering.
+A unified set of comparison functions that work with any comparable value -
+numbers, strings, or enums with ordering.
 
 ```ts
-import { 
-  equals, 
-  atLeast, 
-  atMost, 
-  lessThan, 
-  moreThan, 
-  between, 
-  oneOf 
+import {
+  atLeast,
+  atMost,
+  between,
+  equals,
+  lessThan,
+  moreThan,
+  oneOf,
 } from "@hiisi/viola";
 
 // Numeric comparisons
-when.issue.confidence(atLeast(80))
-when.issue.confidence(between(50, 90))
-when.issue.confidence(lessThan(100))
+when.issue.confidence(atLeast(80));
+when.issue.confidence(between(50, 90));
+when.issue.confidence(lessThan(100));
 
 // Enum comparisons (enums have natural ordering)
-when.issue.impact(atLeast(Impact.Major))
-when.issue.impact(lessThan(Impact.Critical))
-when.issue.impact(oneOf(Impact.Minor, Impact.Major))
+when.issue.impact(atLeast(Impact.Major));
+when.issue.impact(lessThan(Impact.Critical));
+when.issue.impact(oneOf(Impact.Minor, Impact.Major));
 
 // String equality
-when.env("NODE_ENV").is(equals("production"))
-when.env("LOG_LEVEL").is(oneOf("debug", "trace", "info"))
+when.env("NODE_ENV").is(equals("production"));
+when.env("LOG_LEVEL").is(oneOf("debug", "trace", "info"));
 
 // Numeric env vars
-when.env("TIMEOUT").is(atLeast(30))
-when.env("MAX_RETRIES").is(between(1, 10))
+when.env("TIMEOUT").is(atLeast(30));
+when.env("MAX_RETRIES").is(between(1, 10));
 ```
 
 #### Composing Comparators
@@ -174,9 +179,9 @@ Comparators can be composed with `.or()` and `.and()` for the same field:
 
 ```ts
 // Same field, multiple conditions
-when.env("FOO").is(atLeast(2).or(equals("production")))
-when.issue.impact(atLeast(Impact.Minor).and(lessThan(Impact.Critical)))
-when.issue.confidence(atLeast(50).and(atMost(90)))  // same as between(50, 90)
+when.env("FOO").is(atLeast(2).or(equals("production")));
+when.issue.impact(atLeast(Impact.Minor).and(lessThan(Impact.Critical)));
+when.issue.confidence(atLeast(50).and(atMost(90))); // same as between(50, 90)
 ```
 
 ### Composing Conditions
@@ -185,9 +190,9 @@ Different conditions compose with `.and()`:
 
 ```ts
 // Different fields compose at the when level
-when.issue.by(similarFunctions).and(when.in("**/test/**"))
-when.env("CI").exists().and(when.issue.confidence(atLeast(90)))
-when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
+when.issue.by(similarFunctions).and(when.in("**/test/**"));
+when.env("CI").exists().and(when.issue.confidence(atLeast(90)));
+when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)));
 ```
 
 ### Report Actions
@@ -195,16 +200,16 @@ when.in("src/**").and(when.issue.impact(atLeast(Impact.Major)))
 ```ts
 import { report } from "@hiisi/viola";
 
-report.error   // fail the build
-report.warn    // warning, don't fail
-report.off     // suppress entirely
-report.info    // informational only
+report.error; // fail the build
+report.warn; // warning, don't fail
+report.off; // suppress entirely
+report.info; // informational only
 ```
 
 ### Complete Example
 
 ```ts
-import { viola, grammar, linter, report, when } from "@hiisi/viola";
+import { grammar, linter, report, viola, when } from "@hiisi/viola";
 import { atLeast, equals, oneOf } from "@hiisi/viola";
 import typescript from "@hiisi/viola-grammar-ts";
 import javascript from "@hiisi/viola-grammar-js";
@@ -218,65 +223,71 @@ export default viola()
   .add(grammar, typescript).as(ts)
   .add(grammar, javascript).as(js)
   .add(grammar, bash)
-  
   // Register linters
   .add(linter, similarFunctions)
   .add(linter, duplicateStrings)
   .add(linter, missingDocs)
-  
   // Grammar relationships
   .rule(grammar(ts).supplements(js), when.in("*.ts", "*.tsx"))
   .rule(grammar(ts).overrides(js), when.in("*.js"))
-  
   // Severity rules
   .rule(report.error, when.issue.impact(atLeast(Impact.Major)))
   .rule(report.warn, when.issue.impact(atLeast(Impact.Minor)))
-  
   // Per-linter rules
   .rule(report.off, when.issue.by(missingDocs).and(when.in("**/test/**")))
-  .rule(report.error, when.issue.by(similarFunctions).and(when.issue.confidence(atLeast(90))))
-  
+  .rule(
+    report.error,
+    when.issue.by(similarFunctions).and(when.issue.confidence(atLeast(90))),
+  )
   // Path-based rules
   .rule(report.off, when.in("**/vendor/**", "**/generated/**"))
   .rule(report.warn, when.in("**/deprecated/**"))
-  
   // Environment-based rules
-  .rule(report.error, when.env("CI").exists().and(when.issue.impact(atLeast(Impact.Minor))))
-  .rule(report.off, when.env("VIOLA_STRICT").is(equals("false")))
+  .rule(
+    report.error,
+    when.env("CI").exists().and(when.issue.impact(atLeast(Impact.Minor))),
+  )
+  .rule(report.off, when.env("VIOLA_STRICT").is(equals("false")));
 ```
 
 ### API Summary
 
-| Pattern | Purpose | Example |
-|---------|---------|---------|
-| `.add(kind, thing)` | Register grammar/linter | `.add(grammar, typescript)` |
-| `.as(alias)` | Give it a reference name | `.add(grammar, typescript).as(ts)` |
-| `.rule(action, condition)` | Define behavior | `.rule(report.error, when.in("src/**"))` |
-| `grammar(x).overrides(y)` | x replaces y | `.rule(grammar(ts).overrides(js), when.in("*.js"))` |
-| `grammar(x).supplements(y)` | x fills gaps in y | `.rule(grammar(ts).supplements(js), when.in("*.ts"))` |
-| `when.in(...)` | Path patterns | `when.in("**/test/**")` |
-| `when.issue.by(x)` | Issues from x | `when.issue.by(similarFunctions)` |
-| `when.issue.impact(cmp)` | Impact comparison | `when.issue.impact(atLeast(Impact.Major))` |
-| `when.issue.confidence(cmp)` | Confidence comparison | `when.issue.confidence(atLeast(80))` |
-| `when.env(x).exists()` | Env var exists | `when.env("CI").exists()` |
-| `when.env(x).is(cmp)` | Env var comparison | `when.env("NODE_ENV").is(equals("prod"))` |
-| `cond.and(cond)` | Compose conditions | `when.in("src/**").and(when.issue.impact(...))` |
-| `cmp.or(cmp)` | Compose comparators | `atLeast(5).or(equals("default"))` |
+| Pattern                      | Purpose                  | Example                                               |
+| ---------------------------- | ------------------------ | ----------------------------------------------------- |
+| `.add(kind, thing)`          | Register grammar/linter  | `.add(grammar, typescript)`                           |
+| `.as(alias)`                 | Give it a reference name | `.add(grammar, typescript).as(ts)`                    |
+| `.rule(action, condition)`   | Define behavior          | `.rule(report.error, when.in("src/**"))`              |
+| `grammar(x).overrides(y)`    | x replaces y             | `.rule(grammar(ts).overrides(js), when.in("*.js"))`   |
+| `grammar(x).supplements(y)`  | x fills gaps in y        | `.rule(grammar(ts).supplements(js), when.in("*.ts"))` |
+| `when.in(...)`               | Path patterns            | `when.in("**/test/**")`                               |
+| `when.issue.by(x)`           | Issues from x            | `when.issue.by(similarFunctions)`                     |
+| `when.issue.impact(cmp)`     | Impact comparison        | `when.issue.impact(atLeast(Impact.Major))`            |
+| `when.issue.confidence(cmp)` | Confidence comparison    | `when.issue.confidence(atLeast(80))`                  |
+| `when.env(x).exists()`       | Env var exists           | `when.env("CI").exists()`                             |
+| `when.env(x).is(cmp)`        | Env var comparison       | `when.env("NODE_ENV").is(equals("prod"))`             |
+| `cond.and(cond)`             | Compose conditions       | `when.in("src/**").and(when.issue.impact(...))`       |
+| `cmp.or(cmp)`                | Compose comparators      | `atLeast(5).or(equals("default"))`                    |
 
 ---
 
 ## Current State
 
-Viola currently has a hardcoded TypeScript/JavaScript crawler in `src/runtime/crawler.ts` using regex patterns. This limits viola to only linting TypeScript codebases and duplicates parsing logic that tree-sitter already handles better.
+Viola currently has a hardcoded TypeScript/JavaScript crawler in
+`src/runtime/crawler.ts` using regex patterns. This limits viola to only linting
+TypeScript codebases and duplicates parsing logic that tree-sitter already
+handles better.
 
 ## Goal
 
 Make viola a **language-agnostic linter runtime** where:
 
 1. **Single tree-sitter engine** in core - one parser, many grammars
-2. **Grammars are pluggable** - each grammar provides tree-sitter queries for extraction
-3. **Single-pass crawl** - parse each file once, dispatch to matching grammars/linters
-4. **Linters work on abstract data** - `FunctionInfo`, `StringLiteral`, etc. are language-neutral
+2. **Grammars are pluggable** - each grammar provides tree-sitter queries for
+   extraction
+3. **Single-pass crawl** - parse each file once, dispatch to matching
+   grammars/linters
+4. **Linters work on abstract data** - `FunctionInfo`, `StringLiteral`, etc. are
+   language-neutral
 
 ## Architecture
 
@@ -288,7 +299,8 @@ When processing a file, the runtime:
 2. **Apply relationship rules** - process `overrides` and `supplements` rules
 3. **Run grammars** - execute according to relationships:
    - **Parallel (default)**: all run, all results merged
-   - **Supplements**: both run, supplementary only contributes where primary didn't capture
+   - **Supplements**: both run, supplementary only contributes where primary
+     didn't capture
    - **Overrides**: only the overriding grammar runs (last rule wins)
 4. **Merge results** - combine extractions into unified `FileInfo`
 
@@ -302,12 +314,12 @@ When processing a file, the runtime:
 .rule(grammar(ts).supplements(js), when.in("*.ts"))
 ```
 
-| File | Matching Grammars | Rule Applied | What Runs |
-|------|-------------------|--------------|-----------|
-| `foo.ts` | ts, js | ts supplements js | Both; js fills ts gaps |
-| `bar.js` | ts, js | ts overrides js | Only ts |
-| `baz.tsx` | ts | (none) | ts |
-| `script.sh` | bash | (none) | bash |
+| File        | Matching Grammars | Rule Applied      | What Runs              |
+| ----------- | ----------------- | ----------------- | ---------------------- |
+| `foo.ts`    | ts, js            | ts supplements js | Both; js fills ts gaps |
+| `bar.js`    | ts, js            | ts overrides js   | Only ts                |
+| `baz.tsx`   | ts                | (none)            | ts                     |
+| `script.sh` | bash              | (none)            | bash                   |
 
 ### Package Structure
 
@@ -353,7 +365,8 @@ Viola core bundles `web-tree-sitter` and provides:
 
 ### Grammar Definition Type
 
-A grammar definition is primarily **data** - queries and metadata, with optional transform callbacks for complex cases.
+A grammar definition is primarily **data** - queries and metadata, with optional
+transform callbacks for complex cases.
 
 ```ts
 // src/grammars/types.ts
@@ -390,7 +403,7 @@ export interface GrammarSource {
 
 /**
  * Standard capture names used in extraction queries.
- * 
+ *
  * Queries MUST use these capture names for the core to extract data correctly.
  */
 export type StandardCaptures = {
@@ -399,41 +412,41 @@ export type StandardCaptures = {
   "function.params": string;
   "function.body": string;
   "function.return"?: string;
-  "function.async"?: boolean;      // via predicate
-  "function.generator"?: boolean;  // via predicate
-  "function.export"?: boolean;     // via predicate
-  
+  "function.async"?: boolean; // via predicate
+  "function.generator"?: boolean; // via predicate
+  "function.export"?: boolean; // via predicate
+
   // String captures
   "string.value": string;
   "string.raw"?: boolean;
   "string.template"?: boolean;
-  
+
   // Import captures
   "import.name": string;
   "import.from": string;
   "import.type_only"?: boolean;
   "import.namespace"?: boolean;
-  
+
   // Export captures
   "export.name": string;
   "export.kind"?: string;
   "export.from"?: string;
   "export.type_only"?: boolean;
-  
+
   // Type captures
   "type.name": string;
   "type.body": string;
-  "type.kind"?: string;  // "interface" | "type" | "class"
+  "type.kind"?: string; // "interface" | "type" | "class"
   "type.extends"?: string;
-  
+
   // Doc comment captures
   "doc.content": string;
-  "doc.target"?: string;  // What the doc is attached to
+  "doc.target"?: string; // What the doc is attached to
 };
 
 /**
  * Tree-sitter queries for extracting code elements.
- * 
+ *
  * Each query is an S-expression string that produces captures
  * following the StandardCaptures naming convention.
  */
@@ -454,7 +467,7 @@ export interface ExtractionQueries {
 
 /**
  * Optional transform callbacks for language-specific extraction logic.
- * 
+ *
  * These are only needed when queries alone can't capture the semantics.
  * Most languages won't need most of these.
  */
@@ -464,57 +477,70 @@ export interface GrammarTransforms {
    * Needed for languages with complex parameter syntax.
    */
   parseParams?: (paramsNode: SyntaxNode, source: string) => FunctionParam[];
-  
+
   /**
    * Extract the return type from captures or node analysis.
    * Needed when return type syntax varies significantly.
    */
-  extractReturnType?: (node: SyntaxNode, captures: QueryCaptures) => string | undefined;
-  
+  extractReturnType?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+  ) => string | undefined;
+
   /**
    * Normalize function body for similarity comparison.
    * Default: strip whitespace and comments.
    */
   normalizeBody?: (body: string, language: string) => string;
-  
+
   /**
    * Determine if a function is async from context.
    * Needed when async-ness can't be captured via query predicates.
    */
   isAsync?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
-  
+
   /**
    * Determine if something is exported.
    * Needed for languages with complex export semantics.
    */
   isExported?: (node: SyntaxNode, captures: QueryCaptures) => boolean;
-  
+
   /**
    * Parse import details from captured nodes.
    * Needed for languages with complex import syntax.
    */
-  parseImport?: (node: SyntaxNode, captures: QueryCaptures, source: string) => ImportInfo | ImportInfo[];
-  
+  parseImport?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+    source: string,
+  ) => ImportInfo | ImportInfo[];
+
   /**
    * Parse export details from captured nodes.
    */
-  parseExport?: (node: SyntaxNode, captures: QueryCaptures, source: string) => ExportInfo | ExportInfo[];
-  
+  parseExport?: (
+    node: SyntaxNode,
+    captures: QueryCaptures,
+    source: string,
+  ) => ExportInfo | ExportInfo[];
+
   /**
    * Parse type/interface fields from body.
    * Needed for extracting field information from type bodies.
    */
   parseTypeFields?: (bodyNode: SyntaxNode, source: string) => TypeField[];
-  
+
   /**
    * Extract doc comment content and clean it up.
    */
   parseDocComment?: (node: SyntaxNode, source: string) => string;
-  
+
   /**
    * Determine string quote style from node.
    */
-  getQuoteStyle?: (node: SyntaxNode) => "single" | "double" | "backtick" | "raw";
+  getQuoteStyle?: (
+    node: SyntaxNode,
+  ) => "single" | "double" | "backtick" | "raw";
 }
 
 /**
@@ -524,13 +550,13 @@ export interface GrammarTransforms {
 export interface GrammarDefinition {
   /** Grammar metadata */
   readonly meta: GrammarMeta;
-  
+
   /** Reference to the tree-sitter grammar WASM */
   readonly grammar: GrammarSource;
-  
+
   /** Extraction queries using standard capture names */
   readonly queries: ExtractionQueries;
-  
+
   /** Optional transforms for complex extraction logic */
   readonly transforms?: GrammarTransforms;
 }
@@ -538,75 +564,86 @@ export interface GrammarDefinition {
 
 ### Standard Capture Names
 
-All grammars use the same capture names so the core extraction engine can work uniformly:
+All grammars use the same capture names so the core extraction engine can work
+uniformly:
 
-| Capture | Description | Used In |
-|---------|-------------|---------|
-| `@function.name` | Function/method name | `FunctionInfo.name` |
-| `@function.params` | Parameter list node | `FunctionInfo.params` (via transform) |
-| `@function.body` | Function body | `FunctionInfo.body` |
-| `@function.return` | Return type annotation | `FunctionInfo.returnType` |
-| `@string.value` | String literal content | `StringLiteral.value` |
-| `@import.name` | Imported identifier | `ImportInfo.name` |
-| `@import.from` | Module specifier | `ImportInfo.from` |
-| `@export.name` | Exported identifier | `ExportInfo.name` |
-| `@type.name` | Type/interface name | `TypeInfo.name` |
-| `@type.body` | Type definition body | `TypeInfo.body` |
-| `@doc.content` | Documentation comment | `*.jsDoc` |
+| Capture            | Description            | Used In                               |
+| ------------------ | ---------------------- | ------------------------------------- |
+| `@function.name`   | Function/method name   | `FunctionInfo.name`                   |
+| `@function.params` | Parameter list node    | `FunctionInfo.params` (via transform) |
+| `@function.body`   | Function body          | `FunctionInfo.body`                   |
+| `@function.return` | Return type annotation | `FunctionInfo.returnType`             |
+| `@string.value`    | String literal content | `StringLiteral.value`                 |
+| `@import.name`     | Imported identifier    | `ImportInfo.name`                     |
+| `@import.from`     | Module specifier       | `ImportInfo.from`                     |
+| `@export.name`     | Exported identifier    | `ExportInfo.name`                     |
+| `@type.name`       | Type/interface name    | `TypeInfo.name`                       |
+| `@type.body`       | Type definition body   | `TypeInfo.body`                       |
+| `@doc.content`     | Documentation comment  | `*.jsDoc`                             |
 
 ### Single-Pass Crawl Architecture
 
-The runtime crawls the codebase **once**, dispatching to matching grammars and linters as it goes:
+The runtime crawls the codebase **once**, dispatching to matching grammars and
+linters as it goes:
 
 ```ts
 async function crawl(config: CrawlConfig): Promise<CodebaseData> {
   const files: FileInfo[] = [];
-  
+
   for await (const entry of walkDirectory(config.projectRoot)) {
     // Skip excluded paths
     if (matchesExclude(entry.path, config.exclude)) continue;
-    
+
     // Find matching grammars for this file
-    const matchingGrammars = config.grammars.filter(g => 
+    const matchingGrammars = config.grammars.filter((g) =>
       matchesGrammar(entry.path, g.meta)
     );
-    
+
     if (matchingGrammars.length === 0) continue;
-    
+
     // Read file once
     const content = await readFile(entry.path);
-    
+
     // Parse with each matching grammar and merge results
     // (Usually only one grammar matches, but could have overlapping extensions)
-    const fileInfo = await extractFileInfo(entry.path, content, matchingGrammars);
-    
+    const fileInfo = await extractFileInfo(
+      entry.path,
+      content,
+      matchingGrammars,
+    );
+
     files.push(fileInfo);
   }
-  
+
   return buildCodebaseData(config.projectRoot, files);
 }
 
 async function extractFileInfo(
-  path: string, 
-  content: string, 
-  grammars: GrammarDefinition[]
+  path: string,
+  content: string,
+  grammars: GrammarDefinition[],
 ): Promise<FileInfo> {
   // Use first matching grammar (grammars are registered in priority order)
   const grammar = grammars[0];
-  
+
   // Load grammar WASM if not already loaded
   const language = await loadGrammar(grammar);
-  
+
   // Parse the file
   const tree = parser.parse(content, { language });
-  
+
   // Run extraction queries
-  const functions = runQuery(tree, grammar.queries.functions, grammar.transforms, content);
-  const strings = grammar.queries.strings 
+  const functions = runQuery(
+    tree,
+    grammar.queries.functions,
+    grammar.transforms,
+    content,
+  );
+  const strings = grammar.queries.strings
     ? runQuery(tree, grammar.queries.strings, grammar.transforms, content)
     : [];
   // ... etc
-  
+
   return {
     path,
     extension: extname(path),
@@ -623,16 +660,16 @@ async function extractFileInfo(
 ### Builder API
 
 ```ts
-import { viola, report, when } from "@hiisi/viola";
+import { report, viola, when } from "@hiisi/viola";
 import typescript from "@hiisi/viola-grammar-ts";
 import bash from "@hiisi/viola-grammar-bash";
 import defaultLints from "@hiisi/viola-default-lints";
 
 export default viola()
-  .grammar(typescript)   // Register TypeScript grammar
-  .grammar(bash)         // Register Bash grammar
-  .use(defaultLints)     // Add default linters
-  .add(customLinter)     // Add custom linter
+  .grammar(typescript) // Register TypeScript grammar
+  .grammar(bash) // Register Bash grammar
+  .use(defaultLints) // Add default linters
+  .add(customLinter) // Add custom linter
   .rule(report.error, when.impact.atLeast(Impact.Major))
   .rule(report.off, when.in("**/test/**"));
 ```
@@ -653,13 +690,13 @@ export const typescript: GrammarDefinition = {
     extensions: [".ts", ".tsx", ".mts", ".cts"],
     description: "TypeScript and TSX files",
   },
-  
+
   grammar: {
     source: "npm",
     package: "tree-sitter-typescript",
     wasm: "tree-sitter-typescript.wasm",
   },
-  
+
   queries: {
     functions: `
       ; Regular function declarations
@@ -685,12 +722,12 @@ export const typescript: GrammarDefinition = {
         return_type: (type_annotation type: (_) @function.return)?
         body: (statement_block) @function.body) @function
     `,
-    
+
     strings: `
       (string) @string.value
       (template_string) @string.value @string.template
     `,
-    
+
     imports: `
       (import_statement
         (import_clause
@@ -701,7 +738,7 @@ export const typescript: GrammarDefinition = {
               name: (identifier) @import.name)))?
         source: (string) @import.from)
     `,
-    
+
     exports: `
       (export_statement
         (identifier) @export.name)
@@ -710,7 +747,7 @@ export const typescript: GrammarDefinition = {
           (variable_declarator
             name: (identifier) @export.name)))
     `,
-    
+
     types: `
       (interface_declaration
         name: (type_identifier) @type.name
@@ -720,13 +757,13 @@ export const typescript: GrammarDefinition = {
         name: (type_identifier) @type.name
         value: (_) @type.body) @type
     `,
-    
+
     docComments: `
       (comment) @doc.content
       (#match? @doc.content "^/\\\\*\\\\*")
     `,
   },
-  
+
   transforms: {
     parseParams: parseTypeScriptParams,
     parseTypeFields: parseTypeScriptFields,
@@ -756,13 +793,13 @@ export const bash: GrammarDefinition = {
     globs: [".bashrc", ".bash_profile", ".profile", "Makefile"],
     description: "Bash and shell scripts",
   },
-  
+
   grammar: {
     source: "npm",
     package: "tree-sitter-bash",
     wasm: "tree-sitter-bash.wasm",
   },
-  
+
   queries: {
     functions: `
       ; function name() { body }
@@ -770,13 +807,13 @@ export const bash: GrammarDefinition = {
         name: (word) @function.name
         body: (compound_statement) @function.body) @function
     `,
-    
+
     strings: `
       (string) @string.value
       (raw_string) @string.value @string.raw
       (ansii_c_string) @string.value
     `,
-    
+
     imports: `
       ; source "file.sh" or . "file.sh"
       (command
@@ -784,7 +821,7 @@ export const bash: GrammarDefinition = {
         argument: [(string) (word)] @import.from
         (#any-of? @_cmd "source" "."))
     `,
-    
+
     exports: `
       ; export VAR=value
       (declaration_command
@@ -797,16 +834,16 @@ export const bash: GrammarDefinition = {
         argument: (word) @export.name
         (#eq? @_cmd "export"))
     `,
-    
+
     // Bash doesn't have types
     types: undefined,
-    
+
     docComments: `
       ; Comments immediately before function definitions
       (comment) @doc.content
     `,
   },
-  
+
   transforms: {
     parseParams: extractBashPositionalParams,
     normalizeBody: normalizeBashBody,
@@ -818,39 +855,40 @@ export default bash;
 
 ## Required Transforms by Language
 
-Some extraction logic can't be expressed purely in tree-sitter queries. Here's what each language needs:
+Some extraction logic can't be expressed purely in tree-sitter queries. Here's
+what each language needs:
 
 ### TypeScript/JavaScript
 
-| Transform | Why Needed |
-|-----------|------------|
-| `parseParams` | Complex destructuring (`{a, b}: Props`), default values, rest params, type annotations |
-| `parseTypeFields` | Extract field names, types, optionality from interface/type bodies |
-| `isAsync` | Can use query predicate, but transform is cleaner for edge cases |
-| `isExported` | Need to check parent node for `export` keyword |
-| `parseImport` | Named imports, default imports, namespace imports, re-exports |
-| `parseExport` | Re-exports, export lists, default exports |
-| `extractReturnType` | Type annotations can be complex (unions, generics) |
-| `parseDocComment` | Strip `/**` `*/` markers, parse `@param`, `@returns` tags |
+| Transform           | Why Needed                                                                             |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| `parseParams`       | Complex destructuring (`{a, b}: Props`), default values, rest params, type annotations |
+| `parseTypeFields`   | Extract field names, types, optionality from interface/type bodies                     |
+| `isAsync`           | Can use query predicate, but transform is cleaner for edge cases                       |
+| `isExported`        | Need to check parent node for `export` keyword                                         |
+| `parseImport`       | Named imports, default imports, namespace imports, re-exports                          |
+| `parseExport`       | Re-exports, export lists, default exports                                              |
+| `extractReturnType` | Type annotations can be complex (unions, generics)                                     |
+| `parseDocComment`   | Strip `/**` `*/` markers, parse `@param`, `@returns` tags                              |
 
 ### Bash
 
-| Transform | Why Needed |
-|-----------|------------|
-| `parseParams` | Extract `$1`, `$2`, `${1}`, `$@`, `$*` usage from function body |
-| `normalizeBody` | Normalize here-docs, handle different quoting styles |
-| `parseDocComment` | Extract comment blocks before functions |
-| `isExported` | Check for `export -f` or if function is in global scope |
+| Transform         | Why Needed                                                      |
+| ----------------- | --------------------------------------------------------------- |
+| `parseParams`     | Extract `$1`, `$2`, `${1}`, `$@`, `$*` usage from function body |
+| `normalizeBody`   | Normalize here-docs, handle different quoting styles            |
+| `parseDocComment` | Extract comment blocks before functions                         |
+| `isExported`      | Check for `export -f` or if function is in global scope         |
 
 ### Python (Future)
 
-| Transform | Why Needed |
-|-----------|------------|
-| `parseParams` | Default values, `*args`, `**kwargs`, type hints |
-| `parseTypeFields` | Dataclass fields, TypedDict fields |
-| `isAsync` | `async def` vs `def` |
-| `parseImport` | `from x import y`, `import x as y`, relative imports |
-| `parseDocComment` | Docstrings (triple-quoted strings after definition) |
+| Transform         | Why Needed                                           |
+| ----------------- | ---------------------------------------------------- |
+| `parseParams`     | Default values, `*args`, `**kwargs`, type hints      |
+| `parseTypeFields` | Dataclass fields, TypedDict fields                   |
+| `isAsync`         | `async def` vs `def`                                 |
+| `parseImport`     | `from x import y`, `import x as y`, relative imports |
+| `parseDocComment` | Docstrings (triple-quoted strings after definition)  |
 
 ### Languages That Need Minimal Transforms
 
@@ -862,33 +900,36 @@ Some languages have simpler syntax and need fewer transforms:
 
 ## Extraction Without Transforms
 
-For captures that don't need transforms, the core extraction engine handles them directly:
+For captures that don't need transforms, the core extraction engine handles them
+directly:
 
 ```ts
 function extractFunctionFromCaptures(
   captures: QueryCaptures,
   source: string,
-  transforms?: GrammarTransforms
+  transforms?: GrammarTransforms,
 ): FunctionInfo {
   const nameCapture = captures.get("function.name");
   const bodyCapture = captures.get("function.body");
   const paramsCapture = captures.get("function.params");
   const returnCapture = captures.get("function.return");
-  
+
   // Direct extraction (no transform needed)
   const name = nameCapture ? getNodeText(nameCapture.node, source) : "";
   const body = bodyCapture ? getNodeText(bodyCapture.node, source) : "";
-  const returnType = returnCapture ? getNodeText(returnCapture.node, source) : undefined;
-  
+  const returnType = returnCapture
+    ? getNodeText(returnCapture.node, source)
+    : undefined;
+
   // Transform-based extraction (language-specific)
   const params = transforms?.parseParams
     ? transforms.parseParams(paramsCapture?.node, source)
     : extractSimpleParams(paramsCapture?.node, source);
-  
+
   const normalizedBody = transforms?.normalizeBody
     ? transforms.normalizeBody(body, grammar.meta.id)
     : defaultNormalizeBody(body);
-  
+
   return {
     name,
     location: nodeToLocation(nameCapture?.node ?? bodyCapture?.node),
@@ -898,7 +939,7 @@ function extractFunctionFromCaptures(
     normalizedBody,
     bodyHash: hashCode(normalizedBody),
     isAsync: transforms?.isAsync?.(captures) ?? false,
-    isGenerator: false,  // From query predicate or transform
+    isGenerator: false, // From query predicate or transform
     isExported: transforms?.isExported?.(captures) ?? false,
     isDefaultExport: false,
     kind: "function",
@@ -914,10 +955,10 @@ Grammars match files by extension and/or glob patterns:
 function matchesGrammar(filePath: string, meta: GrammarMeta): boolean {
   const ext = extname(filePath);
   const basename = basename(filePath);
-  
+
   // Check extension match
   if (meta.extensions.includes(ext)) return true;
-  
+
   // Check glob patterns (for files like Makefile, .bashrc)
   if (meta.globs) {
     for (const glob of meta.globs) {
@@ -926,7 +967,7 @@ function matchesGrammar(filePath: string, meta: GrammarMeta): boolean {
       }
     }
   }
-  
+
   return false;
 }
 ```
@@ -937,12 +978,13 @@ When multiple grammars could match a file, the first registered grammar wins:
 
 ```ts
 viola()
-  .grammar(typescript)  // Priority 1
-  .grammar(javascript)  // Priority 2 (won't match .ts files)
-  .grammar(bash);       // Priority 3
+  .grammar(typescript) // Priority 1
+  .grammar(javascript) // Priority 2 (won't match .ts files)
+  .grammar(bash); // Priority 3
 ```
 
-This allows users to override default behavior by registering their grammar first.
+This allows users to override default behavior by registering their grammar
+first.
 
 ## Migration Path
 
@@ -982,28 +1024,33 @@ This allows users to override default behavior by registering their grammar firs
 
 ## Benefits Over Separate Crawlers
 
-| Aspect | Separate Crawlers | Single Tree-Sitter Core |
-|--------|-------------------|------------------------|
-| Code duplication | Each crawler has its own parsing | One parsing engine |
-| Adding languages | Write TypeScript code | Write queries (data) |
-| Bundle size | Multiple parsers | One engine + grammar WASMs |
-| Consistency | Each crawler extracts differently | Standard captures ensure consistency |
-| Testing | Test each crawler separately | Test queries in isolation |
-| Maintenance | Update multiple packages | Update queries only |
+| Aspect           | Separate Crawlers                 | Single Tree-Sitter Core              |
+| ---------------- | --------------------------------- | ------------------------------------ |
+| Code duplication | Each crawler has its own parsing  | One parsing engine                   |
+| Adding languages | Write TypeScript code             | Write queries (data)                 |
+| Bundle size      | Multiple parsers                  | One engine + grammar WASMs           |
+| Consistency      | Each crawler extracts differently | Standard captures ensure consistency |
+| Testing          | Test each crawler separately      | Test queries in isolation            |
+| Maintenance      | Update multiple packages          | Update queries only                  |
 
 ## Open Questions
 
-1. **Grammar WASM bundling** - Should grammars bundle their WASM, or should viola core bundle common ones?
+1. **Grammar WASM bundling** - Should grammars bundle their WASM, or should
+   viola core bundle common ones?
 
-2. **Query inheritance** - Should grammars be able to extend other grammars' queries? (e.g., TSX extends TS)
+2. **Query inheritance** - Should grammars be able to extend other grammars'
+   queries? (e.g., TSX extends TS)
 
-3. **Multiple grammars per file** - Should we support multiple grammars analyzing the same file? (e.g., embedded languages)
+3. **Multiple grammars per file** - Should we support multiple grammars
+   analyzing the same file? (e.g., embedded languages)
 
-4. **Query validation** - Should viola validate that queries use standard capture names at registration time?
+4. **Query validation** - Should viola validate that queries use standard
+   capture names at registration time?
 
 ## Implementation Checklist
 
 ### Phase 1: Core Infrastructure
+
 - [ ] Add `web-tree-sitter` to viola dependencies
 - [ ] Create `src/grammars/types.ts` with all type definitions
 - [ ] Create `src/grammars/loader.ts` for lazy grammar loading
@@ -1011,25 +1058,31 @@ This allows users to override default behavior by registering their grammar firs
 - [ ] Create `src/grammars/mod.ts` to export public API
 
 ### Phase 2: Builder API
+
 - [ ] Create comparison primitives (`atLeast`, `equals`, `oneOf`, etc.)
-- [ ] Create `when` condition API with namespaces (`when.issue.*`, `when.env()`, `when.in()`)
+- [ ] Create `when` condition API with namespaces (`when.issue.*`, `when.env()`,
+      `when.in()`)
 - [ ] Implement `.add(kind, thing).as(alias)` pattern
 - [ ] Implement `.rule(action, condition)` for report actions
-- [ ] Implement `grammar(x).overrides(y)` and `grammar(x).supplements(y)` actions
+- [ ] Implement `grammar(x).overrides(y)` and `grammar(x).supplements(y)`
+      actions
 - [ ] Implement condition composition (`.and()`)
 - [ ] Implement comparator composition (`.or()`, `.and()`)
 
 ### Phase 3: Runtime
+
 - [ ] Implement grammar resolution (parallel, supplements, overrides)
 - [ ] Update `runViola` to use new builder config
 - [ ] Implement condition evaluation at runtime
 
 ### Phase 4: Grammar Packages
+
 - [ ] Create `@hiisi/viola-grammar-ts` package
 - [ ] Create `@hiisi/viola-grammar-bash` package
 - [ ] Update default-lints to work with new extraction
 
 ### Phase 5: Testing & Docs
+
 - [ ] Add integration tests for builder API
 - [ ] Add integration tests for grammar resolution
 - [ ] Update documentation

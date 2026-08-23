@@ -10,19 +10,15 @@ import { assertEquals } from "@std/assert";
 import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
-import {
-    plugin,
-    viola,
-    type ViolaPlugin,
-} from "../builder.ts";
+import { plugin, viola, type ViolaPlugin } from "../builder.ts";
 import { when } from "../conditions.ts";
 import { Category, Impact, ReportLevel } from "../enums.ts";
 import {
-    countByLevel,
-    evaluateIssue,
-    evaluateIssues,
-    filterReportableIssues,
-    type EvaluatedIssue,
+  countByLevel,
+  type EvaluatedIssue,
+  evaluateIssue,
+  evaluateIssues,
+  filterReportableIssues,
 } from "../evaluator.ts";
 import type { IssueCatalog } from "../types.ts";
 
@@ -66,7 +62,7 @@ function createMockLinter(id: string, issues: string[] = []): BaseLinter {
 function createMockIssue(
   kind: string,
   file: string,
-  confidence = 80
+  confidence = 80,
 ): Issue {
   return {
     kind,

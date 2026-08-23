@@ -32,7 +32,7 @@ import type { GrammarEntry, GrammarRegistry } from "./registry.ts";
  * The role a grammar plays in the resolution.
  */
 export type GrammarRole =
-  | "primary"    // Normal execution
+  | "primary" // Normal execution
   | "overriding" // This grammar overrides another
   | "supplement" // This grammar supplements another (fills gaps)
   | "suppressed"; // This grammar is suppressed by an override
@@ -110,7 +110,7 @@ export interface GrammarRelationshipRule {
 export class GrammarResolver {
   constructor(
     private readonly registry: GrammarRegistry,
-    private readonly rules: readonly GrammarRelationshipRule[]
+    private readonly rules: readonly GrammarRelationshipRule[],
   ) {}
 
   /**
@@ -218,7 +218,7 @@ export class GrammarResolver {
    * Returns the relationships that are active (condition passes).
    */
   private evaluateRelationships(
-    context: EvaluationContext
+    context: EvaluationContext,
   ): GrammarRelationshipAction[] {
     const active: GrammarRelationshipAction[] = [];
 
@@ -259,7 +259,7 @@ export class GrammarResolver {
  */
 export function createGrammarResolver(
   registry: GrammarRegistry,
-  rules: readonly GrammarRelationshipRule[]
+  rules: readonly GrammarRelationshipRule[],
 ): GrammarResolver {
   return new GrammarResolver(registry, rules);
 }
@@ -280,8 +280,10 @@ export function createGrammarResolver(
  * @param results - Array of extraction results with their grammar roles
  * @returns Merged results
  */
-export function mergeExtractionResults<T extends { location: { line: number; column?: number } }>(
-  results: Array<{ items: readonly T[]; role: GrammarRole }>
+export function mergeExtractionResults<
+  T extends { location: { line: number; column?: number } },
+>(
+  results: Array<{ items: readonly T[]; role: GrammarRole }>,
 ): T[] {
   const merged: T[] = [];
   const seenLocations = new Set<string>();

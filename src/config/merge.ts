@@ -9,15 +9,12 @@
 
 import { resolvePreset } from "../runtime/plugins.ts";
 import type {
-    DiscoveredPreset,
-    PluginsDiscoveryResult,
-    ViolaConfigPreset,
+  DiscoveredPreset,
+  PluginsDiscoveryResult,
+  ViolaConfigPreset,
 } from "../types/plugin.ts";
 import { parsePattern, resolvePatternValue } from "./pattern.ts";
-import type {
-    ResolvedConfig,
-    ResolvedScope
-} from "./types.ts";
+import type { ResolvedConfig, ResolvedScope } from "./types.ts";
 import type { MergeOptions, MergeResult } from "./types/merge.types.ts";
 
 // Re-export types for convenience
@@ -36,7 +33,7 @@ export type { MergeOptions, MergeResult } from "./types/merge.types.ts";
  */
 export function resolvePresets(
   names: string[],
-  discovery: PluginsDiscoveryResult
+  discovery: PluginsDiscoveryResult,
 ): { presets: DiscoveredPreset[]; warnings: string[] } {
   const presets: DiscoveredPreset[] = [];
   const warnings: string[] = [];
@@ -49,7 +46,7 @@ export function resolvePresets(
       if (discovery.presetCollisions.includes(name)) {
         warnings.push(
           `Preset "${name}" is ambiguous (multiple plugins define it). ` +
-            `Use qualified name: <plugin>/${name}`
+            `Use qualified name: <plugin>/${name}`,
         );
       } else {
         warnings.push(`Preset "${name}" not found in any loaded plugin.`);
@@ -68,7 +65,7 @@ export function resolvePresets(
  * Default presets are those named "default".
  */
 export function collectDefaultPresets(
-  discovery: PluginsDiscoveryResult
+  discovery: PluginsDiscoveryResult,
 ): DiscoveredPreset[] {
   return discovery.defaultPresets;
 }
@@ -76,8 +73,6 @@ export function collectDefaultPresets(
 // =============================================================================
 // Config Merging
 // =============================================================================
-
-
 
 /**
  * Convert a preset's scope config into ResolvedScope format.
@@ -112,7 +107,7 @@ function presetToScopes(preset: ViolaConfigPreset): ResolvedScope[] {
  */
 function mergeScopes(
   presetScopes: ResolvedScope[],
-  userScopes: ResolvedScope[]
+  userScopes: ResolvedScope[],
 ): ResolvedScope[] {
   // Group scopes by file pattern
   const byPattern = new Map<string, ResolvedScope["patterns"][]>();
@@ -157,7 +152,7 @@ function mergeScopes(
 export function mergeConfigWithPresets(
   userConfig: ResolvedConfig,
   discovery: PluginsDiscoveryResult,
-  options: MergeOptions = {}
+  options: MergeOptions = {},
 ): MergeResult {
   const warnings: string[] = [];
   const appliedPresets: string[] = [];
@@ -173,15 +168,18 @@ export function mergeConfigWithPresets(
     appliedPresets.push(`${preset.pluginName}/${preset.name} (default)`);
 
     if (options.verbose) {
-      console.log(`  Applied default preset: ${preset.pluginName}/${preset.name}`);
+      console.log(
+        `  Applied default preset: ${preset.pluginName}/${preset.name}`,
+      );
     }
   }
 
   // 2. Apply explicitly inherited presets
-  const { presets: inheritedPresets, warnings: resolveWarnings } = resolvePresets(
-    userConfig.inherit,
-    discovery
-  );
+  const { presets: inheritedPresets, warnings: resolveWarnings } =
+    resolvePresets(
+      userConfig.inherit,
+      discovery,
+    );
   warnings.push(...resolveWarnings);
 
   for (const preset of inheritedPresets) {
@@ -190,7 +188,9 @@ export function mergeConfigWithPresets(
     appliedPresets.push(`${preset.pluginName}/${preset.name}`);
 
     if (options.verbose) {
-      console.log(`  Applied inherited preset: ${preset.pluginName}/${preset.name}`);
+      console.log(
+        `  Applied inherited preset: ${preset.pluginName}/${preset.name}`,
+      );
     }
   }
 
@@ -216,7 +216,7 @@ export function mergeConfigWithPresets(
  */
 export function mergeLinterConfig(
   presetConfigs: Record<string, Record<string, unknown>>[],
-  userConfig: Record<string, Record<string, unknown>>
+  userConfig: Record<string, Record<string, unknown>>,
 ): Record<string, Record<string, unknown>> {
   const merged: Record<string, Record<string, unknown>> = {};
 

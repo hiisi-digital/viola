@@ -15,19 +15,19 @@ import type { CodebaseData, Issue } from "../../data/types.ts";
 import type { BaseLinter } from "../../linters/base.ts";
 import { isReportAction, report } from "../actions.ts";
 import {
-    plugin,
-    viola,
-    type ViolaBuilderConfig,
-    type ViolaPlugin,
+  plugin,
+  viola,
+  type ViolaBuilderConfig,
+  type ViolaPlugin,
 } from "../builder.ts";
 import { when } from "../conditions.ts";
 import { Category, Impact, ReportLevel } from "../enums.ts";
 import {
-    countByLevel,
-    evaluateIssues,
-    filterReportableIssues,
-    hasErrors,
-    type EvaluatedIssue,
+  countByLevel,
+  type EvaluatedIssue,
+  evaluateIssues,
+  filterReportableIssues,
+  hasErrors,
 } from "../evaluator.ts";
 import type { IssueCatalog } from "../types.ts";
 
@@ -40,9 +40,14 @@ function mockLinter(
   id: string,
   issues: Array<{
     name: string;
-    category: "correctness" | "maintainability" | "consistency" | "performance" | "style";
+    category:
+      | "correctness"
+      | "maintainability"
+      | "consistency"
+      | "performance"
+      | "style";
     impact: "critical" | "major" | "minor" | "trivial";
-  }>
+  }>,
 ): BaseLinter {
   const catalog: IssueCatalog = {};
   for (const issue of issues) {
@@ -90,7 +95,7 @@ function buildCatalogs(config: ViolaBuilderConfig): Map<string, IssueCatalog> {
 /** Runs evaluation and returns results */
 function runEvaluation(
   config: ViolaBuilderConfig,
-  issues: Issue[]
+  issues: Issue[],
 ): EvaluatedIssue[] {
   const catalogs = buildCatalogs(config);
   return evaluateIssues(issues, config.rules, catalogs);
@@ -112,17 +117,33 @@ const simulatedDefaultLints: ViolaPlugin = {
       ]))
       .add(mockLinter("similar-functions", [
         { name: "similar-names", category: "maintainability", impact: "minor" },
-        { name: "duplicate-logic", category: "maintainability", impact: "major" },
+        {
+          name: "duplicate-logic",
+          category: "maintainability",
+          impact: "major",
+        },
       ]))
       .add(mockLinter("duplicate-strings", [
         { name: "repeated-string", category: "consistency", impact: "trivial" },
       ]))
       .add(mockLinter("missing-docs", [
-        { name: "no-export-docs", category: "maintainability", impact: "minor" },
+        {
+          name: "no-export-docs",
+          category: "maintainability",
+          impact: "minor",
+        },
       ]))
       .add(mockLinter("deprecation-check", [
-        { name: "past-removal-date", category: "correctness", impact: "critical" },
-        { name: "approaching-removal", category: "correctness", impact: "major" },
+        {
+          name: "past-removal-date",
+          category: "correctness",
+          impact: "critical",
+        },
+        {
+          name: "approaching-removal",
+          category: "correctness",
+          impact: "major",
+        },
       ]));
 
     // Default rules
@@ -140,7 +161,11 @@ const securityPlugin: ViolaPlugin = {
   build(builder) {
     builder
       .add(mockLinter("security-check", [
-        { name: "hardcoded-secret", category: "correctness", impact: "critical" },
+        {
+          name: "hardcoded-secret",
+          category: "correctness",
+          impact: "critical",
+        },
         { name: "weak-crypto", category: "correctness", impact: "major" },
         { name: "unsafe-eval", category: "correctness", impact: "major" },
       ]));
@@ -158,20 +183,30 @@ const perfPlugin: ViolaPlugin = {
     builder
       .add(mockLinter("perf-check", [
         { name: "n-plus-one", category: "performance", impact: "major" },
-        { name: "unnecessary-rerender", category: "performance", impact: "minor" },
+        {
+          name: "unnecessary-rerender",
+          category: "performance",
+          impact: "minor",
+        },
         { name: "large-bundle", category: "performance", impact: "major" },
       ]));
 
     // Performance issues: error if major, warn if minor
     builder
-      .rule(report.error, when.all(
-        when.linter("perf-*"),
-        when.impact.atLeast(Impact.Major)
-      ))
-      .rule(report.warn, when.all(
-        when.linter("perf-*"),
-        when.impact.is(Impact.Minor)
-      ));
+      .rule(
+        report.error,
+        when.all(
+          when.linter("perf-*"),
+          when.impact.atLeast(Impact.Major),
+        ),
+      )
+      .rule(
+        report.warn,
+        when.all(
+          when.linter("perf-*"),
+          when.impact.is(Impact.Minor),
+        ),
+      );
   },
 };
 
@@ -186,7 +221,7 @@ Deno.test("Integration: single plugin provides linters and rules", () => {
 
   // Should have all linters
   assertEquals(config.linters.length, 5);
-  
+
   // Should have default rules
   assertEquals(config.rules.length, 3);
 
@@ -200,8 +235,8 @@ Deno.test("Integration: single plugin provides linters and rules", () => {
   const results = runEvaluation(config, issues);
 
   assertEquals(results[0]!.level, ReportLevel.Error); // critical → error
-  assertEquals(results[1]!.level, ReportLevel.Warn);  // minor → warn
-  assertEquals(results[2]!.level, ReportLevel.Info);  // trivial → info
+  assertEquals(results[1]!.level, ReportLevel.Warn); // minor → warn
+  assertEquals(results[2]!.level, ReportLevel.Info); // trivial → info
 });
 
 Deno.test("Integration: multiple plugins compose correctly", () => {
@@ -236,8 +271,8 @@ Deno.test("Integration: user rules override plugin rules (last wins)", () => {
 
   const results = runEvaluation(config, issues);
 
-  assertEquals(results[0]!.level, ReportLevel.Off);   // test file → off
-  assertEquals(results[1]!.level, ReportLevel.Hint);  // legacy → hint
+  assertEquals(results[0]!.level, ReportLevel.Off); // test file → off
+  assertEquals(results[1]!.level, ReportLevel.Hint); // legacy → hint
   assertEquals(results[2]!.level, ReportLevel.Error); // normal → error (plugin rule)
 });
 
@@ -287,7 +322,10 @@ Deno.test("Integration: complex rule precedence scenario", () => {
     // Core file, minor issue → error (core rule)
     mockIssue("type-location/misplaced-type", "packages/core/index.ts"),
     // Generated file in core → off (generated rule is AFTER core rule, last wins)
-    mockIssue("deprecation-check/past-removal-date", "packages/core/generated/api.ts"),
+    mockIssue(
+      "deprecation-check/past-removal-date",
+      "packages/core/generated/api.ts",
+    ),
   ];
 
   const results = runEvaluation(config, issues);
@@ -304,15 +342,21 @@ Deno.test("Integration: category-based rules with overrides", () => {
     // Base: correctness issues are always errors
     .rule(report.error, when.category.is(Category.Correctness))
     // Override: style issues in tests can be ignored
-    .rule(report.off, when.all(
-      when.category.is(Category.Style),
-      when.in("**/*_test.ts")
-    ))
+    .rule(
+      report.off,
+      when.all(
+        when.category.is(Category.Style),
+        when.in("**/*_test.ts"),
+      ),
+    )
     .build();
 
   // Add a style linter for testing
   const styleIssue = mockIssue("style-linter/bad-naming", "src/utils_test.ts");
-  const correctnessIssue = mockIssue("deprecation-check/past-removal-date", "src/main.ts");
+  const correctnessIssue = mockIssue(
+    "deprecation-check/past-removal-date",
+    "src/main.ts",
+  );
 
   // We need to add the style linter catalog for this test
   const catalogs = buildCatalogs(config);
@@ -327,7 +371,7 @@ Deno.test("Integration: category-based rules with overrides", () => {
   const results = evaluateIssues(
     [styleIssue, correctnessIssue],
     config.rules,
-    catalogs
+    catalogs,
   );
 
   // Style in test file - the compound condition doesn't match because
@@ -353,9 +397,9 @@ Deno.test("Integration: confidence-based filtering", () => {
 
   const results = runEvaluation(config, issues);
 
-  assertEquals(results[0]!.level, ReportLevel.Warn);  // normal (plugin rule)
-  assertEquals(results[1]!.level, ReportLevel.Hint);  // low confidence
-  assertEquals(results[2]!.level, ReportLevel.Off);   // very low confidence
+  assertEquals(results[0]!.level, ReportLevel.Warn); // normal (plugin rule)
+  assertEquals(results[1]!.level, ReportLevel.Hint); // low confidence
+  assertEquals(results[2]!.level, ReportLevel.Off); // very low confidence
 });
 
 // =============================================================================
@@ -377,14 +421,14 @@ Deno.test("Integration: plugin and user settings merge correctly", () => {
   const config = viola()
     .use(configPlugin)
     .set("configurable-linter.threshold", 0.8) // override
-    .set("configurable-linter.maxIssues", 10)  // add new setting
+    .set("configurable-linter.maxIssues", 10) // add new setting
     .build();
 
   // All settings are stored
   assertEquals(config.settings.length, 4);
 
   // Last value for threshold wins
-  const thresholds = config.settings.filter(s =>
+  const thresholds = config.settings.filter((s) =>
     s.linter === "configurable-linter" && s.key === "threshold"
   );
   assertEquals(thresholds.length, 2);
@@ -402,12 +446,12 @@ Deno.test("Integration: hasErrors detects error-level issues", () => {
 
   const issuesWithError = [
     mockIssue("deprecation-check/past-removal-date", "src/a.ts"), // critical → error
-    mockIssue("type-location/misplaced-type", "src/b.ts"),        // minor → warn
+    mockIssue("type-location/misplaced-type", "src/b.ts"), // minor → warn
   ];
 
   const issuesWithoutError = [
-    mockIssue("type-location/misplaced-type", "src/b.ts"),        // minor → warn
-    mockIssue("duplicate-strings/repeated-string", "src/c.ts"),   // trivial → info
+    mockIssue("type-location/misplaced-type", "src/b.ts"), // minor → warn
+    mockIssue("duplicate-strings/repeated-string", "src/c.ts"), // trivial → info
   ];
 
   const resultsWithError = runEvaluation(config, issuesWithError);
@@ -522,7 +566,11 @@ Deno.test("Integration: multiple rule layers with same condition", () => {
 
   const catalogs = new Map<string, IssueCatalog>();
   catalogs.set("test", {
-    "test/issue": { category: "consistency", impact: "minor", description: "Test" },
+    "test/issue": {
+      category: "consistency",
+      impact: "minor",
+      description: "Test",
+    },
   });
 
   const issue = mockIssue("test/issue", "src/main.ts");
@@ -570,13 +618,13 @@ Deno.test("Integration: verify rule order in built config", () => {
   assertEquals(config.rules.length, 3);
 
   // Verify order by checking the actions (need type guard)
-  const levels = config.rules.map(r => {
+  const levels = config.rules.map((r) => {
     if (isReportAction(r.action)) return r.action.level;
     return undefined;
   });
 
-  assertEquals(levels[0], ReportLevel.Info);  // from pluginA
-  assertEquals(levels[1], ReportLevel.Warn);  // from pluginB
+  assertEquals(levels[0], ReportLevel.Info); // from pluginA
+  assertEquals(levels[1], ReportLevel.Warn); // from pluginB
   assertEquals(levels[2], ReportLevel.Error); // from user
 });
 
@@ -590,47 +638,48 @@ Deno.test("Integration: realistic project configuration", () => {
   const config = viola()
     // Base: use default lints
     .use(simulatedDefaultLints)
-
     // Project-specific linters
     .add(mockLinter("project-specific", [
       { name: "deprecated-api", category: "correctness", impact: "critical" },
       { name: "naming-convention", category: "consistency", impact: "minor" },
     ]))
-
     // Linter settings
     .set("similar-functions.threshold", 0.85)
     .set("duplicate-strings", { minLength: 10, threshold: 3 })
-
     // Project rules
     // Tests: off by default
-    .rule(report.off, when.any(
-      when.in("**/*_test.ts"),
-      when.in("**/*.spec.ts"),
-      when.in("tests/**")
-    ))
-
+    .rule(
+      report.off,
+      when.any(
+        when.in("**/*_test.ts"),
+        when.in("**/*.spec.ts"),
+        when.in("tests/**"),
+      ),
+    )
     // Generated code: skip entirely
     .rule(report.skip, when.in("**/generated/**"))
-
     // Core package: stricter
-    .rule(report.error, when.all(
-      when.in("packages/core/**"),
-      when.impact.atLeast(Impact.Minor)
-    ))
-
+    .rule(
+      report.error,
+      when.all(
+        when.in("packages/core/**"),
+        when.impact.atLeast(Impact.Minor),
+      ),
+    )
     // Vendor code: only critical issues
-    .rule(report.off, when.all(
-      when.in("vendor/**"),
-      when.impact.below(Impact.Critical)
-    ))
-
+    .rule(
+      report.off,
+      when.all(
+        when.in("vendor/**"),
+        when.impact.below(Impact.Critical),
+      ),
+    )
     // Low confidence: reduce severity
     .rule(report.hint, when.confidence.below(50))
-
     .build();
 
   // Verify configuration
-  assertEquals(config.linters.length, 6);  // 5 default + 1 project
+  assertEquals(config.linters.length, 6); // 5 default + 1 project
   // Rules: 3 from plugin + 5 user = 8, but let's verify
   assertEquals(config.rules.length >= 8, true);
   assertEquals(config.settings.length, 3); // 1 threshold + 2 from object (minLength, threshold)
@@ -658,7 +707,7 @@ Deno.test("Integration: realistic project configuration", () => {
 
   // With "last wins" - trace expected results:
   // issue 0: src/main.ts critical - rule 1 (major+) matches → error
-  // issue 1: src/main_test.ts - rule 4 (tests) matches → off  
+  // issue 1: src/main_test.ts - rule 4 (tests) matches → off
   // issue 2: packages/core/lib.ts minor - rule 6 (core+minor) matches → error
   // issue 3: src/generated/api.ts - rule 5 (generated) matches → skip
   // issue 4: vendor/lib.ts critical - rule 7 (vendor+below critical) doesn't match (critical not below critical)
@@ -677,7 +726,7 @@ Deno.test("Integration: realistic project configuration", () => {
   // Verify reportable issues
   // Count: 3 errors + 1 hint = 4 reportable; 2 off + 1 skip = 3 filtered
   const reportable = filterReportableIssues(results);
-  
+
   // The actual count might differ - let's check what we actually get
   // If 3 reportable, one of our expectations above is wrong
   // Most likely: the low confidence issue matches an earlier rule too

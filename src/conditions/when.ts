@@ -29,13 +29,13 @@
 
 import type { Comparison } from "./comparisons.ts";
 import type {
-    Category,
-    Condition,
-    EnvConditionBuilder,
-    EvaluationContext,
-    Impact,
-    IssueConditions,
-    WhenBuilder,
+  Category,
+  Condition,
+  EnvConditionBuilder,
+  EvaluationContext,
+  Impact,
+  IssueConditions,
+  WhenBuilder,
 } from "./types.ts";
 
 /**
@@ -45,15 +45,15 @@ import type {
 function matchGlob(pattern: string, path: string): boolean {
   // Convert glob pattern to regex
   // We need to be careful about the order of replacements
-  
+
   // First, escape special regex characters (except * and ?)
   let regexPattern = "";
   let i = 0;
-  
+
   while (i < pattern.length) {
     const char = pattern[i] as string;
     const nextChar = pattern[i + 1] as string | undefined;
-    
+
     if (char === "*" && nextChar === "*") {
       // Handle **
       const afterStars = pattern[i + 2] as string | undefined;
@@ -104,7 +104,7 @@ function matchGlob(pattern: string, path: string): boolean {
 class BaseCondition implements Condition {
   constructor(
     private readonly predicate: (ctx: EvaluationContext) => boolean,
-    private readonly description?: string
+    private readonly description?: string,
   ) {}
 
   evaluate(context: EvaluationContext): boolean {
@@ -114,21 +114,21 @@ class BaseCondition implements Condition {
   and(other: Condition): Condition {
     return new BaseCondition(
       (ctx) => this.evaluate(ctx) && other.evaluate(ctx),
-      `(${this.description} AND ${other.toString()})`
+      `(${this.description} AND ${other.toString()})`,
     );
   }
 
   or(other: Condition): Condition {
     return new BaseCondition(
       (ctx) => this.evaluate(ctx) || other.evaluate(ctx),
-      `(${this.description} OR ${other.toString()})`
+      `(${this.description} OR ${other.toString()})`,
     );
   }
 
   not(): Condition {
     return new BaseCondition(
       (ctx) => !this.evaluate(ctx),
-      `NOT(${this.description})`
+      `NOT(${this.description})`,
     );
   }
 
@@ -169,7 +169,7 @@ function inPatterns(...patterns: string[]): Condition {
  * Extract ID from various source types.
  */
 function extractId(
-  source: { meta: { id: string } } | { id: string } | string
+  source: { meta: { id: string } } | { id: string } | string,
 ): string {
   if (typeof source === "string") return source;
   if ("meta" in source) return source.meta.id;
@@ -184,14 +184,14 @@ const issueConditions: IssueConditions = {
     const id = extractId(source);
     return new BaseCondition(
       (ctx) => ctx.issue?.by === id,
-      `issue.by(${id})`
+      `issue.by(${id})`,
     );
   },
 
   kind(issueKind: string): Condition {
     return new BaseCondition(
       (ctx) => ctx.issue?.kind === issueKind,
-      `issue.kind(${issueKind})`
+      `issue.kind(${issueKind})`,
     );
   },
 
@@ -229,7 +229,7 @@ function envCondition(varName: string): EnvConditionBuilder {
     exists(): Condition {
       return new BaseCondition(
         (ctx) => ctx.env[varName] !== undefined && ctx.env[varName] !== "",
-        `env(${varName}).exists()`
+        `env(${varName}).exists()`,
       );
     },
 
@@ -285,4 +285,3 @@ export const when: WhenBuilder = {
 // Re-export for convenience
 export { alwaysCondition as always, neverCondition as never };
 export type { Condition, EvaluationContext };
-

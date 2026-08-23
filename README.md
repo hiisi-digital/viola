@@ -12,15 +12,21 @@
 
 ## What is Viola?
 
-Viola is a **runtime and framework** for convention linting that works with **any programming language**. It uses tree-sitter grammars to parse source code and extract structured data (functions, types, imports, strings), then runs linter plugins against that data.
+Viola is a **runtime and framework** for convention linting that works with
+**any programming language**. It uses tree-sitter grammars to parse source code
+and extract structured data (functions, types, imports, strings), then runs
+linter plugins against that data.
 
-Viola itself has **no built-in linters** and **no opinions**. You bring your own linters and grammars - whether that's your own custom rules, third-party plugins, or the `@hiisi/viola-default-lints` package.
+Viola itself has **no built-in linters** and **no opinions**. You bring your own
+linters and grammars - whether that's your own custom rules, third-party
+plugins, or the `@hiisi/viola-default-lints` package.
 
 ### Key Features
 
 - **Language-agnostic**: Support any language via tree-sitter grammar packages
 - **Single-pass crawling**: Parse each file once, run multiple linters
-- **Grammar relationships**: Configure override/supplement semantics between grammars
+- **Grammar relationships**: Configure override/supplement semantics between
+  grammars
 - **Fluent API**: Builder-pattern configuration with composable conditions
 - **Plugin system**: Extend with linters, grammars, and presets
 
@@ -35,17 +41,15 @@ deno add jsr:@hiisi/viola
 Create a `viola.config.ts` in your project root:
 
 ```ts
-import { viola, report, when } from "@hiisi/viola";
+import { report, viola, when } from "@hiisi/viola";
 import defaultLints from "@hiisi/viola-default-lints";
 import typescript from "@hiisi/viola-grammar-ts";
 
 export default viola()
   // Grammars (how to parse files)
   .add(typescript).as("ts")
-
   // Linter plugin
   .use(defaultLints)
-
   // Your rules (last wins!)
   .rule(report.off, when.in("**/*_test.ts"));
 ```
@@ -57,22 +61,18 @@ export default viola()
 ```ts
 viola()
   // Add grammars and linters
-  .add(grammar).as("alias")    // Register a grammar with alias
-  .add(linter)                  // Register a linter
-  .add([linter1, linter2])     // Register multiple linters
-  
+  .add(grammar).as("alias") // Register a grammar with alias
+  .add(linter) // Register a linter
+  .add([linter1, linter2]) // Register multiple linters
   // Use plugins (add linters + default rules)
   .use(plugin)
-  
   // Configure linter settings
   .set("linter.option", value)
   .set("linter", { option1: v1, option2: v2 })
-  
   // Add rules (last wins!)
   .rule(action, condition)
-  
   // Build final config
-  .build()
+  .build();
 ```
 
 ### Grammar Relationships
@@ -88,101 +88,110 @@ When multiple grammars match a file, you can control how they interact:
 ```
 
 **Semantics:**
+
 - **Default**: All matching grammars run in parallel, results merged
 - **overrides**: Primary grammar replaces secondary entirely
-- **supplements**: Primary runs first, secondary fills in gaps (elements not captured by primary)
+- **supplements**: Primary runs first, secondary fills in gaps (elements not
+  captured by primary)
 
-A relationship applies only where both named grammars already match the file. The matching set comes
-from each grammar's registered extensions and globs, and a relationship naming a grammar outside that
-set is skipped.
+A relationship applies only where both named grammars already match the file.
+The matching set comes from each grammar's registered extensions and globs, and
+a relationship naming a grammar outside that set is skipped.
 
 ### Report Actions
 
-| Action | Description |
-|--------|-------------|
-| `report.error` | Fails build, exits non-zero |
-| `report.warn` | Yellow output, doesn't fail |
-| `report.info` | Blue, informational |
-| `report.hint` | Dim, subtle suggestion |
-| `report.off` | Suppress, don't show |
-| `report.skip` | Don't run linters at all (file-scope) |
+| Action         | Description                           |
+| -------------- | ------------------------------------- |
+| `report.error` | Fails build, exits non-zero           |
+| `report.warn`  | Yellow output, doesn't fail           |
+| `report.info`  | Blue, informational                   |
+| `report.hint`  | Dim, subtle suggestion                |
+| `report.off`   | Suppress, don't show                  |
+| `report.skip`  | Don't run linters at all (file-scope) |
 
 ### Conditions (`when`)
 
 **By file pattern:**
+
 ```ts
-when.in("*.ts", "*.tsx")
-when.in("**/tests/**")
-when.in("src/**")
+when.in("*.ts", "*.tsx");
+when.in("**/tests/**");
+when.in("src/**");
 ```
 
 **By linter:**
+
 ```ts
-when.linter("similar-functions")
-when.linter("similar-*", "duplicate-*")
+when.linter("similar-functions");
+when.linter("similar-*", "duplicate-*");
 ```
 
 **By impact:**
+
 ```ts
-when.impact.atLeast(Impact.Major)
-when.impact.is(Impact.Critical)
-when.impact.above(Impact.Minor)
-when.impact.not(Impact.Trivial)
+when.impact.atLeast(Impact.Major);
+when.impact.is(Impact.Critical);
+when.impact.above(Impact.Minor);
+when.impact.not(Impact.Trivial);
 ```
 
 **By confidence:**
+
 ```ts
-when.confidence.atLeast(80)
-when.confidence.below(50)
-when.confidence.between(50, 90)
+when.confidence.atLeast(80);
+when.confidence.below(50);
+when.confidence.between(50, 90);
 ```
 
 **By category:**
+
 ```ts
-when.category.is(Category.Consistency)
-when.category.in(Category.Correctness, Category.Performance)
-when.category.notIn(Category.Style)
+when.category.is(Category.Consistency);
+when.category.in(Category.Correctness, Category.Performance);
+when.category.notIn(Category.Style);
 ```
 
 **Combining conditions:**
+
 ```ts
-when.in("src/**").and(when.impact.atLeast(Impact.Major))
-when.category.is(Category.Style).not()
-when.all(when.in("src/**"), when.impact.atLeast(Impact.Major))
-when.any(when.in("**/*_test.ts"), when.in("**/*.spec.ts"))
+when.in("src/**").and(when.impact.atLeast(Impact.Major));
+when.category.is(Category.Style).not();
+when.all(when.in("src/**"), when.impact.atLeast(Impact.Major));
+when.any(when.in("**/*_test.ts"), when.in("**/*.spec.ts"));
 ```
 
 ### The condition-object builder
 
-`when` above is the builder `.rule()` is written against. A second builder covers issue source and
-environment, and is exported under a different name to keep the two apart:
+`when` above is the builder `.rule()` is written against. A second builder
+covers issue source and environment, and is exported under a different name to
+keep the two apart:
 
 ```ts
-import { whenCondition, atLeast, equals } from "@hiisi/viola";
+import { atLeast, equals, whenCondition } from "@hiisi/viola";
 
-whenCondition.issue.by("similar-functions")   // by linter ID
-whenCondition.issue.impact(atLeast(Impact.Major))
-whenCondition.env("CI").exists()
-whenCondition.env("NODE_ENV").is(equals("production"))
+whenCondition.issue.by("similar-functions"); // by linter ID
+whenCondition.issue.impact(atLeast(Impact.Major));
+whenCondition.env("CI").exists();
+whenCondition.env("NODE_ENV").is(equals("production"));
 ```
 
 Its conditions take comparison primitives rather than plain values:
 
 ```ts
-equals(value)           // Exact equality
-atLeast(min)            // >= comparison
-atMost(max)             // <= comparison
-lessThan(bound)         // < comparison
-moreThan(bound)         // > comparison
-between(min, max)       // Inclusive range
-oneOf(...values)        // Match any value
-noneOf(...values)       // Exclude values
-contains(substring)     // String contains
-startsWith(prefix)      // String prefix
-endsWith(suffix)        // String suffix
-matches(regex)          // Regex match
-alwaysMatch()           // Always true
-neverMatch()            // Always false
+equals(value); // Exact equality
+atLeast(min); // >= comparison
+atMost(max); // <= comparison
+lessThan(bound); // < comparison
+moreThan(bound); // > comparison
+between(min, max); // Inclusive range
+oneOf(...values); // Match any value
+noneOf(...values); // Exclude values
+contains(substring); // String contains
+startsWith(prefix); // String prefix
+endsWith(suffix); // String suffix
+matches(regex); // Regex match
+alwaysMatch(); // Always true
+neverMatch(); // Always false
 ```
 
 ## Writing Grammars
@@ -250,12 +259,14 @@ class NoUnderscoreFunctions extends BaseLinter {
 
   lint(data: CodebaseData): Issue[] {
     return data.allFunctions
-      .filter(fn => fn.name.startsWith("_"))
-      .map(fn => this.issue(
-        "underscore-prefix",
-        fn.location,
-        `Function "${fn.name}" starts with underscore`,
-      ));
+      .filter((fn) => fn.name.startsWith("_"))
+      .map((fn) =>
+        this.issue(
+          "underscore-prefix",
+          fn.location,
+          `Function "${fn.name}" starts with underscore`,
+        )
+      );
   }
 }
 
@@ -267,7 +278,7 @@ export const noUnderscoreFunctions = new NoUnderscoreFunctions();
 Plugins can add grammars, linters, and default rules:
 
 ```ts
-import { plugin, report, when, Impact } from "@hiisi/viola";
+import { Impact, plugin, report, when } from "@hiisi/viola";
 import { typescript } from "./grammar.ts";
 import { myLinter } from "./linter.ts";
 
@@ -302,12 +313,13 @@ Rules use **"last wins"** semantics (like CSS):
 
 ```ts
 viola()
-  .rule(report.warn, when.impact.atLeast(Impact.Minor))         // base
-  .rule(report.off, when.in("**/*_test.ts"))                    // override for tests
-  .rule(report.error, when.in("packages/core/**"))              // override for core
+  .rule(report.warn, when.impact.atLeast(Impact.Minor)) // base
+  .rule(report.off, when.in("**/*_test.ts")) // override for tests
+  .rule(report.error, when.in("packages/core/**")); // override for core
 ```
 
 For an issue in `packages/core/utils_test.ts`:
+
 1. First rule matches → warn
 2. Second rule matches → off
 3. Third rule matches → error
@@ -343,7 +355,12 @@ deno run -A jsr:@hiisi/viola-cli || exit 1
 
 ## Architecture
 
-Viola runs a single tree-sitter engine (WASM) at its core. Grammar packages supply the tree-sitter queries for each language. The crawler parses every matched file once, runs each matching grammar's queries, and merges the captures into one `CodebaseData` structure (functions, types, imports, exports, strings). Linters then run against that shared data, so adding a linter never adds another parse pass.
+Viola runs a single tree-sitter engine (WASM) at its core. Grammar packages
+supply the tree-sitter queries for each language. The crawler parses every
+matched file once, runs each matching grammar's queries, and merges the captures
+into one `CodebaseData` structure (functions, types, imports, exports, strings).
+Linters then run against that shared data, so adding a linter never adds another
+parse pass.
 
 ## Support
 
@@ -355,7 +372,8 @@ on open-source projects like this :)
 
 ## License
 
-> You can check out the full license [here](https://github.com/hiisi-digital/viola/blob/main/LICENSE)
+> You can check out the full license
+> [here](https://github.com/hiisi-digital/viola/blob/main/LICENSE)
 
 This project is licensed under the terms of the **Mozilla Public License 2.0**.
 

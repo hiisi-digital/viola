@@ -258,7 +258,10 @@ export class GrammarRegistry {
    * Extract file extension from path.
    */
   private getExtension(filePath: string): string {
-    const lastSlash = Math.max(filePath.lastIndexOf("/"), filePath.lastIndexOf("\\"));
+    const lastSlash = Math.max(
+      filePath.lastIndexOf("/"),
+      filePath.lastIndexOf("\\"),
+    );
     const filename = lastSlash >= 0 ? filePath.slice(lastSlash + 1) : filePath;
     const dotIndex = filename.lastIndexOf(".");
     return dotIndex >= 0 ? filename.slice(dotIndex) : "";
@@ -269,7 +272,7 @@ export class GrammarRegistry {
    */
   private matchesPatterns(
     filePath: string,
-    patterns: readonly string[]
+    patterns: readonly string[],
   ): boolean {
     for (const pattern of patterns) {
       if (this.matchGlob(pattern, filePath)) {

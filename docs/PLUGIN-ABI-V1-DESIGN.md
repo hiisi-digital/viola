@@ -1,14 +1,17 @@
 # Viola Plugin ABI v1: Design Specification
 
-**Status:** Draft (implementation-targeted)  
-**Audience:** `viola-core` maintainers, plugin authors (`runner`, `grammar`, `lint`), integrators  
-**Primary goal:** Provide a tight, stable, host-loaded plugin ABI that is immediately implementable.
+**Status:** Draft (implementation-targeted)\
+**Audience:** `viola-core` maintainers, plugin authors (`runner`, `grammar`,
+`lint`), integrators\
+**Primary goal:** Provide a tight, stable, host-loaded plugin ABI that is
+immediately implementable.
 
 ---
 
 ## Part I: Normative Specification
 
-This section is normative. Terms like **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are used in the RFC sense.
+This section is normative. Terms like **MUST**, **MUST NOT**, **SHOULD**, and
+**MAY** are used in the RFC sense.
 
 ### 1. Scope
 
@@ -35,13 +38,20 @@ Out of scope for v1:
 
 ### 2. Core invariants
 
-1. **Single host model:** Plugins are loaded and executed by one host process (`viola-core`) in-process.
-2. **Strict load contract:** Every plugin MUST present the same required ABI shape for v1.
-3. **Fail-fast on mismatch:** Invalid or incompatible plugin shape/version MUST fail loading with structured, graceful errors.
-4. **Unified ABI:** Runners, grammars, and lints share one ABI and lifecycle, with role-specific operations.
-5. **Config-driven run:** Host behavior is determined by resolved configuration artifacts.
-6. **Single analysis snapshot:** A configured run scope is processed once by the selected runner pipeline; lints run against that same snapshot.
-7. **Language-agnostic core:** `viola-core` knows roles/contracts, not language internals.
+1. **Single host model:** Plugins are loaded and executed by one host process
+   (`viola-core`) in-process.
+2. **Strict load contract:** Every plugin MUST present the same required ABI
+   shape for v1.
+3. **Fail-fast on mismatch:** Invalid or incompatible plugin shape/version MUST
+   fail loading with structured, graceful errors.
+4. **Unified ABI:** Runners, grammars, and lints share one ABI and lifecycle,
+   with role-specific operations.
+5. **Config-driven run:** Host behavior is determined by resolved configuration
+   artifacts.
+6. **Single analysis snapshot:** A configured run scope is processed once by the
+   selected runner pipeline; lints run against that same snapshot.
+7. **Language-agnostic core:** `viola-core` knows roles/contracts, not language
+   internals.
 
 ---
 
@@ -51,7 +61,8 @@ Out of scope for v1:
 
 - `abi_version`: Plugin ABI compatibility target (semver string)
 - `manifest_version`: Manifest schema version (semver string)
-- `model_version`: Normalized Analysis Model (NAM) schema version (semver string)
+- `model_version`: Normalized Analysis Model (NAM) schema version (semver
+  string)
 
 #### 3.2 Compatibility rules
 
@@ -67,19 +78,25 @@ Out of scope for v1:
 
 #### 4.1 Normative loading form (v1)
 
-Plugins are native dynamic libraries compiled to a strict C-ABI boundary (e.g., Rust `cdylib`):
+Plugins are native dynamic libraries compiled to a strict C-ABI boundary (e.g.,
+Rust `cdylib`):
 
 - macOS: `.dylib`
 - Linux: `.so`
 - Windows: `.dll`
 
-Host discovers plugin artifacts from configured plugin roots and explicit plugin references. The boundary MUST be a stable C-ABI to prevent compiler-version coupling and cross-boundary optimization bleeding.
+Host discovers plugin artifacts from configured plugin roots and explicit plugin
+references. The boundary MUST be a stable C-ABI to prevent compiler-version
+coupling and cross-boundary optimization bleeding.
 
 #### 4.2 Required exported symbol set
 
-Each plugin library MUST export a stable v1 descriptor/provider entrypoint and operation table according to ABI v1.
+Each plugin library MUST export a stable v1 descriptor/provider entrypoint and
+operation table according to ABI v1.
 
-Plugins MUST NOT rely on linker constructor magic (e.g., `.init_array`, `inventory` crate) for registration. Discovery is strictly pull-based: the host actively loads the library and calls the explicit exported symbol.
+Plugins MUST NOT rely on linker constructor magic (e.g., `.init_array`,
+`inventory` crate) for registration. Discovery is strictly pull-based: the host
+actively loads the library and calls the explicit exported symbol.
 
 At minimum, the host MUST be able to resolve:
 
@@ -90,7 +107,8 @@ At minimum, the host MUST be able to resolve:
   - invoke role operation(s)
   - shutdown
 
-> Exact symbol names are implementation-defined but MUST be fixed and documented in the SDK for ABI v1.
+> Exact symbol names are implementation-defined but MUST be fixed and documented
+> in the SDK for ABI v1.
 
 #### 4.3 Load-time validation
 
@@ -107,7 +125,8 @@ If any validation fails:
 
 - Plugin MUST be rejected
 - Error MUST be structured and actionable
-- Host behavior (abort run vs continue without plugin) is config-controlled, defaulting to fail-closed for required plugins
+- Host behavior (abort run vs continue without plugin) is config-controlled,
+  defaulting to fail-closed for required plugins
 
 ---
 
@@ -232,7 +251,9 @@ Canonical persisted config artifact is **TOML**.
 
 #### 8.2 Multi-format authoring
 
-Other authoring surfaces (e.g. TS builder API) are allowed, but MUST compile/emit into the same canonical TOML-equivalent resolved config model before execution.
+Other authoring surfaces (e.g. TS builder API) are allowed, but MUST
+compile/emit into the same canonical TOML-equivalent resolved config model
+before execution.
 
 #### 8.3 Run semantics
 
@@ -277,7 +298,8 @@ NAM is the single stable structure consumed by all lints.
 - Node IDs are unique per document
 - Required fields are never omitted
 - Optional fields follow schema null/omission rules consistently
-- Same input + config MUST produce structurally equivalent NAM (ignoring approved non-semantic metadata fields)
+- Same input + config MUST produce structurally equivalent NAM (ignoring
+  approved non-semantic metadata fields)
 
 Example sketch:
 
@@ -365,7 +387,9 @@ Example:
 
 Determinism rule:
 
-- Diagnostics MUST be sorted by `(path, start_line, start_col, plugin_id, rule_id)` before final host emission.
+- Diagnostics MUST be sorted by
+  `(path, start_line, start_col, plugin_id, rule_id)` before final host
+  emission.
 
 ---
 
@@ -406,7 +430,8 @@ Failure behavior:
 - Host MAY run lint plugins concurrently.
 - Lints MUST treat NAM as immutable input.
 - Runner phase precedes lint phase.
-- v1 does not require incremental protocol support; full configured scope execution is canonical.
+- v1 does not require incremental protocol support; full configured scope
+  execution is canonical.
 
 ---
 
@@ -417,11 +442,15 @@ This section is prescriptive for the current intended architecture profile.
 ### 13. Profile overview
 
 - `viola-core` is the single in-process native host runtime.
-- `viola-cli` is the standard executable that runs `viola-core` and attaches configured plugins.
+- `viola-cli` is the standard executable that runs `viola-core` and attaches
+  configured plugins.
 - Core loads native plugin `cdylib`s (`.dylib/.so/.dll`) using ABI v1.
-- Rust-native plugins integrate directly via ABI v1 SDK, using macro-driven static monomorphization to maintain safe Rust ergonomics over the C-ABI boundary.
+- Rust-native plugins integrate directly via ABI v1 SDK, using macro-driven
+  static monomorphization to maintain safe Rust ergonomics over the C-ABI
+  boundary.
 - TS/Deno ecosystem is integrated through a **Deno bridge plugin**.
-- Packaging is intentionally composable: users/integrators assemble required pieces rather than relying on one package to include everything.
+- Packaging is intentionally composable: users/integrators assemble required
+  pieces rather than relying on one package to include everything.
 
 ---
 
@@ -435,7 +464,8 @@ Instead:
 
 - Provide one native plugin: `viola-plugin-deno-bridge`
 - Bridge is loaded by host via ABI v1
-- Bridge hosts/coordinates TS-side extension model and maps results to NAM/diagnostics contracts
+- Bridge hosts/coordinates TS-side extension model and maps results to
+  NAM/diagnostics contracts
 
 This preserves existing TS ecosystem ergonomics and avoids mass migration.
 
@@ -453,7 +483,8 @@ Role exposure MUST still satisfy same ABI v1 role contracts externally.
 
 ### 15. Runtime and assembly policy
 
-The system is intentionally "bring the pieces together" and supports explicit assembly profiles.
+The system is intentionally "bring the pieces together" and supports explicit
+assembly profiles.
 
 #### 15.1 Canonical execution options
 
@@ -461,22 +492,28 @@ Users/integrators choose one of:
 
 1. Use `viola-cli` on PATH (`viola`) as the host executable.
 2. Embed `viola-core` in their own native app and host plugins directly.
-3. Bundle `viola-cli` with their app and invoke it as the executable host boundary.
+3. Bundle `viola-cli` with their app and invoke it as the executable host
+   boundary.
 
 No single package is required to complete the full loop automatically.
 
 #### 15.2 Deno/TS package policy
 
-The Deno/TS-side `viola` package SHOULD ship bridge plugin dylib artifacts (platform coverage as available) and TS-facing config/builder surfaces.  
+The Deno/TS-side `viola` package SHOULD ship bridge plugin dylib artifacts
+(platform coverage as available) and TS-facing config/builder surfaces.\
 It MUST NOT be required to bundle `viola-core`.
 
 #### 15.3 CLI policy
 
-`viola-cli` SHOULD include `viola-core` and select the correct cross-compiled host binary for the running platform at startup.
+`viola-cli` SHOULD include `viola-core` and select the correct cross-compiled
+host binary for the running platform at startup.
 
 #### 15.4 Rust plugin policy
 
-Rust plugins MUST be compiled as `cdylib` to enforce the optimization and ABI boundary. They implement ABI v1 directly via the Rust SDK (which utilizes procedural macros to generate the required `extern "C"` boilerplate) and do not require the Deno bridge.
+Rust plugins MUST be compiled as `cdylib` to enforce the optimization and ABI
+boundary. They implement ABI v1 directly via the Rust SDK (which utilizes
+procedural macros to generate the required `extern "C"` boilerplate) and do not
+require the Deno bridge.
 
 ---
 
@@ -488,7 +525,8 @@ Rust plugins MUST be compiled as `cdylib` to enforce the optimization and ABI bo
 
 - `viola-core` host runtime (cross-compiled platform artifacts)
 - plugin loader/runtime support
-- optional default plugin profile wiring (e.g. TS bridge attachment by config/profile)
+- optional default plugin profile wiring (e.g. TS bridge attachment by
+  config/profile)
 
 #### 16.2 Deno package distribution
 
@@ -513,10 +551,13 @@ Missing required plugins MUST produce structured fail-closed errors by default.
 ### 17. Config authoring and artifact parity
 
 - TOML is canonical textual config form.
-- TS builder API MUST emit equivalent resolved config model (and/or TOML artifact) consumed identically by host execution.
+- TS builder API MUST emit equivalent resolved config model (and/or TOML
+  artifact) consumed identically by host execution.
 - Rust-first consumers typically author TOML directly.
 - Both paths MUST converge to the same resolved run plan.
-- Docs MUST describe required assembly inputs per execution profile (`viola-cli`, embedded `viola-core`, bundled `viola-cli`) so composition remains explicit and predictable.
+- Docs MUST describe required assembly inputs per execution profile
+  (`viola-cli`, embedded `viola-core`, bundled `viola-cli`) so composition
+  remains explicit and predictable.
 
 ---
 
@@ -527,7 +568,8 @@ Missing required plugins MUST produce structured fail-closed errors by default.
 - Matches requirement: one host loads plugins directly
 - Avoids IPC complexity for v1
 - Enables tight stable load contract with immediate fail-on-mismatch behavior
-- Gives runners direct host-level capability surface within strict ABI boundaries
+- Gives runners direct host-level capability surface within strict ABI
+  boundaries
 
 ### 19. Why unified ABI across roles
 
@@ -540,7 +582,8 @@ Missing required plugins MUST produce structured fail-closed errors by default.
 
 - Supports “run once, lint many” efficiently
 - Keeps lints language-agnostic at consumption boundary
-- Preserves grammar plugin freedom internally while enforcing stable external structure
+- Preserves grammar plugin freedom internally while enforcing stable external
+  structure
 
 ### 21. Why Deno bridge instead of per-TS dylibs
 
@@ -548,25 +591,39 @@ Missing required plugins MUST produce structured fail-closed errors by default.
 - Avoids forcing all TS packages into native build pipelines
 - Concentrates runtime compatibility and mapping logic in one maintained bridge
 - Keeps migration and maintenance costs tractable
-- Allows the `viola` TS package to remain bridge/artifact-focused without bundling core host runtime
+- Allows the `viola` TS package to remain bridge/artifact-focused without
+  bundling core host runtime
 
 ### 22. Why explicit assembly profiles
 
-- Keeps responsibilities clear: `viola-cli`/embedded host runs core; TS package provides bridge-facing ecosystem surface
+- Keeps responsibilities clear: `viola-cli`/embedded host runs core; TS package
+  provides bridge-facing ecosystem surface
 - Avoids hidden packaging coupling between TS package and core host runtime
-- Supports both CLI-first and embedded-host integrators without forcing one distribution style
+- Supports both CLI-first and embedded-host integrators without forcing one
+  distribution style
 - Makes requirements documentable and testable instead of implicit
 
 ### 23. Why `cdylib` and explicit exports instead of `dylib` and `inventory`
 
-- **Rust ABI is unstable:** `dylib` requires host and plugins to be compiled with the exact same compiler version. `cdylib` provides a rock-solid C-ABI boundary.
-- **LLVM Optimization Boundaries:** Compiling as `cdylib` and calling via `dlsym` creates a hard optimization barrier, preventing unfair LLVM devirtualization advantages and tight coupling (proven by `polka-dots` benchmarks).
-- **Linker Magic is fragile:** Global constructors (`.init_array`, `inventory`) fail silently across dynamic boundaries on different OSs. Explicit symbol exports ensure deterministic, pull-based host registration.
+- **Rust ABI is unstable:** `dylib` requires host and plugins to be compiled
+  with the exact same compiler version. `cdylib` provides a rock-solid C-ABI
+  boundary.
+- **LLVM Optimization Boundaries:** Compiling as `cdylib` and calling via
+  `dlsym` creates a hard optimization barrier, preventing unfair LLVM
+  devirtualization advantages and tight coupling (proven by `polka-dots`
+  benchmarks).
+- **Linker Magic is fragile:** Global constructors (`.init_array`, `inventory`)
+  fail silently across dynamic boundaries on different OSs. Explicit symbol
+  exports ensure deterministic, pull-based host registration.
 
 ### 24. How Rust ergonomics are preserved (Macro-driven Monomorphization)
 
-Even though the boundary is strictly C-ABI, plugin authors write idiomatic, safe, generic Rust.
-The `viola-plugin-abi` SDK uses procedural macros (e.g., `#[export_plugin]`) to statically monomorphize the user's generic code at compile time *inside the plugin*. The macro generates the `repr(C)` descriptors and `extern "C"` function wrappers, leaving the user experience clean and `dyn`-free (a pattern proven by the `saalis` architecture).
+Even though the boundary is strictly C-ABI, plugin authors write idiomatic,
+safe, generic Rust. The `viola-plugin-abi` SDK uses procedural macros (e.g.,
+`#[export_plugin]`) to statically monomorphize the user's generic code at
+compile time _inside the plugin_. The macro generates the `repr(C)` descriptors
+and `extern "C"` function wrappers, leaving the user experience clean and
+`dyn`-free (a pattern proven by the `saalis` architecture).
 
 ### 25. Future evolution (informative only)
 
@@ -578,7 +635,8 @@ Possible future additions (not v1 requirements):
 - Incremental NAM computation contracts
 - Extended capability sandbox enforcement
 
-None of these alter the v1 core decision: strict host-loaded in-process ABI with unified role contract.
+None of these alter the v1 core decision: strict host-loaded in-process ABI with
+unified role contract.
 
 ---
 

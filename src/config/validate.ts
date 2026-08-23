@@ -7,10 +7,16 @@
  */
 
 import type { JSONSchema, PluginsDiscoveryResult } from "../types/plugin.ts";
-import type { ValidationError, ValidationResult } from "./types/validate.types.ts";
+import type {
+  ValidationError,
+  ValidationResult,
+} from "./types/validate.types.ts";
 
 // Re-export types for convenience
-export type { ValidationError, ValidationResult } from "./types/validate.types.ts";
+export type {
+  ValidationError,
+  ValidationResult,
+} from "./types/validate.types.ts";
 
 // =============================================================================
 // Schema Validation
@@ -23,14 +29,14 @@ export type { ValidationError, ValidationResult } from "./types/validate.types.t
 function validateValue(
   value: unknown,
   schema: JSONSchema,
-  path: string
+  path: string,
 ): ValidationError[] {
   const errors: ValidationError[] = [];
 
   // Handle oneOf/anyOf/allOf
   if (schema.oneOf) {
     const matches = schema.oneOf.filter(
-      (s) => validateValue(value, s, path).length === 0
+      (s) => validateValue(value, s, path).length === 0,
     );
     if (matches.length !== 1) {
       errors.push({
@@ -44,7 +50,7 @@ function validateValue(
 
   if (schema.anyOf) {
     const matches = schema.anyOf.filter(
-      (s) => validateValue(value, s, path).length === 0
+      (s) => validateValue(value, s, path).length === 0,
     );
     if (matches.length === 0) {
       errors.push({
@@ -80,7 +86,9 @@ function validateValue(
     if (!schema.enum.includes(value)) {
       errors.push({
         path,
-        message: `Must be one of: ${schema.enum.map((e) => JSON.stringify(e)).join(", ")}`,
+        message: `Must be one of: ${
+          schema.enum.map((e) => JSON.stringify(e)).join(", ")
+        }`,
         value,
       });
     }
@@ -111,7 +119,10 @@ function validateValue(
   }
 
   // Object validation
-  if (schema.type === "object" && typeof value === "object" && value !== null && !Array.isArray(value)) {
+  if (
+    schema.type === "object" && typeof value === "object" && value !== null &&
+    !Array.isArray(value)
+  ) {
     const obj = value as Record<string, unknown>;
 
     // Check required properties
@@ -207,7 +218,10 @@ function validateValue(
   }
 
   // Number validation
-  if ((schema.type === "number" || schema.type === "integer") && typeof value === "number") {
+  if (
+    (schema.type === "number" || schema.type === "integer") &&
+    typeof value === "number"
+  ) {
     if (schema.minimum !== undefined && value < schema.minimum) {
       errors.push({
         path,
@@ -251,7 +265,7 @@ function getJsonType(value: unknown): string {
 export function validateLinterConfig(
   linterConfig: Record<string, Record<string, unknown>>,
   discovery: PluginsDiscoveryResult | null,
-  registeredLinterIds: Set<string>
+  registeredLinterIds: Set<string>,
 ): ValidationResult {
   const errors: ValidationError[] = [];
   const warnings: string[] = [];
@@ -261,7 +275,7 @@ export function validateLinterConfig(
     if (!registeredLinterIds.has(linterId)) {
       warnings.push(
         `Unknown linter ID "${linterId}" in config. ` +
-          `This may be a typo or the plugin providing this linter is not loaded.`
+          `This may be a typo or the plugin providing this linter is not loaded.`,
       );
       continue;
     }
@@ -275,7 +289,11 @@ export function validateLinterConfig(
     }
 
     // Validate against schema
-    const schemaErrors = validateValue(config, discoveredSchema.schema, linterId);
+    const schemaErrors = validateValue(
+      config,
+      discoveredSchema.schema,
+      linterId,
+    );
     errors.push(...schemaErrors);
   }
 

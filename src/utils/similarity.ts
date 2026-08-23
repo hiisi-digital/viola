@@ -8,16 +8,16 @@
  */
 
 import type {
-    SimilarityLevel,
-    SimilarityMatch,
-    SimilarityThresholds
+  SimilarityLevel,
+  SimilarityMatch,
+  SimilarityThresholds,
 } from "./types/similarity.types.ts";
 
 // Re-export types for convenience
 export type {
-    SimilarityLevel,
-    SimilarityMatch,
-    SimilarityThresholds
+  SimilarityLevel,
+  SimilarityMatch,
+  SimilarityThresholds,
 } from "./types/similarity.types.ts";
 
 // =============================================================================
@@ -55,7 +55,7 @@ export function levenshteinDistance(a: string, b: string): number {
       currRow[j] = Math.min(
         prevRow[j] + 1, // deletion
         currRow[j - 1] + 1, // insertion
-        prevRow[j - 1] + cost // substitution
+        prevRow[j - 1] + cost, // substitution
       );
     }
 
@@ -95,7 +95,7 @@ export function levenshteinSimilarity(a: string, b: string): number {
  */
 export function jaccardSimilarity<T>(
   a: ReadonlySet<T> | readonly T[],
-  b: ReadonlySet<T> | readonly T[]
+  b: ReadonlySet<T> | readonly T[],
 ): number {
   const setA = a instanceof Set ? a : new Set(a);
   const setB = b instanceof Set ? b : new Set(b);
@@ -125,7 +125,7 @@ export function jaccardSimilarity<T>(
 export function jaccardNGramSimilarity(
   a: string,
   b: string,
-  n: number = 2
+  n: number = 2,
 ): number {
   const ngramsA = getNGrams(a, n);
   const ngramsB = getNGrams(b, n);
@@ -184,8 +184,6 @@ export function tokenSimilarity(a: string, b: string): number {
 // Combined Similarity
 // =============================================================================
 
-
-
 /**
  * Default thresholds for name comparison.
  */
@@ -204,14 +202,12 @@ export const BODY_SIMILARITY_THRESHOLDS: SimilarityThresholds = {
   high: 0.95,
 };
 
-
-
 /**
  * Classify similarity score against thresholds.
  */
 export function classifySimilarity(
   score: number,
-  thresholds: SimilarityThresholds = NAME_SIMILARITY_THRESHOLDS
+  thresholds: SimilarityThresholds = NAME_SIMILARITY_THRESHOLDS,
 ): SimilarityLevel {
   if (score >= 1) return "exact";
   if (score >= thresholds.high) return "high";
@@ -236,7 +232,7 @@ export function combinedSimilarity(
     levenshtein?: number;
     jaccard?: number;
     token?: number;
-  } = { levenshtein: 0.4, jaccard: 0.3, token: 0.3 }
+  } = { levenshtein: 0.4, jaccard: 0.3, token: 0.3 },
 ): number {
   const lev = weights.levenshtein ?? 0;
   const jac = weights.jaccard ?? 0;
@@ -267,7 +263,7 @@ export function combinedSimilarity(
  */
 export function compareIdentifiers(
   a: string,
-  b: string
+  b: string,
 ): {
   similarity: number;
   level: SimilarityLevel;
@@ -302,8 +298,8 @@ export function compareIdentifiers(
   };
 
   // Weight token similarity higher for identifiers
-  const similarity =
-    metrics.levenshtein * 0.3 + metrics.jaccard * 0.2 + metrics.token * 0.5;
+  const similarity = metrics.levenshtein * 0.3 + metrics.jaccard * 0.2 +
+    metrics.token * 0.5;
 
   return {
     similarity,
@@ -327,7 +323,7 @@ export function normalizeCode(
     normalizeWhitespace?: boolean;
     removeStringLiterals?: boolean;
     removeIdentifiers?: boolean;
-  } = {}
+  } = {},
 ): string {
   const {
     removeComments = true,
@@ -375,7 +371,7 @@ export function normalizeCode(
  */
 export function compareCodeBodies(
   a: string,
-  b: string
+  b: string,
 ): {
   similarity: number;
   level: SimilarityLevel;
@@ -417,8 +413,6 @@ export function compareCodeBodies(
 // Batch Comparison
 // =============================================================================
 
-
-
 /**
  * Find similar items in a collection.
  *
@@ -432,7 +426,7 @@ export function findSimilar<T>(
   target: T,
   candidates: readonly T[],
   getName: (item: T) => string,
-  minSimilarity: number = 0.5
+  minSimilarity: number = 0.5,
 ): SimilarityMatch<T>[] {
   const targetName = getName(target);
   const matches: SimilarityMatch<T>[] = [];
@@ -463,7 +457,7 @@ export function findSimilar<T>(
 export function findAllSimilarPairs<T>(
   items: readonly T[],
   getName: (item: T) => string,
-  minSimilarity: number = 0.5
+  minSimilarity: number = 0.5,
 ): Array<{
   a: T;
   b: T;

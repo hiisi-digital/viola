@@ -152,7 +152,7 @@ Deno.test("ViolaBuilder - grammar rules separate from report rules", () => {
     .rule(report.warn, when.in("test/**"));
 
   const config = builder.build();
-  
+
   // Report rules
   assertEquals(config.rules.length, 2);
   assertEquals(config.rules[0]?.action.type, "report");
@@ -196,7 +196,7 @@ Deno.test("ViolaBuilder - add both linters and grammars", () => {
     .add(mockTypeScriptGrammar).as("ts");
 
   const config = builder.build();
-  
+
   // Both should be registered
   assertEquals(config.linters.length, 1);
   assertEquals(config.linters[0]?.meta.id, "test-linter");
@@ -250,17 +250,13 @@ Deno.test("ViolaBuilder - real-world configuration pattern", () => {
     .add(mockTypeScriptGrammar).as("ts")
     .add(mockJavaScriptGrammar).as("js")
     .add(mockBashGrammar).as("bash")
-    
     // TypeScript overrides JavaScript for .ts/.tsx files
     .rule(grammar("ts").overrides("js"), when.in("*.ts", "*.tsx"))
-    
     // TypeScript supplements JavaScript for .js files (JSDoc support)
     .rule(grammar("ts").supplements("js"), when.in("*.js", "*.jsx"))
-    
     // Report rules
     .rule(report.error, when.in("src/**"))
     .rule(report.off, when.in("**/*_test.ts"))
-    
     // Settings
     .set("similar-functions.threshold", 0.85)
     .build();
@@ -330,7 +326,7 @@ Deno.test("viola() - creates new builder instance", () => {
 
   // Should be different instances
   builder1.add(mockTypeScriptGrammar).as("ts");
-  
+
   assertEquals(builder1.grammars.has("ts"), true);
   assertEquals(builder2.grammars.has("ts"), false);
 });

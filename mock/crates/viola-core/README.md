@@ -4,11 +4,13 @@ Status: placeholder (design-first, implementation pending)
 
 ## Purpose
 
-`viola-core` is the native **host runtime** crate for Viola’s plugin architecture.
+`viola-core` is the native **host runtime** crate for Viola’s plugin
+architecture.
 
 It is responsible for:
 
-- loading ABI-conforming native plugins (as strict `cdylib` binaries) in-process via explicit symbol extraction
+- loading ABI-conforming native plugins (as strict `cdylib` binaries) in-process
+  via explicit symbol extraction
 - validating plugin compatibility and required shape at load time
 - orchestrating the config-driven execution lifecycle
 - running configured runner pipelines once per scope
@@ -21,7 +23,8 @@ This crate is the host/orchestration layer, not the ABI definition crate.
 
 Planned responsibilities include:
 
-- plugin discovery integration from resolved config (pull-based, no `inventory`/linker magic)
+- plugin discovery integration from resolved config (pull-based, no
+  `inventory`/linker magic)
 - plugin loading/linking integration (enforcing `cdylib` optimization barriers)
 - strict load-time ABI validation
 - plugin lifecycle management (`initialize`, role invocation, `shutdown`)
@@ -43,7 +46,8 @@ Planned responsibilities include:
 
 ## Contract relationship
 
-`viola-core` depends on `viola-plugin-abi` for the stable plugin contract surface.
+`viola-core` depends on `viola-plugin-abi` for the stable plugin contract
+surface.
 
 Expected direction:
 

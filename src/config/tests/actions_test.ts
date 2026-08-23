@@ -88,7 +88,7 @@ Deno.test("all ReportLevel values have corresponding report action", () => {
     assertEquals(
       reportLevels.includes(level),
       true,
-      `Missing report action for level ${level}`
+      `Missing report action for level ${level}`,
     );
   }
 });

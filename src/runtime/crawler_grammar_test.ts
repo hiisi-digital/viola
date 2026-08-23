@@ -112,7 +112,9 @@ async function createTestFixture(): Promise<string> {
   await Deno.mkdir(srcDir);
 
   // File with export async function: the bug we're fixing
-  await Deno.writeTextFile(`${srcDir}/async-exports.ts`, `
+  await Deno.writeTextFile(
+    `${srcDir}/async-exports.ts`,
+    `
 export async function fetchData(url: string): Promise<string> {
   return await fetch(url).then(r => r.text());
 }
@@ -132,17 +134,21 @@ export abstract class BaseHandler {
 }
 
 export const MY_CONST = "hello";
-`);
+`,
+  );
 
   // File with imports
-  await Deno.writeTextFile(`${srcDir}/imports.ts`, `
+  await Deno.writeTextFile(
+    `${srcDir}/imports.ts`,
+    `
 import { fetchData } from "./async-exports.ts";
 import type { Config } from "./types.ts";
 
 export function main(): void {
   console.log("hello");
 }
-`);
+`,
+  );
 
   return tmpDir;
 }
@@ -175,18 +181,46 @@ Deno.test("crawler with grammar registry - extracts async function exports corre
     const data = await crawlCodebase(config, registry);
 
     // Find the async-exports file
-    const asyncFile = data.files.find(f => f.path.includes("async-exports"));
+    const asyncFile = data.files.find((f) => f.path.includes("async-exports"));
     assertExists(asyncFile, "Should find async-exports.ts");
 
     // Check that exports have correct names (not "async" or "abstract")
-    const exportNames = asyncFile.exports.map(e => e.name);
-    assertEquals(exportNames.includes("async"), false, "Should not export 'async' as a name");
-    assertEquals(exportNames.includes("abstract"), false, "Should not export 'abstract' as a name");
-    assertEquals(exportNames.includes("fetchData"), true, "Should export 'fetchData'");
-    assertEquals(exportNames.includes("processItems"), true, "Should export 'processItems'");
-    assertEquals(exportNames.includes("syncFunction"), true, "Should export 'syncFunction'");
-    assertEquals(exportNames.includes("BaseHandler"), true, "Should export 'BaseHandler'");
-    assertEquals(exportNames.includes("MY_CONST"), true, "Should export 'MY_CONST'");
+    const exportNames = asyncFile.exports.map((e) => e.name);
+    assertEquals(
+      exportNames.includes("async"),
+      false,
+      "Should not export 'async' as a name",
+    );
+    assertEquals(
+      exportNames.includes("abstract"),
+      false,
+      "Should not export 'abstract' as a name",
+    );
+    assertEquals(
+      exportNames.includes("fetchData"),
+      true,
+      "Should export 'fetchData'",
+    );
+    assertEquals(
+      exportNames.includes("processItems"),
+      true,
+      "Should export 'processItems'",
+    );
+    assertEquals(
+      exportNames.includes("syncFunction"),
+      true,
+      "Should export 'syncFunction'",
+    );
+    assertEquals(
+      exportNames.includes("BaseHandler"),
+      true,
+      "Should export 'BaseHandler'",
+    );
+    assertEquals(
+      exportNames.includes("MY_CONST"),
+      true,
+      "Should export 'MY_CONST'",
+    );
   } finally {
     await cleanupFixture(tmpDir);
   }

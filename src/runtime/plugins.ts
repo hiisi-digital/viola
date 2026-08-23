@@ -14,20 +14,26 @@ import type { BaseLinter } from "../linters/base.ts";
 import { isLinter } from "../linters/base.ts";
 import { registry } from "../linters/registry.ts";
 import type {
-    DiscoveredBundle,
-    DiscoveredPreset,
-    DiscoveredSchema,
-    JSONSchema,
-    PluginDiscoveryResult,
-    PluginsDiscoveryResult,
-    ViolaConfigPreset,
+  DiscoveredBundle,
+  DiscoveredPreset,
+  DiscoveredSchema,
+  JSONSchema,
+  PluginDiscoveryResult,
+  PluginsDiscoveryResult,
+  ViolaConfigPreset,
 } from "../types/plugin.ts";
 import { derivePluginName, qualifiedName } from "../types/plugin.ts";
 
 // Re-export types for convenience
-export type { PluginLoadResult, PluginsLoadResult } from "./types/plugins.types.ts";
+export type {
+  PluginLoadResult,
+  PluginsLoadResult,
+} from "./types/plugins.types.ts";
 
-import type { PluginLoadResult, PluginsLoadResult } from "./types/plugins.types.ts";
+import type {
+  PluginLoadResult,
+  PluginsLoadResult,
+} from "./types/plugins.types.ts";
 
 // =============================================================================
 // Discovery Functions
@@ -64,7 +70,9 @@ function discoverLinters(exports: Record<string, unknown>): BaseLinter[] {
   // Check all named exports
   for (const [key, value] of Object.entries(exports)) {
     if (key === "linters" || key === "default") continue;
-    if (key === "bundles" || key === "configPresets" || key === "schemas") continue;
+    if (key === "bundles" || key === "configPresets" || key === "schemas") {
+      continue;
+    }
 
     if (isLinter(value)) {
       addLinter(value);
@@ -94,13 +102,20 @@ function discoverLinters(exports: Record<string, unknown>): BaseLinter[] {
  */
 function discoverBundles(
   exports: Record<string, unknown>,
-  pluginName: string
+  pluginName: string,
 ): DiscoveredBundle[] {
   const bundles: DiscoveredBundle[] = [];
 
   const bundlesExport = exports.bundles;
-  if (bundlesExport && typeof bundlesExport === "object" && !Array.isArray(bundlesExport)) {
-    for (const [name, linters] of Object.entries(bundlesExport as Record<string, unknown>)) {
+  if (
+    bundlesExport && typeof bundlesExport === "object" &&
+    !Array.isArray(bundlesExport)
+  ) {
+    for (
+      const [name, linters] of Object.entries(
+        bundlesExport as Record<string, unknown>,
+      )
+    ) {
       if (!Array.isArray(linters)) continue;
 
       const validLinters: BaseLinter[] = [];
@@ -137,7 +152,10 @@ function isConfigPreset(value: unknown): value is ViolaConfigPreset {
     if (typeof key !== "string") return false;
 
     // Values should be objects (scope configs)
-    if (!scopeConfig || typeof scopeConfig !== "object" || Array.isArray(scopeConfig)) {
+    if (
+      !scopeConfig || typeof scopeConfig !== "object" ||
+      Array.isArray(scopeConfig)
+    ) {
       return false;
     }
   }
@@ -150,13 +168,20 @@ function isConfigPreset(value: unknown): value is ViolaConfigPreset {
  */
 function discoverPresets(
   exports: Record<string, unknown>,
-  pluginName: string
+  pluginName: string,
 ): DiscoveredPreset[] {
   const presets: DiscoveredPreset[] = [];
 
   const presetsExport = exports.configPresets;
-  if (presetsExport && typeof presetsExport === "object" && !Array.isArray(presetsExport)) {
-    for (const [name, config] of Object.entries(presetsExport as Record<string, unknown>)) {
+  if (
+    presetsExport && typeof presetsExport === "object" &&
+    !Array.isArray(presetsExport)
+  ) {
+    for (
+      const [name, config] of Object.entries(
+        presetsExport as Record<string, unknown>,
+      )
+    ) {
       if (isConfigPreset(config)) {
         presets.push({
           name,
@@ -198,13 +223,20 @@ function isJSONSchema(value: unknown): value is JSONSchema {
  */
 function discoverSchemas(
   exports: Record<string, unknown>,
-  pluginName: string
+  pluginName: string,
 ): DiscoveredSchema[] {
   const schemas: DiscoveredSchema[] = [];
 
   const schemasExport = exports.schemas;
-  if (schemasExport && typeof schemasExport === "object" && !Array.isArray(schemasExport)) {
-    for (const [linterId, schema] of Object.entries(schemasExport as Record<string, unknown>)) {
+  if (
+    schemasExport && typeof schemasExport === "object" &&
+    !Array.isArray(schemasExport)
+  ) {
+    for (
+      const [linterId, schema] of Object.entries(
+        schemasExport as Record<string, unknown>,
+      )
+    ) {
       if (isJSONSchema(schema)) {
         schemas.push({
           linterId,
@@ -225,7 +257,9 @@ function discoverSchemas(
 /**
  * Load a single plugin module and discover all its exports.
  */
-export async function discoverPlugin(specifier: string): Promise<PluginDiscoveryResult> {
+export async function discoverPlugin(
+  specifier: string,
+): Promise<PluginDiscoveryResult> {
   const pluginName = derivePluginName(specifier);
 
   try {
@@ -265,7 +299,7 @@ export async function discoverPlugin(specifier: string): Promise<PluginDiscovery
  */
 export async function discoverPlugins(
   specifiers: string[],
-  options: { verbose?: boolean; parallel?: boolean } = {}
+  options: { verbose?: boolean; parallel?: boolean } = {},
 ): Promise<PluginsDiscoveryResult> {
   const results: PluginDiscoveryResult[] = [];
 
@@ -376,7 +410,9 @@ export async function discoverPlugins(
 /**
  * Register all discovered linters with the global registry.
  */
-export function registerDiscoveredLinters(discovery: PluginsDiscoveryResult): string[] {
+export function registerDiscoveredLinters(
+  discovery: PluginsDiscoveryResult,
+): string[] {
   const registeredIds: string[] = [];
 
   for (const linter of discovery.allLinters) {
@@ -441,7 +477,7 @@ export async function loadPlugin(specifier: string): Promise<PluginLoadResult> {
  */
 export async function loadPlugins(
   specifiers: string[],
-  options: { verbose?: boolean; parallel?: boolean } = {}
+  options: { verbose?: boolean; parallel?: boolean } = {},
 ): Promise<PluginsLoadResult> {
   const results: PluginLoadResult[] = [];
 
@@ -459,7 +495,11 @@ export async function loadPlugins(
 
       if (options.verbose) {
         if (result.success) {
-          console.log(`  Registered ${result.linters.length} linter(s): ${result.linters.join(", ")}`);
+          console.log(
+            `  Registered ${result.linters.length} linter(s): ${
+              result.linters.join(", ")
+            }`,
+          );
         } else {
           console.log(`  Failed: ${result.error}`);
         }
@@ -490,7 +530,7 @@ export async function loadPlugins(
  */
 export function resolveBundle(
   name: string,
-  discovery: PluginsDiscoveryResult
+  discovery: PluginsDiscoveryResult,
 ): DiscoveredBundle | null {
   // Check if it's a qualified name
   if (name.includes("/")) {
@@ -521,7 +561,7 @@ export function resolveBundle(
  */
 export function resolvePreset(
   name: string,
-  discovery: PluginsDiscoveryResult
+  discovery: PluginsDiscoveryResult,
 ): DiscoveredPreset | null {
   // Check if it's a qualified name
   if (name.includes("/")) {

@@ -10,26 +10,26 @@
 import { deepFreeze, type Frozen } from "@hiisi/flash-freeze";
 import { Category, Impact } from "./enums.ts";
 import type {
-    CategoryCondition,
-    Condition,
-    ConfidenceCondition,
-    FileCondition,
-    ImpactCondition,
-    LinterCondition,
+  CategoryCondition,
+  Condition,
+  ConfidenceCondition,
+  FileCondition,
+  ImpactCondition,
+  LinterCondition,
 } from "./types/conditions.types.ts";
 
 // Re-export types for convenience
 export type {
-    BaseCondition,
-    CategoryCondition,
-    CompoundCondition,
-    Condition,
-    ConditionOperator,
-    ConfidenceCondition,
-    FileCondition,
-    ImpactCondition,
-    LinterCondition,
-    NotCondition
+  BaseCondition,
+  CategoryCondition,
+  CompoundCondition,
+  Condition,
+  ConditionOperator,
+  ConfidenceCondition,
+  FileCondition,
+  ImpactCondition,
+  LinterCondition,
+  NotCondition,
 } from "./types/conditions.types.ts";
 
 // =============================================================================
@@ -86,7 +86,7 @@ export class ConditionExpr {
  */
 function impactCond(
   operator: ImpactCondition["operator"],
-  value: Impact
+  value: Impact,
 ): ConditionExpr {
   return new ConditionExpr(deepFreeze({
     type: "impact" as const,
@@ -100,7 +100,7 @@ function impactCond(
  */
 function categoryCond(
   include?: Category[],
-  exclude?: Category[]
+  exclude?: Category[],
 ): ConditionExpr {
   return new ConditionExpr(deepFreeze({
     type: "category" as const,
@@ -191,7 +191,8 @@ const categoryBuilder: Frozen<CategoryConditions> = deepFreeze({
   /** Category in list */
   in: (...values: Category[]): ConditionExpr => categoryCond(values, undefined),
   /** Category not in list */
-  notIn: (...values: Category[]): ConditionExpr => categoryCond(undefined, values),
+  notIn: (...values: Category[]): ConditionExpr =>
+    categoryCond(undefined, values),
 });
 
 /**
@@ -210,7 +211,8 @@ const confidenceBuilder: Frozen<ConfidenceConditions> = deepFreeze({
   /** Confidence < value */
   below: (value: number): ConditionExpr => confidenceCond(undefined, value),
   /** Confidence in range [min, max] */
-  between: (min: number, max: number): ConditionExpr => confidenceCond(min, max),
+  between: (min: number, max: number): ConditionExpr =>
+    confidenceCond(min, max),
 });
 
 // =============================================================================
@@ -293,7 +295,7 @@ export const when: Frozen<Conditions> = deepFreeze({
     return new ConditionExpr(deepFreeze({
       type: "compound" as const,
       operator: "and" as const,
-      conditions: conditions.map(c => c.condition),
+      conditions: conditions.map((c) => c.condition),
     }));
   },
 
@@ -311,7 +313,7 @@ export const when: Frozen<Conditions> = deepFreeze({
     return new ConditionExpr(deepFreeze({
       type: "compound" as const,
       operator: "or" as const,
-      conditions: conditions.map(c => c.condition),
+      conditions: conditions.map((c) => c.condition),
     }));
   },
 });
@@ -358,13 +360,17 @@ export function isConfidenceCondition(c: Condition): c is ConfidenceCondition {
 /**
  * Check if a condition is a compound (AND/OR) condition.
  */
-export function isCompoundCondition(c: Condition): c is import("./types/conditions.types.ts").CompoundCondition {
+export function isCompoundCondition(
+  c: Condition,
+): c is import("./types/conditions.types.ts").CompoundCondition {
   return c.type === "compound";
 }
 
 /**
  * Check if a condition is a NOT condition.
  */
-export function isNotCondition(c: Condition): c is import("./types/conditions.types.ts").NotCondition {
+export function isNotCondition(
+  c: Condition,
+): c is import("./types/conditions.types.ts").NotCondition {
   return c.type === "not";
 }

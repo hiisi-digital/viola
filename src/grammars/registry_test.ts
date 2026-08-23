@@ -262,7 +262,7 @@ Deno.test("GrammarRegistry - handles paths with different separators", () => {
 
   // Windows-style path (though we normalize to /)
   const winMatches = registry.findMatchingGrammars(
-    "src\\components\\Button.ts"
+    "src\\components\\Button.ts",
   );
   assertEquals(winMatches.length, 1);
 });

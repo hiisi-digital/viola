@@ -14,7 +14,9 @@ import { always, never, when } from "./when.ts";
 // Test Helpers
 // =============================================================================
 
-function makeContext(overrides: Partial<EvaluationContext> = {}): EvaluationContext {
+function makeContext(
+  overrides: Partial<EvaluationContext> = {},
+): EvaluationContext {
   return {
     projectRoot: "/project",
     env: {},
@@ -22,7 +24,11 @@ function makeContext(overrides: Partial<EvaluationContext> = {}): EvaluationCont
   };
 }
 
-function makeFileContext(path: string, extension = ".ts", grammarId = "typescript") {
+function makeFileContext(
+  path: string,
+  extension = ".ts",
+  grammarId = "typescript",
+) {
   return makeContext({
     file: { path, extension, grammarId },
   });
@@ -33,7 +39,7 @@ function makeIssueContext(
   impact: Impact,
   confidence: number,
   category = Category.Maintainability,
-  kind = "issue"
+  kind = "issue",
 ) {
   return makeContext({
     issue: {
@@ -93,11 +99,11 @@ Deno.test("when.issue.by - matches by string ID", () => {
   const cond = when.issue.by("similar-functions");
   assertEquals(
     cond.evaluate(makeIssueContext("similar-functions", Impact.Major, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("duplicate-strings", Impact.Major, 80)),
-    false
+    false,
   );
 });
 
@@ -106,7 +112,7 @@ Deno.test("when.issue.by - matches by object with id", () => {
   const cond = when.issue.by(linter);
   assertEquals(
     cond.evaluate(makeIssueContext("similar-functions", Impact.Major, 80)),
-    true
+    true,
   );
 });
 
@@ -115,7 +121,7 @@ Deno.test("when.issue.by - matches by object with meta.id", () => {
   const cond = when.issue.by(linter);
   assertEquals(
     cond.evaluate(makeIssueContext("similar-functions", Impact.Major, 80)),
-    true
+    true,
   );
 });
 
@@ -166,15 +172,15 @@ Deno.test("when.issue.impact - matches with atLeast", () => {
   const cond = when.issue.impact(atLeast(Impact.Major));
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Critical, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Minor, 80)),
-    false
+    false,
   );
 });
 
@@ -182,11 +188,11 @@ Deno.test("when.issue.impact - matches with equals", () => {
   const cond = when.issue.impact(equals(Impact.Major));
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Critical, 80)),
-    false
+    false,
   );
 });
 
@@ -194,15 +200,15 @@ Deno.test("when.issue.impact - matches with oneOf", () => {
   const cond = when.issue.impact(oneOf(Impact.Minor, Impact.Major));
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Minor, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Critical, 80)),
-    false
+    false,
   );
 });
 
@@ -214,15 +220,15 @@ Deno.test("when.issue.confidence - matches with atLeast", () => {
   const cond = when.issue.confidence(atLeast(80));
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 80)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 90)),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeIssueContext("test", Impact.Major, 79)),
-    false
+    false,
   );
 });
 
@@ -233,12 +239,16 @@ Deno.test("when.issue.confidence - matches with atLeast", () => {
 Deno.test("when.issue.category - matches category", () => {
   const cond = when.issue.category(equals(Category.Security));
   assertEquals(
-    cond.evaluate(makeIssueContext("test", Impact.Major, 80, Category.Security)),
-    true
+    cond.evaluate(
+      makeIssueContext("test", Impact.Major, 80, Category.Security),
+    ),
+    true,
   );
   assertEquals(
-    cond.evaluate(makeIssueContext("test", Impact.Major, 80, Category.Maintainability)),
-    false
+    cond.evaluate(
+      makeIssueContext("test", Impact.Major, 80, Category.Maintainability),
+    ),
+    false,
   );
 });
 
@@ -258,11 +268,11 @@ Deno.test("when.env().is() - string comparison", () => {
   const cond = when.env("NODE_ENV").is(equals("production"));
   assertEquals(
     cond.evaluate(makeContext({ env: { NODE_ENV: "production" } })),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeContext({ env: { NODE_ENV: "development" } })),
-    false
+    false,
   );
   assertEquals(cond.evaluate(makeContext({ env: {} })), false);
 });
@@ -271,15 +281,15 @@ Deno.test("when.env().is() - numeric comparison", () => {
   const cond = when.env("TIMEOUT").is(atLeast(30));
   assertEquals(
     cond.evaluate(makeContext({ env: { TIMEOUT: "30" } })),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeContext({ env: { TIMEOUT: "60" } })),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeContext({ env: { TIMEOUT: "10" } })),
-    false
+    false,
   );
 });
 
@@ -287,15 +297,15 @@ Deno.test("when.env().is() - oneOf comparison", () => {
   const cond = when.env("LOG_LEVEL").is(oneOf("debug", "trace"));
   assertEquals(
     cond.evaluate(makeContext({ env: { LOG_LEVEL: "debug" } })),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeContext({ env: { LOG_LEVEL: "trace" } })),
-    true
+    true,
   );
   assertEquals(
     cond.evaluate(makeContext({ env: { LOG_LEVEL: "info" } })),
-    false
+    false,
   );
 });
 
@@ -425,7 +435,9 @@ Deno.test("never - always returns false", () => {
 
 Deno.test("scenario: CI-specific strict mode", () => {
   // In CI, treat minor issues as errors
-  const cond = when.env("CI").exists().and(when.issue.impact(atLeast(Impact.Minor)));
+  const cond = when.env("CI").exists().and(
+    when.issue.impact(atLeast(Impact.Minor)),
+  );
 
   const ciMinorIssue = makeContext({
     env: { CI: "true" },

@@ -9,11 +9,11 @@ import { assertEquals, assertExists } from "@std/assert";
 import type { Condition, EvaluationContext } from "../conditions/types.ts";
 import { GrammarRegistry } from "./registry.ts";
 import {
-    createGrammarResolver,
-    GrammarResolver,
-    mergeExtractionResults,
-    type GrammarRelationshipRule,
-    type GrammarRole,
+  createGrammarResolver,
+  type GrammarRelationshipRule,
+  GrammarResolver,
+  type GrammarRole,
+  mergeExtractionResults,
 } from "./resolver.ts";
 import type { GrammarDefinition } from "./types.ts";
 
@@ -75,8 +75,10 @@ const mockBashGrammar: GrammarDefinition = {
 function mockCondition(result: boolean): Condition {
   return {
     evaluate: () => result,
-    and: (other) => mockCondition(result && other.evaluate({} as EvaluationContext)),
-    or: (other) => mockCondition(result || other.evaluate({} as EvaluationContext)),
+    and: (other) =>
+      mockCondition(result && other.evaluate({} as EvaluationContext)),
+    or: (other) =>
+      mockCondition(result || other.evaluate({} as EvaluationContext)),
     not: () => mockCondition(!result),
   };
 }
@@ -93,7 +95,8 @@ function extensionCondition(...exts: string[]): Condition {
     and: function (other) {
       const self = this;
       return {
-        evaluate: (ctx: EvaluationContext) => self.evaluate(ctx) && other.evaluate(ctx),
+        evaluate: (ctx: EvaluationContext) =>
+          self.evaluate(ctx) && other.evaluate(ctx),
         and: self.and,
         or: self.or,
         not: self.not,
@@ -102,7 +105,8 @@ function extensionCondition(...exts: string[]): Condition {
     or: function (other) {
       const self = this;
       return {
-        evaluate: (ctx: EvaluationContext) => self.evaluate(ctx) || other.evaluate(ctx),
+        evaluate: (ctx: EvaluationContext) =>
+          self.evaluate(ctx) || other.evaluate(ctx),
         and: self.and,
         or: self.or,
         not: self.not,
@@ -124,7 +128,9 @@ function extensionCondition(...exts: string[]): Condition {
  * Create an evaluation context for a file.
  */
 function createContext(filePath: string): EvaluationContext {
-  const ext = filePath.includes(".") ? filePath.slice(filePath.lastIndexOf(".")) : "";
+  const ext = filePath.includes(".")
+    ? filePath.slice(filePath.lastIndexOf("."))
+    : "";
   return {
     file: {
       path: filePath,

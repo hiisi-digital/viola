@@ -156,7 +156,8 @@ for (const parallel of [false, true]) {
     registry.register(new NowLinter());
 
     const results = await runLinters(EMPTY_DATA, { parallel, registry });
-    const kinds = results.results.flatMap((r) => r.issues.map((i) => i.kind)).sort();
+    const kinds = results.results.flatMap((r) => r.issues.map((i) => i.kind))
+      .sort();
 
     assertEquals(kinds, ["later/found", "now/found"]);
   });

@@ -71,7 +71,10 @@ export function combineHashes(...hashes: string[]): string {
  * @param normalize - Whether to normalize whitespace
  * @returns Hash of content
  */
-export function hashContent(content: string, normalize: boolean = true): string {
+export function hashContent(
+  content: string,
+  normalize: boolean = true,
+): string {
   let processed = content;
 
   if (normalize) {
@@ -168,7 +171,7 @@ export function createFingerprint(code: string): CodeFingerprint {
  */
 export function fingerprintsMightMatch(
   a: CodeFingerprint,
-  b: CodeFingerprint
+  b: CodeFingerprint,
 ): boolean {
   // Exact structural match is a strong signal
   if (a.structural === b.structural) return true;
@@ -177,7 +180,8 @@ export function fingerprintsMightMatch(
   if (a.normalized === b.normalized) return true;
 
   // Similar length (within 20%)
-  const lengthRatio = Math.min(a.length, b.length) / Math.max(a.length, b.length);
+  const lengthRatio = Math.min(a.length, b.length) /
+    Math.max(a.length, b.length);
   if (lengthRatio < 0.8) return false;
 
   // Similar line count (within 2 lines or 20%)
@@ -202,7 +206,7 @@ export function fingerprintsMightMatch(
  */
 export function groupByHash<T>(
   items: readonly T[],
-  getContent: (item: T) => string
+  getContent: (item: T) => string,
 ): Map<string, T[]> {
   const groups = new Map<string, T[]>();
 
@@ -228,7 +232,7 @@ export function groupByHash<T>(
  */
 export function findExactDuplicates<T>(
   items: readonly T[],
-  getContent: (item: T) => string
+  getContent: (item: T) => string,
 ): T[][] {
   const groups = groupByHash(items, getContent);
   return Array.from(groups.values()).filter((group) => group.length > 1);
@@ -244,7 +248,7 @@ export function findExactDuplicates<T>(
  */
 export function groupByStructure<T>(
   items: readonly T[],
-  getCode: (item: T) => string
+  getCode: (item: T) => string,
 ): Map<string, T[]> {
   const groups = new Map<string, T[]>();
 

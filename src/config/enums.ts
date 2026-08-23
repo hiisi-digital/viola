@@ -6,7 +6,7 @@
 
 /**
  * Impact level of an issue - how urgent it is.
- * 
+ *
  * Order: Critical > Major > Minor > Trivial
  */
 export enum Impact {
