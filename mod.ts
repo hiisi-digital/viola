@@ -565,6 +565,36 @@ export async function runProject(
   options: ProjectRunOptions = {},
 ): Promise<number> {
   const { options: runOptions } = await resolveRun(options);
+
+  // No linters is not a clean project either. A config that registered none,
+  // or none this cli could load, checks nothing and would otherwise report
+  // "All clear" for the same reason a zero-file run does.
+  const configured = (runOptions.rules?.length ?? 0) > 0 ||
+    (runOptions.catalogs?.size ?? 0) > 0 ||
+    (runOptions.plugins?.length ?? 0) > 0;
+  if (!configured && options.allowEmpty !== true) {
+    console.error(
+      "Refusing to pass: no plugins configured, so nothing would be checked.\n" +
+        "\n" +
+        "  Create a viola.config.ts naming what to run:\n" +
+        "\n" +
+        '    import defaultLints from "@hiisi/viola-default-lints";\n' +
+        '    import typescript from "@hiisi/viola-grammar-ts";\n' +
+        '    import { report, viola, when } from "@hiisi/viola";\n' +
+        "\n" +
+        "    export default viola()\n" +
+        "      .use(defaultLints)\n" +
+        "      .add(typescript)\n" +
+        "      .rule(report.error, when.confidence.atLeast(1));\n" +
+        "\n" +
+        "  A grammar is not optional: without one viola reads nothing and\n" +
+        "  reports nothing, which looks exactly like a clean project.\n" +
+        "\n" +
+        "  Pass `allowEmpty` if a project really has nothing to check yet.",
+    );
+    return 1;
+  }
+
   const results = await runViola(runOptions);
   console.log(formatResults(results));
 
