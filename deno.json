@@ -1,6 +1,6 @@
 {
   "name": "@hiisi/viola",
-  "version": "0.3.0-alpha.5",
+  "version": "0.3.0-alpha.6",
   "description": "Language-agnostic convention linter runtime. Plugin-based, zero opinions.",
   "exports": {
     ".": "./mod.ts",

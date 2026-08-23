@@ -468,6 +468,36 @@ function extractTypes(
  * console.log(`Found ${data.functions.length} functions`);
  * ```
  */
+/**
+ * Whether a string literal sits in a type rather than in code.
+ *
+ * `Pick<Target, "runtime" | "platform" | "architecture">` holds three string
+ * literals that tree-sitter reports as ordinary strings, so duplicate-strings
+ * counted them and advised extracting them to a constant. A `Pick` needs
+ * literal types and cannot take one, so the advice could not be followed.
+ *
+ * A type-position literal is not a string the program ever holds. It is part
+ * of a type's spelling, and deduplicating it is a different question with a
+ * different answer.
+ */
+function inTypePosition(node: SyntaxNode | undefined): boolean {
+  let at: SyntaxNode | null | undefined = node;
+  while (at) {
+    if (
+      at.type === "type_annotation" ||
+      at.type === "type_arguments" ||
+      at.type === "type_alias_declaration" ||
+      at.type === "literal_type" ||
+      at.type === "union_type" ||
+      at.type === "interface_declaration"
+    ) {
+      return true;
+    }
+    at = at.parent;
+  }
+  return false;
+}
+
 export function extractFileData(
   tree: Tree,
   language: Language,
