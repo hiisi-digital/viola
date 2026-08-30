@@ -6,6 +6,7 @@ mockspace_branch = "dev"
 project_name = "viola"
 crate_prefix = "viola"
 abi_version = 1
+mock_dir = "mock"
 
 proc_macro_crates = []
 module_crates = []
