@@ -3,17 +3,9 @@
 version = 4
 
 [[package]]
-name = "aho-corasick"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ddd31a130427c27518df266943a5308ed92d4b226cc639f5a8f1002816174301"
-dependencies = [
- "memchr",
-]
-
-[[package]]
 name = "arvo"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-bits",
  "arvo-bits-contracts",
@@ -21,191 +13,160 @@ dependencies = [
  "arvo-storage",
  "arvo-strategy",
  "arvo-transparent",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-bitmask"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
  "arvo-bits",
  "arvo-bits-contracts",
  "arvo-mask-contracts",
  "arvo-tensor",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
 name = "arvo-bits"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-bits-contracts",
  "arvo-storage",
  "arvo-strategy",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
 name = "arvo-bits-contracts"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-storage",
  "arvo-strategy",
  "arvo-transparent",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-comb"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
  "arvo-bitmask",
  "arvo-tensor",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
 name = "arvo-graph"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
  "arvo-bitmask",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+ "arvo-bits-contracts",
+ "arvo-tensor",
 ]
 
 [[package]]
 name = "arvo-mask-contracts"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-bits-contracts",
  "arvo-storage",
  "arvo-strategy",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-numeric-contracts"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-bits-contracts",
  "arvo-storage",
  "arvo-strategy",
  "arvo-transparent",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-refit"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-bitmask",
  "arvo-bits-contracts",
  "arvo-mask-contracts",
  "arvo-storage",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-sparse"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
  "arvo-bitmask",
  "arvo-bits-contracts",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
+ "arvo-tensor",
  "notko",
 ]
 
 [[package]]
 name = "arvo-spectral"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
  "arvo-bitmask",
  "arvo-sparse",
  "arvo-tensor",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
 name = "arvo-storage"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-strategy",
  "arvo-transparent",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-strategy"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo-transparent",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
 name = "arvo-tensor"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
  "arvo",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
 ]
 
 [[package]]
 name = "arvo-transparent"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/arvo.git?branch=dev#1b2796e92ad2b8176c2177d72a9cffa161b7b92e"
 dependencies = [
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
 [[package]]
-name = "cc"
-version = "1.2.62"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1dce859f0832a7d088c4f1119888ab94ef4b5d6795d1ce05afb7fe159d79f98"
-dependencies = [
- "find-msvc-tools",
- "shlex",
-]
-
-[[package]]
-name = "cfg-if"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
-
-[[package]]
-name = "equivalent"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
-
-[[package]]
-name = "find-msvc-tools"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5baebc0774151f905a1a2cc41989300b1e6fbb29aff0ceffa1064fdd3088d582"
-
-[[package]]
-name = "hashbrown"
-version = "0.17.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
-
-[[package]]
 name = "hilavitkutin"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "arvo",
  "arvo-bitmask",
@@ -213,43 +174,45 @@ dependencies = [
  "arvo-graph",
  "arvo-sparse",
  "arvo-spectral",
+ "arvo-tensor",
  "hilavitkutin-api",
  "hilavitkutin-kit",
  "libc",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "notko",
 ]
 
 [[package]]
 name = "hilavitkutin-api"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "arvo",
  "arvo-bitmask",
+ "arvo-tensor",
  "hilavitkutin-ctx",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "notko",
 ]
 
 [[package]]
 name = "hilavitkutin-ctx"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 
 [[package]]
 name = "hilavitkutin-extensions"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "arvo",
  "hilavitkutin-linking",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "notko",
 ]
 
 [[package]]
 name = "hilavitkutin-extensions-macros"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "proc-macro2",
  "quote",
  "syn",
@@ -258,6 +221,7 @@ dependencies = [
 [[package]]
 name = "hilavitkutin-kit"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "hilavitkutin-api",
 ]
@@ -265,11 +229,11 @@ dependencies = [
 [[package]]
 name = "hilavitkutin-linking"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "arvo",
  "arvo-bits",
  "libc",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
  "notko",
  "windows-sys",
 ]
@@ -277,21 +241,23 @@ dependencies = [
 [[package]]
 name = "hilavitkutin-str"
 version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
  "arvo",
  "arvo-bits",
  "arvo-refit",
+ "hilavitkutin-sym",
  "notko",
 ]
 
 [[package]]
-name = "indexmap"
-version = "2.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
+name = "hilavitkutin-sym"
+version = "0.1.0"
+source = "git+ssh://git@github.com/orgrinrt/hilavitkutin.git?branch=dev#313d427aeae1f5f4c98678a49f1f8aaea84fdd55"
 dependencies = [
- "equivalent",
- "hashbrown",
+ "arvo",
+ "arvo-bits",
+ "notko",
 ]
 
 [[package]]
@@ -301,68 +267,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
-name = "libloading"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
-dependencies = [
- "cfg-if",
- "windows-link",
-]
-
-[[package]]
-name = "memchr"
-version = "2.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
-
-[[package]]
-name = "mockspace"
-version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#678c5854ef33463c5821bfb74872c4ec703897ac"
-dependencies = [
- "libloading",
- "mockspace-lint-rules 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
- "serde",
- "toml_edit",
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "mockspace"
-version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main#0d2f5cf25b60aa7cce214ce72f883720044ef143"
-dependencies = [
- "libloading",
- "mockspace-lint-rules 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main)",
- "serde",
- "toml_edit",
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "mockspace-lint-rules"
-version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev#678c5854ef33463c5821bfb74872c4ec703897ac"
-dependencies = [
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
-name = "mockspace-lint-rules"
-version = "0.1.0"
-source = "git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=main#0d2f5cf25b60aa7cce214ce72f883720044ef143"
-dependencies = [
- "tree-sitter",
- "tree-sitter-rust",
-]
-
-[[package]]
 name = "notko"
-version = "0.1.0"
+version = "0.0.1"
+source = "git+ssh://git@github.com/orgrinrt/notko.git?branch=dev#8763b5cf852e5b69e6750ed188580c17652c44a8"
 
 [[package]]
 name = "proc-macro2"
@@ -383,86 +290,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex"
-version = "1.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e10754a14b9137dd7b1e3e5b0493cc9171fdd105e0ab477f51b72e7f3ac0e276"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
-name = "regex-automata"
-version = "0.4.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e1dd4122fc1595e8162618945476892eefca7b88c52820e74af6262213cae8f"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-syntax",
-]
-
-[[package]]
-name = "regex-syntax"
-version = "0.8.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc897dd8d9e8bd1ed8cdad82b5966c3e0ecae09fb1907d58efaa013543185d0a"
-
-[[package]]
-name = "serde"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a8e94ea7f378bd32cbbd37198a4a91436180c5bb472411e48b5ec2e2124ae9e"
-dependencies = [
- "serde_core",
- "serde_derive",
-]
-
-[[package]]
-name = "serde_core"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41d385c7d4ca58e59fc732af25c3983b67ac852c1a25000afe1175de458b67ad"
-dependencies = [
- "serde_derive",
-]
-
-[[package]]
-name = "serde_derive"
-version = "1.0.228"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d540f220d3187173da220f885ab66608367b6574e925011a9353e4badda91d79"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "serde_spanned"
-version = "0.6.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "shlex"
-version = "1.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "streaming-iterator"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
-
-[[package]]
 name = "syn"
 version = "2.0.117"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -471,64 +298,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "toml_datetime"
-version = "0.6.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.22.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
-dependencies = [
- "indexmap",
- "serde",
- "serde_spanned",
- "toml_datetime",
- "toml_write",
- "winnow",
-]
-
-[[package]]
-name = "toml_write"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
-
-[[package]]
-name = "tree-sitter"
-version = "0.24.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5387dffa7ffc7d2dae12b50c6f7aab8ff79d6210147c6613561fc3d474c6f75"
-dependencies = [
- "cc",
- "regex",
- "regex-syntax",
- "streaming-iterator",
- "tree-sitter-language",
-]
-
-[[package]]
-name = "tree-sitter-language"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
-
-[[package]]
-name = "tree-sitter-rust"
-version = "0.23.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca8ccb3e3a3495c8a943f6c3fd24c3804c471fd7f4f16087623c7fa4c0068e8a"
-dependencies = [
- "cc",
- "tree-sitter-language",
 ]
 
 [[package]]
@@ -595,7 +364,6 @@ version = "0.1.0"
 dependencies = [
  "arvo",
  "hilavitkutin-extensions",
- "mockspace 0.1.0 (git+ssh://git@github.com/hiisi-digital/mockspace.git?branch=dev)",
  "notko",
 ]
 
@@ -622,12 +390,6 @@ dependencies = [
  "notko",
  "viola-plugin-abi",
 ]
-
-[[package]]
-name = "windows-link"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
 [[package]]
 name = "windows-sys"
@@ -701,16 +463,3 @@ name = "windows_x86_64_msvc"
 version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
-
-[[package]]
-name = "winnow"
-version = "0.7.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df79d97927682d2fd8adb29682d1140b343be4ac0f08fd68b7765d9c059d3945"
-dependencies = [
- "memchr",
-]
-
-[[patch.unused]]
-name = "arvo-hash"
-version = "0.1.0"
